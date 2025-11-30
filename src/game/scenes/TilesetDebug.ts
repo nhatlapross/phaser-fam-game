@@ -6,57 +6,62 @@ export class TilesetDebug extends Scene {
     }
 
     create() {
-        this.add.text(10, 10, 'Square Buttons 26x26 Debug - Press ESC to return', {
-            fontSize: '16px',
+        this.cameras.main.setBackgroundColor('#333333');
+
+        this.add.text(10, 10, 'Tileset Debug - Press ESC to return, 1/2 to switch', {
+            fontSize: '14px',
             color: '#ffffff',
             backgroundColor: '#000000',
-            padding: { x: 10, y: 5 }
+            padding: { x: 8, y: 4 }
         }).setScrollFactor(0).setDepth(1000);
 
-        // Display all square buttons in a grid (2 cols x 4 rows = 8 buttons)
-        let spriteIndex = 0;
-        const cols = 2;
-        const rows = 4;
-        const maxSprites = 8;
-        const spacing = 32;
+        // Section 1: Square Buttons (48x48 each, 2 cols x 4 rows = 8 frames)
+        this.add.text(20, 50, 'Square Buttons (48x48):', {
+            fontSize: '12px',
+            color: '#ffff00'
+        });
 
-        for (let y = 0; y < rows; y++) {
-            for (let x = 0; x < cols; x++) {
-                if (spriteIndex >= maxSprites) break;
+        for (let i = 0; i < 8; i++) {
+            const col = i % 2;
+            const row = Math.floor(i / 2);
+            const x = 40 + col * 60;
+            const y = 80 + row * 60;
 
-                // Try to display sprite
-                try {
-                    const sprite = this.add.sprite(
-                        x * spacing + 20,
-                        y * spacing + 40,
-                        'square-buttons',
-                        spriteIndex
-                    );
-                    sprite.setOrigin(0.5);
+            const sprite = this.add.sprite(x, y, 'square-buttons', i);
+            sprite.setOrigin(0);
 
-                    // Add sprite index text
-                    this.add.text(
-                        x * spacing + 8,
-                        y * spacing + 28,
-                        spriteIndex.toString(),
-                        {
-                            fontSize: '10px',
-                            color: '#ff0000',
-                            backgroundColor: '#ffffff99'
-                        }
-                    );
-                } catch (e) {
-                    // Sprite doesn't exist, skip
-                }
-
-                spriteIndex++;
-            }
-            if (spriteIndex >= maxSprites) break;
+            this.add.text(x, y - 12, `#${i}`, {
+                fontSize: '10px',
+                color: '#00ff00'
+            });
         }
 
-        // Scale up for better visibility
-        this.cameras.main.setZoom(4);
-        this.cameras.main.centerOn(cols * spacing / 2 + 5, rows * spacing / 2 + 25);
+        // Section 2: UI Big Play Button (96x32 each, 2 cols x 2 rows = 4 frames)
+        this.add.text(200, 50, 'UI Big Play Button (96x32):', {
+            fontSize: '12px',
+            color: '#ffff00'
+        });
+
+        for (let i = 0; i < 4; i++) {
+            const col = i % 2;
+            const row = Math.floor(i / 2);
+            const x = 200 + col * 110;
+            const y = 80 + row * 50;
+
+            const sprite = this.add.sprite(x, y, 'ui-big-play-button', i);
+            sprite.setOrigin(0);
+
+            this.add.text(x, y - 12, `#${i}`, {
+                fontSize: '10px',
+                color: '#00ff00'
+            });
+        }
+
+        // Info text
+        this.add.text(20, 320, 'Frame layout:\n#0: Empty normal  #1: Play normal\n#2: Empty pressed #3: Play pressed', {
+            fontSize: '11px',
+            color: '#aaaaaa'
+        });
 
         // ESC to return to game
         this.input.keyboard!.on('keydown-ESC', () => {

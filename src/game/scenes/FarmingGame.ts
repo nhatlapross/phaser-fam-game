@@ -2,41 +2,64 @@ import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { ISLAND_MAP_DATA } from './IslandMapData';
 
+// Plant types based on proposal
+type PlantType = 'social' | 'technical' | 'branded' | 'mushroom';
+
 interface TileState {
     tilled: boolean;
     planted: boolean;
-    plantStage: number; // 0-4 (seed -> stage1 -> stage2 -> stage3 -> harvest ready)
-    cropType: 'wheat' | 'tomato' | null;
-    plantSprite?: Phaser.GameObjects.Sprite;
+    plantStage: number; // 0-6 (seed -> stage1-5 -> fruit) or -1 for death
+    cropType: PlantType | null;
+    plantSprite?: Phaser.GameObjects.Image;
+    isDead?: boolean;
 }
 
-// Crop definitions
-// Wheat: frames 0 (seed bag), 1-4 (growth stages), 5 (harvest)
-// Tomato: frames 6 (seed bag), 7-10 (growth stages), 11 (harvest)
+// New crop definitions using image keys instead of sprite frames
 interface CropDefinition {
-    seedFrame: number;
-    growthFrames: number[];
-    harvestFrame: number;
+    name: string;
+    seedImage: string;
+    growthImages: string[]; // 5 stages
+    fruitImage: string;
+    deathImage: string;
 }
 
-const CROP_DEFINITIONS: Record<string, CropDefinition> = {
-    wheat: {
-        seedFrame: 0,
-        growthFrames: [1, 2, 3, 4],
-        harvestFrame: 5
+const CROP_DEFINITIONS: Record<PlantType, CropDefinition> = {
+    social: {
+        name: 'Social Plant',
+        seedImage: 'social-seed',
+        growthImages: ['social-plant-1', 'social-plant-2', 'social-plant-3', 'social-plant-4', 'social-plant-5'],
+        fruitImage: 'social-fruit',
+        deathImage: 'social-plant-death'
     },
-    tomato: {
-        seedFrame: 6,
-        growthFrames: [7, 8, 9, 10],
-        harvestFrame: 11
+    technical: {
+        name: 'Technical Plant',
+        seedImage: 'technical-seed',
+        growthImages: ['technical-plant-1', 'technical-plant-2', 'technical-plant-3', 'technical-plant-4', 'technical-plant-5'],
+        fruitImage: 'technical-fruit',
+        deathImage: 'technical-plant-death'
+    },
+    branded: {
+        name: 'Branded Plant',
+        seedImage: 'branded-seed',
+        growthImages: ['branded-plant-1', 'branded-plant-2', 'branded-plant-3', 'branded-plant-4', 'branded-plant-5'],
+        fruitImage: 'branded-fruit',
+        deathImage: 'branded-plant-death'
+    },
+    mushroom: {
+        name: 'Mushroom',
+        seedImage: 'mushroom-seed',
+        growthImages: ['mushroom-plant-1', 'mushroom-plant-2', 'mushroom-plant-3', 'mushroom-plant-4', 'mushroom-plant-5'],
+        fruitImage: 'mushroom-fruit',
+        deathImage: 'mushroom-plant-death'
     }
 };
+
+// Available plant types for seed selection
+const PLANT_TYPES: PlantType[] = ['social', 'technical', 'branded', 'mushroom'];
 
 interface ToolbarItem {
     type: 'tool' | 'seed';
     name: string;
-    cropType?: 'wheat' | 'tomato';
-    spriteFrame: number;
     count?: number;
 }
 
@@ -57,12 +80,18 @@ export class FarmingGame extends Scene {
     private farmLandStates: Map<string, TileState> = new Map();
     private selectedToolIndex: number = 0;
 
-    // Toolbar items (4 slots: hand, watering can, wheat seed, tomato seed)
+    // Seed selection
+    private selectedSeedIndex: number = 0; // Index in PLANT_TYPES
+    private seedSelectorOpen: boolean = false;
+    private seedSelectorElements: Phaser.GameObjects.GameObject[] = [];
+    private seedOptionJustClicked: boolean = false; // Prevent movement when clicking seed options
+
+    // Toolbar items (4 slots: hand, watering can, seed, fertilizer)
     private toolbarItems: ToolbarItem[] = [
-        { type: 'tool', name: 'hand', spriteFrame: -1 },
-        { type: 'tool', name: 'wateringCan', spriteFrame: -1 },
-        { type: 'seed', name: 'wheatSeed', cropType: 'wheat', spriteFrame: 0, count: 3 },
-        { type: 'seed', name: 'tomatoSeed', cropType: 'tomato', spriteFrame: 6, count: 3 },
+        { type: 'tool', name: 'hand' },
+        { type: 'tool', name: 'wateringCan', count: 100 },
+        { type: 'seed', name: 'seed', count: 5 },
+        { type: 'tool', name: 'fertilizer', count: 5 },
     ];
     private toolbarSlots: Phaser.GameObjects.GameObject[] = [];
     private toolbarElements: Phaser.GameObjects.GameObject[] = [];
@@ -72,6 +101,10 @@ export class FarmingGame extends Scene {
     private timeText!: Phaser.GameObjects.Text;
     private dayCounter: number = 1;
     private timeOfDay: number = 7 * 60; // 7:00 AM in minutes
+
+    // Wallet
+    private walletAddress: string = '';
+    private walletUIElements: Phaser.GameObjects.GameObject[] = [];
 
     // Mobile controls
     private joystickBase!: Phaser.GameObjects.Arc;
@@ -128,6 +161,11 @@ export class FarmingGame extends Scene {
             callbackScope: this,
             loop: true
         });
+
+        // Listen for wallet connection
+        EventBus.on('wallet-connected', this.onWalletConnected, this);
+        // Check if already connected
+        EventBus.emit('check-wallet-connection');
 
         EventBus.emit('current-scene-ready', this);
     }
@@ -310,19 +348,21 @@ export class FarmingGame extends Scene {
     private addDecorativeElements() {
         // Generate random plants on the island
         const plantCount = 20; // Number of decorative plants
-        const farmPlotPositions = [
-            { x: 24, y: 24 }, { x: 25, y: 24 }, { x: 26, y: 24 },
-            { x: 24, y: 25 }, { x: 25, y: 25 }, { x: 26, y: 25 }
-        ];
+
+        // Center exclusion zone (farm area + buffer)
+        // Farm plots are at (24-26, 24-25), add buffer of 2 tiles around
+        const centerX = 25;
+        const centerY = 25;
+        const exclusionRadius = 4; // Tiles to exclude from center
 
         for (let i = 0; i < plantCount; i++) {
             // Random position on the island (rows 11-39, cols 10-39)
             const x = Phaser.Math.Between(11, 38);
             const y = Phaser.Math.Between(12, 38);
 
-            // Skip if position is on farm plots
-            const isOnFarmPlot = farmPlotPositions.some(p => p.x === x && p.y === y);
-            if (isOnFarmPlot) continue;
+            // Skip if position is in center exclusion zone
+            const distFromCenter = Math.max(Math.abs(x - centerX), Math.abs(y - centerY));
+            if (distFromCenter < exclusionRadius) continue;
 
             // Skip if not on land
             if (!this.isLandTile(x, y)) continue;
@@ -355,10 +395,23 @@ export class FarmingGame extends Scene {
     }
 
     private canPlaceLargeObject(x: number, y: number, width: number, height: number): boolean {
-        // Check if all tiles for large object are on land
+        const centerX = 25;
+        const centerY = 25;
+        const exclusionRadius = 4;
+
+        // Check if all tiles for large object are on land and not in exclusion zone
         for (let dy = 0; dy < height; dy++) {
             for (let dx = 0; dx < width; dx++) {
-                if (!this.isLandTile(x + dx, y + dy)) {
+                const checkX = x + dx;
+                const checkY = y + dy;
+
+                if (!this.isLandTile(checkX, checkY)) {
+                    return false;
+                }
+
+                // Check exclusion zone
+                const distFromCenter = Math.max(Math.abs(checkX - centerX), Math.abs(checkY - centerY));
+                if (distFromCenter < exclusionRadius) {
                     return false;
                 }
             }
@@ -606,9 +659,12 @@ export class FarmingGame extends Scene {
         const key4 = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR);
         key4.on('down', () => this.selectToolbarSlot(3));
 
-        // Debug key - press D to view tileset debug
-        const keyD = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-        keyD.on('down', () => {
+        const key5 = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.FIVE);
+        key5.on('down', () => this.selectToolbarSlot(4));
+
+        // Debug key - press T to view tileset debug
+        const keyT = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.T);
+        keyT.on('down', () => {
             this.scene.start('TilesetDebug');
         });
     }
@@ -686,7 +742,6 @@ export class FarmingGame extends Scene {
         );
         toolbarBg.setStrokeStyle(3, 0x3E2723);
         toolbarBg.setDepth(5000);
-        // Main camera ignores UI, UI camera sees it
         this.cameras.main.ignore(toolbarBg);
         this.toolbarElements.push(toolbarBg);
 
@@ -695,7 +750,7 @@ export class FarmingGame extends Scene {
             const slotX = startX + i * (slotSize + slotSpacing) + slotSize / 2;
             const slotY = startY + slotSize / 2;
 
-            // Slot background using square-buttons spritesheet (button #6)
+            // Slot background
             const bg = this.add.sprite(slotX, slotY, 'square-buttons', 6);
             bg.setDisplaySize(slotSize, slotSize);
             bg.setDepth(5001);
@@ -703,7 +758,7 @@ export class FarmingGame extends Scene {
             this.toolbarElements.push(bg);
             this.toolbarSlots.push(bg);
 
-            // Add selection highlight
+            // Selection highlight
             if (i === this.selectedToolIndex) {
                 const highlight = this.add.rectangle(slotX, slotY, slotSize + 6, slotSize + 6);
                 highlight.setStrokeStyle(3, 0xFFD700);
@@ -717,11 +772,25 @@ export class FarmingGame extends Scene {
 
             // Add icon based on item type
             if (item.type === 'seed') {
-                const icon = this.add.sprite(slotX, slotY, 'crops', item.spriteFrame);
-                icon.setScale(2.5);
+                // Get current selected seed type
+                const selectedSeedType = PLANT_TYPES[this.selectedSeedIndex];
+                const cropDef = CROP_DEFINITIONS[selectedSeedType];
+
+                // Seed icon using the new image assets
+                const icon = this.add.image(slotX, slotY, cropDef.seedImage);
+                icon.setDisplaySize(slotSize - 8, slotSize - 8);
                 icon.setDepth(5003);
                 this.cameras.main.ignore(icon);
                 this.toolbarElements.push(icon);
+
+                // Small indicator arrow for seed selection
+                const arrow = this.add.text(slotX + slotSize/2 - 6, slotY - slotSize/2 + 4, '▼', {
+                    fontSize: '10px',
+                    color: '#FFD700'
+                });
+                arrow.setDepth(5004);
+                this.cameras.main.ignore(arrow);
+                this.toolbarElements.push(arrow);
 
                 // Count display
                 if (item.count !== undefined && item.count > 0) {
@@ -742,37 +811,252 @@ export class FarmingGame extends Scene {
                     this.toolbarElements.push(countText);
                 }
             } else {
-                let iconText = '';
-                if (item.name === 'wateringCan') iconText = '💧';
-                else if (item.name === 'hand') iconText = '✋';
+                // Tool icons
+                let iconKey = '';
+                if (item.name === 'wateringCan') iconKey = 'icon-watercan';
+                else if (item.name === 'hand') iconKey = 'icon-hand';
+                else if (item.name === 'fertilizer') iconKey = 'icon-fertilizer';
 
-                const icon = this.add.text(slotX, slotY, iconText, { fontSize: '28px' });
-                icon.setOrigin(0.5);
-                icon.setDepth(5003);
-                this.cameras.main.ignore(icon);
-                this.toolbarElements.push(icon);
+                if (iconKey) {
+                    const icon = this.add.sprite(slotX, slotY, iconKey);
+                    icon.setDisplaySize(slotSize - 12, slotSize - 12);
+                    icon.setDepth(5003);
+                    this.cameras.main.ignore(icon);
+                    this.toolbarElements.push(icon);
+
+                    // Count display
+                    if (item.count !== undefined && item.count >= 0) {
+                        const countText = this.add.text(
+                            slotX + slotSize/2 - 4,
+                            slotY + slotSize/2 - 4,
+                            item.count.toString(),
+                            {
+                                fontSize: '14px',
+                                color: '#ffffff',
+                                backgroundColor: '#000000cc',
+                                padding: { x: 4, y: 2 }
+                            }
+                        );
+                        countText.setOrigin(1, 1);
+                        countText.setDepth(5004);
+                        this.cameras.main.ignore(countText);
+                        this.toolbarElements.push(countText);
+                    }
+                }
             }
 
             // Make slot interactive
             bg.setInteractive();
             bg.on('pointerdown', () => {
+                if (item.type === 'seed') {
+                    // Toggle seed selector
+                    this.toggleSeedSelector();
+                } else {
+                    this.closeSeedSelector();
+                }
                 this.selectToolbarSlot(i);
             });
         }
     }
 
+    private toggleSeedSelector() {
+        if (this.seedSelectorOpen) {
+            this.closeSeedSelector();
+        } else {
+            this.openSeedSelector();
+        }
+    }
+
+    private openSeedSelector() {
+        this.closeSeedSelector();
+        this.seedSelectorOpen = true;
+
+        const slotSize = 48;
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const numSlots = this.toolbarItems.length;
+        const slotSpacing = 8;
+        const totalWidth = (slotSize + slotSpacing) * numSlots - slotSpacing;
+        const startX = (screenWidth - totalWidth) / 2;
+        const startY = screenHeight - slotSize - 20;
+
+        // Find seed slot position (index 2)
+        const seedSlotIndex = this.toolbarItems.findIndex(item => item.type === 'seed');
+        const seedSlotX = startX + seedSlotIndex * (slotSize + slotSpacing) + slotSize / 2;
+        const selectorY = startY - 10;
+
+        // Selector background
+        const selectorBg = this.add.rectangle(
+            seedSlotX,
+            selectorY - (PLANT_TYPES.length * (slotSize + 4)) / 2,
+            slotSize + 16,
+            PLANT_TYPES.length * (slotSize + 4) + 8,
+            0x5D4037,
+            0.95
+        );
+        selectorBg.setStrokeStyle(2, 0x3E2723);
+        selectorBg.setDepth(5100);
+        this.cameras.main.ignore(selectorBg);
+        this.seedSelectorElements.push(selectorBg);
+
+        // Create seed options
+        PLANT_TYPES.forEach((plantType, index) => {
+            const cropDef = CROP_DEFINITIONS[plantType];
+            const optionY = selectorY - (slotSize + 4) * (index + 1);
+
+            // Option background
+            const optionBg = this.add.sprite(seedSlotX, optionY, 'square-buttons',
+                index === this.selectedSeedIndex ? 4 : 6);
+            optionBg.setDisplaySize(slotSize, slotSize);
+            optionBg.setDepth(5101);
+            optionBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(optionBg);
+            this.seedSelectorElements.push(optionBg);
+
+            // Seed icon
+            const icon = this.add.image(seedSlotX, optionY, cropDef.seedImage);
+            icon.setDisplaySize(slotSize - 8, slotSize - 8);
+            icon.setDepth(5102);
+            this.cameras.main.ignore(icon);
+            this.seedSelectorElements.push(icon);
+
+            // Click handler
+            optionBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+                event.stopPropagation();
+                this.seedOptionJustClicked = true;
+                this.selectedSeedIndex = index;
+                this.closeSeedSelector();
+                this.updateToolbar();
+            });
+
+            optionBg.on('pointerover', () => {
+                optionBg.setFrame(4);
+            });
+            optionBg.on('pointerout', () => {
+                optionBg.setFrame(index === this.selectedSeedIndex ? 4 : 6);
+            });
+        });
+    }
+
+    private closeSeedSelector() {
+        this.seedSelectorOpen = false;
+        this.seedSelectorElements.forEach(el => el.destroy());
+        this.seedSelectorElements = [];
+    }
+
     private selectToolbarSlot(index: number) {
         if (index < 0 || index >= this.toolbarItems.length) return;
-
         this.selectedToolIndex = index;
-
-        // Recreate toolbar to update selection highlight
         this.updateToolbar();
     }
 
     private updateToolbar() {
-        // Recreate toolbar (createToolbar handles cleanup)
         this.createToolbar();
+    }
+
+    private getSelectedPlantType(): PlantType {
+        return PLANT_TYPES[this.selectedSeedIndex];
+    }
+
+    private onWalletConnected(address: string) {
+        console.log('FarmingGame: wallet connected', address);
+        this.walletAddress = address;
+        this.createWalletDisplay();
+    }
+
+    private createWalletDisplay() {
+        // Safety check - ensure scene and cameras are ready
+        if (!this.sys || !this.cameras || !this.cameras.main) {
+            console.log('FarmingGame: scene not ready for wallet display');
+            return;
+        }
+
+        // Clear previous wallet UI
+        this.walletUIElements.forEach(el => el.destroy());
+        this.walletUIElements = [];
+
+        if (!this.walletAddress) return;
+
+        // Position in top-right corner
+        const screenWidth = this.scale.width;
+        const buttonWidth = 96;
+        const buttonHeight = 32;
+        const padding = 10;
+        const gap = 6;
+
+        // Logout button position (rightmost)
+        const logoutX = screenWidth - buttonWidth / 2 - padding;
+        const y = buttonHeight / 2 + padding;
+
+        // Wallet button position (left of logout)
+        const walletX = logoutX - buttonWidth - gap;
+
+        // Background button for wallet (frame #0 - empty normal state)
+        const bg = this.add.sprite(walletX, y, 'ui-big-play-button', 0);
+        bg.setDepth(5010);
+        this.cameras.main.ignore(bg);
+        this.walletUIElements.push(bg);
+
+        // Shortened wallet address (4...4)
+        const shortAddress = `${this.walletAddress.slice(0, 6)}...${this.walletAddress.slice(-4)}`;
+
+        // Wallet address text with pixel font
+        const addressText = this.add.text(walletX, y, shortAddress, {
+            fontFamily: 'PixelFont',
+            fontSize: '12px',
+            color: '#5D4037',
+            resolution: 2
+        });
+        addressText.setOrigin(0.5);
+        addressText.setDepth(5011);
+        this.cameras.main.ignore(addressText);
+        this.walletUIElements.push(addressText);
+
+        // Logout button (using ui-big-play-button frame #0, same size as wallet)
+        const logoutBg = this.add.sprite(logoutX, y, 'ui-big-play-button', 0);
+        logoutBg.setDepth(5010);
+        logoutBg.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(logoutBg);
+        this.walletUIElements.push(logoutBg);
+
+        // Logout text
+        const logoutText = this.add.text(logoutX, y, 'Log out', {
+            fontFamily: 'PixelFont',
+            fontSize: '12px',
+            color: '#5D4037',
+            resolution: 2
+        });
+        logoutText.setOrigin(0.5);
+        logoutText.setDepth(5011);
+        this.cameras.main.ignore(logoutText);
+        this.walletUIElements.push(logoutText);
+
+        // Logout button interaction (use tint instead of frame to avoid "play" text)
+        logoutBg.on('pointerover', () => {
+            logoutBg.setTint(0xcccccc); // darken on hover
+        });
+        logoutBg.on('pointerout', () => {
+            logoutBg.clearTint(); // clear tint
+        });
+        logoutBg.on('pointerdown', () => {
+            this.handleLogout();
+        });
+    }
+
+    private handleLogout() {
+        // Emit disconnect event to React
+        EventBus.emit('disconnect-wallet');
+
+        // Clear wallet data
+        this.walletAddress = '';
+        this.walletUIElements.forEach(el => el.destroy());
+        this.walletUIElements = [];
+
+        // Transition to Login scene with fromLogout flag
+        this.cameras.main.fadeOut(300, 0, 0, 0);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+            this.scene.start('Login', { fromLogout: true });
+        });
     }
 
     private setupCameraIgnore() {
@@ -905,6 +1189,18 @@ export class FarmingGame extends Scene {
                 return; // Touch is on inventory area
             }
 
+            // Check if seed option was just clicked (prevents movement)
+            if (this.seedOptionJustClicked) {
+                this.seedOptionJustClicked = false;
+                return;
+            }
+
+            // Check if seed selector is open - close it when clicking outside
+            if (this.seedSelectorOpen) {
+                this.closeSeedSelector();
+                return; // Don't move when closing seed selector
+            }
+
             // Set movement target (world coordinates)
             const worldX = pointer.worldX;
             const worldY = pointer.worldY;
@@ -935,52 +1231,100 @@ export class FarmingGame extends Scene {
 
         const selectedItem = this.toolbarItems[this.selectedToolIndex];
 
-        if (selectedItem.type === 'seed' && selectedItem.cropType) {
-            // Plant seed
-            this.plantSeed(tileKey, playerTileX, playerTileY, selectedItem);
+        if (selectedItem.type === 'seed') {
+            // Plant seed using selected seed type
+            this.plantSeed(tileKey, playerTileX, playerTileY);
         } else if (selectedItem.name === 'wateringCan') {
             // Water plant
             this.waterCrop(tileKey, playerTileX, playerTileY);
         } else if (selectedItem.name === 'hand') {
             // Harvest crop
             this.harvestCrop(tileKey, playerTileX, playerTileY);
+        } else if (selectedItem.name === 'fertilizer') {
+            // Fertilize plant (grows 2 stages)
+            this.fertilizeCrop(tileKey, playerTileX, playerTileY);
         }
     }
 
-    private plantSeed(tileKey: string, x: number, y: number, seedItem: ToolbarItem) {
+    private plantSeed(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
+        const seedItem = this.toolbarItems.find(item => item.type === 'seed');
 
         if (state && state.tilled && !state.planted) {
-            if (seedItem.count !== undefined && seedItem.count > 0 && seedItem.cropType) {
+            if (seedItem && seedItem.count !== undefined && seedItem.count > 0) {
+                const selectedPlantType = this.getSelectedPlantType();
+
                 state.planted = true;
-                state.cropType = seedItem.cropType;
+                state.cropType = selectedPlantType;
                 state.plantStage = 0;
+                state.isDead = false;
 
                 seedItem.count--;
                 this.updateToolbar();
 
                 // Show plant sprite (first growth stage)
-                this.showPlant(x, y, state.cropType, 0);
+                this.showPlant(x, y, selectedPlantType, 0);
 
-                console.log('Planted', seedItem.cropType, 'at', tileKey);
+                console.log('Planted', selectedPlantType, 'at', tileKey);
+            } else {
+                console.log('No seeds left!');
             }
         }
     }
 
     private waterCrop(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
+        const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
+
+        // Check if we have water
+        if (!wateringCan || wateringCan.count === undefined || wateringCan.count <= 0) {
+            console.log('No water left!');
+            return;
+        }
 
         if (state && state.planted && state.cropType) {
             const cropDef = CROP_DEFINITIONS[state.cropType];
-            const maxStage = cropDef.growthFrames.length; // 4 stages
+            const maxStage = cropDef.growthImages.length; // 5 stages + fruit = 6 total
 
             if (state.plantStage < maxStage) {
                 state.plantStage++;
+                wateringCan.count--;
+                this.updateToolbar();
 
                 // Update plant sprite
                 this.updatePlantSprite(x, y, state.cropType, state.plantStage);
 
-                console.log('Watered and grew to stage', state.plantStage, 'at', tileKey);
+                console.log('Watered and grew to stage', state.plantStage, 'at', tileKey, '- Water left:', wateringCan.count);
+            } else {
+                console.log('Plant is already fully grown at', tileKey);
+            }
+        }
+    }
+
+    private fertilizeCrop(tileKey: string, x: number, y: number) {
+        const state = this.farmLandStates.get(tileKey);
+        const fertilizer = this.toolbarItems.find(item => item.name === 'fertilizer');
+
+        // Check if we have fertilizer
+        if (!fertilizer || fertilizer.count === undefined || fertilizer.count <= 0) {
+            console.log('No fertilizer left!');
+            return;
+        }
+
+        if (state && state.planted && state.cropType) {
+            const cropDef = CROP_DEFINITIONS[state.cropType];
+            const maxStage = cropDef.growthImages.length;
+
+            if (state.plantStage < maxStage) {
+                // Fertilizer grows plant by 2 stages (but not beyond max)
+                state.plantStage = Math.min(state.plantStage + 2, maxStage);
+                fertilizer.count--;
+                this.updateToolbar();
+
+                // Update plant sprite
+                this.updatePlantSprite(x, y, state.cropType, state.plantStage);
+
+                console.log('Fertilized and grew to stage', state.plantStage, 'at', tileKey, '- Fertilizer left:', fertilizer.count);
             } else {
                 console.log('Plant is already fully grown at', tileKey);
             }
@@ -992,13 +1336,14 @@ export class FarmingGame extends Scene {
 
         if (state && state.planted && state.cropType) {
             const cropDef = CROP_DEFINITIONS[state.cropType];
-            const maxStage = cropDef.growthFrames.length;
+            const maxStage = cropDef.growthImages.length;
 
             if (state.plantStage >= maxStage) {
                 // Reset state
                 state.planted = false;
                 state.plantStage = 0;
                 state.cropType = null;
+                state.isDead = false;
 
                 // Remove plant sprite
                 this.removePlant(x, y);
@@ -1010,26 +1355,32 @@ export class FarmingGame extends Scene {
         }
     }
 
-    private showPlant(x: number, y: number, cropType: 'wheat' | 'tomato', stage: number) {
-        // Get frame from crop definition
+    private showPlant(x: number, y: number, cropType: PlantType, stage: number, isDead: boolean = false) {
         const cropDef = CROP_DEFINITIONS[cropType];
-        let frame: number;
+        let imageKey: string;
 
-        if (stage === 0) {
-            frame = cropDef.growthFrames[0]; // First growth stage
-        } else if (stage >= cropDef.growthFrames.length) {
-            frame = cropDef.harvestFrame; // Ready to harvest
+        if (isDead) {
+            imageKey = cropDef.deathImage;
+        } else if (stage === 0) {
+            imageKey = cropDef.growthImages[0]; // First growth stage
+        } else if (stage >= 5) {
+            imageKey = cropDef.fruitImage; // Ready to harvest (fruit stage)
+        } else if (stage < cropDef.growthImages.length) {
+            imageKey = cropDef.growthImages[stage];
         } else {
-            frame = cropDef.growthFrames[stage];
+            imageKey = cropDef.growthImages[cropDef.growthImages.length - 1];
         }
 
-        const plant = this.add.sprite(
+        // Plant size (scale down from 157x153 to fit tile)
+        const plantSize = 16;
+
+        const plant = this.add.image(
             x * this.TILE_SIZE + this.TILE_SIZE / 2,
             y * this.TILE_SIZE + this.TILE_SIZE / 2,
-            'crops',
-            frame
+            imageKey
         );
-        plant.setOrigin(0.5);
+        plant.setDisplaySize(plantSize, plantSize);
+        plant.setOrigin(0.5, 0.5); // Center on tile
         plant.setDepth(y * this.TILE_SIZE + 5);
         plant.setName(`plant-${x}-${y}`);
         // Make sure UI camera ignores this game object
@@ -1043,9 +1394,9 @@ export class FarmingGame extends Scene {
         }
     }
 
-    private updatePlantSprite(x: number, y: number, cropType: 'wheat' | 'tomato', stage: number) {
+    private updatePlantSprite(x: number, y: number, cropType: PlantType, stage: number, isDead: boolean = false) {
         this.removePlant(x, y);
-        this.showPlant(x, y, cropType, stage);
+        this.showPlant(x, y, cropType, stage, isDead);
     }
 
     private getPlayerDirection(): { x: number, y: number } {
@@ -1211,5 +1562,9 @@ export class FarmingGame extends Scene {
 
         // Update player depth for proper layering
         this.player.setDepth(this.player.y);
+    }
+
+    shutdown() {
+        EventBus.off('wallet-connected', this.onWalletConnected, this);
     }
 }
