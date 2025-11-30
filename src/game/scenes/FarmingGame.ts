@@ -112,6 +112,8 @@ export class FarmingGame extends Scene {
     private joystickActive: boolean = false;
     private joystickPointer: Phaser.Input.Pointer | null = null;
     private touchMoveTarget: { x: number, y: number } | null = null;
+    private actionButton!: Phaser.GameObjects.Arc;
+    private actionButtonText!: Phaser.GameObjects.Text;
 
     constructor() {
         super('FarmingGame');
@@ -1160,30 +1162,30 @@ export class FarmingGame extends Scene {
         });
 
         // Action button (bottom right)
-        const actionButton = this.add.circle(
+        this.actionButton = this.add.circle(
             this.scale.width - 80,
             this.scale.height - 80,
             40,
             0xff6b6b,
             0.8
         );
-        actionButton.setStrokeStyle(3, 0xffffff, 0.9);
-        actionButton.setDepth(5010);
-        actionButton.setInteractive();
-        this.cameras.main.ignore(actionButton);
+        this.actionButton.setStrokeStyle(3, 0xffffff, 0.9);
+        this.actionButton.setDepth(5010);
+        this.actionButton.setInteractive();
+        this.cameras.main.ignore(this.actionButton);
 
         // Action button text
-        const actionText = this.add.text(
+        this.actionButtonText = this.add.text(
             this.scale.width - 80,
             this.scale.height - 80,
             '⚒',
             { fontSize: '32px' }
         );
-        actionText.setOrigin(0.5);
-        actionText.setDepth(5011);
-        this.cameras.main.ignore(actionText);
+        this.actionButtonText.setOrigin(0.5);
+        this.actionButtonText.setDepth(5011);
+        this.cameras.main.ignore(this.actionButtonText);
 
-        actionButton.on('pointerdown', () => {
+        this.actionButton.on('pointerdown', () => {
             this.performAction();
         });
     }

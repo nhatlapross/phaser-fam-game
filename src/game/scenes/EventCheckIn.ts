@@ -17,7 +17,7 @@ interface EventData {
 
 export class EventCheckIn extends Scene {
     private viewMode: 'map' | 'list' = 'list';
-    private events: EventData[] = [];
+    private eventDataList: EventData[] = [];
     private eventMarkers: Phaser.GameObjects.Container[] = [];
     private listContainer!: Phaser.GameObjects.Container;
 
@@ -82,7 +82,7 @@ export class EventCheckIn extends Scene {
     }
 
     private initializeEvents() {
-        this.events = [
+        this.eventDataList = [
             {
                 id: 'event1',
                 name: 'Token2049 Singapore',
@@ -203,7 +203,7 @@ export class EventCheckIn extends Scene {
         userLabel.setVisible(false);
 
         // Event markers
-        this.events.forEach(event => {
+        this.eventDataList.forEach(event => {
             const marker = this.createEventMarker(event);
             this.eventMarkers.push(marker);
         });
@@ -257,7 +257,7 @@ export class EventCheckIn extends Scene {
         let yOffset = 0;
 
         // Live Events Section
-        const liveEvents = this.events.filter(e => e.status === 'live');
+        const liveEvents = this.eventDataList.filter(e => e.status === 'live');
         if (liveEvents.length > 0) {
             const liveHeader = this.add.text(30, yOffset, '🔴 LIVE NOW (' + liveEvents.length + ')', {
                 fontSize: '20px',
@@ -275,7 +275,7 @@ export class EventCheckIn extends Scene {
         }
 
         // Upcoming Events Section
-        const upcomingEvents = this.events.filter(e => e.status === 'upcoming');
+        const upcomingEvents = this.eventDataList.filter(e => e.status === 'upcoming');
         if (upcomingEvents.length > 0) {
             yOffset += 10;
             const upcomingHeader = this.add.text(30, yOffset,
