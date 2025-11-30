@@ -57,17 +57,18 @@ export class FarmingGame extends Scene {
     private farmLandStates: Map<string, TileState> = new Map();
     private selectedToolIndex: number = 0;
 
-    // Toolbar items
+    // Toolbar items (4 slots: hand, watering can, wheat seed, tomato seed)
     private toolbarItems: ToolbarItem[] = [
-        { type: 'tool', name: 'wateringCan', spriteFrame: -1 }, // Will use UI spritesheet
         { type: 'tool', name: 'hand', spriteFrame: -1 },
+        { type: 'tool', name: 'wateringCan', spriteFrame: -1 },
         { type: 'seed', name: 'wheatSeed', cropType: 'wheat', spriteFrame: 0, count: 3 },
         { type: 'seed', name: 'tomatoSeed', cropType: 'tomato', spriteFrame: 6, count: 3 },
     ];
-    private toolbarSlots: Phaser.GameObjects.Container[] = [];
-    private toolbarContainer!: Phaser.GameObjects.Container;
+    private toolbarSlots: Phaser.GameObjects.GameObject[] = [];
+    private toolbarElements: Phaser.GameObjects.GameObject[] = [];
 
     // UI
+    private uiCamera!: Phaser.Cameras.Scene2D.Camera;
     private timeText!: Phaser.GameObjects.Text;
     private dayCounter: number = 1;
     private timeOfDay: number = 7 * 60; // 7:00 AM in minutes
@@ -93,9 +94,14 @@ export class FarmingGame extends Scene {
         // Create player
         this.createPlayer();
 
-        // Setup camera
+        // Setup main game camera (zoomed, follows player)
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-        this.cameras.main.setZoom(2); // Zoom in for pixel art
+        this.cameras.main.setZoom(3); // Zoom in for pixel art
+
+        // Create UI camera (no zoom, fixed position, for UI elements only)
+        this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
+        this.uiCamera.setScroll(0, 0);
+        // UI camera ignores all game world objects - will be set up after they're created
 
         // Setup controls
         this.setupControls();
@@ -108,6 +114,9 @@ export class FarmingGame extends Scene {
 
         // Create mobile controls
         this.createMobileControls();
+
+        // Make UI camera ignore all game world objects (everything except UI)
+        this.setupCameraIgnore();
 
         // Setup interactions
         this.setupInteractions();
@@ -640,8 +649,8 @@ export class FarmingGame extends Scene {
             backgroundColor: '#00000088',
             padding: { x: 10, y: 5 }
         });
-        this.timeText.setScrollFactor(0);
-        this.timeText.setDepth(2000);
+        this.timeText.setDepth(5005);
+        this.cameras.main.ignore(this.timeText);
         this.updateTimeDisplay();
 
         // Toolbar (bottom center)
@@ -649,74 +658,99 @@ export class FarmingGame extends Scene {
     }
 
     private createToolbar() {
-        const slotSize = 32;
-        const slotSpacing = 4;
+        const slotSize = 48;
+        const slotSpacing = 8;
         const numSlots = this.toolbarItems.length;
-        const totalWidth = (slotSize + slotSpacing) * numSlots - slotSpacing + 16; // +16 for padding
-        const startX = (this.scale.width - totalWidth) / 2;
-        const startY = this.scale.height - slotSize - 24;
+        const totalWidth = (slotSize + slotSpacing) * numSlots - slotSpacing;
 
-        // Container for entire toolbar
-        this.toolbarContainer = this.add.container(0, 0);
-        this.toolbarContainer.setScrollFactor(0);
-        this.toolbarContainer.setDepth(2000);
+        // Use actual screen dimensions for responsive UI
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+
+        const startX = (screenWidth - totalWidth) / 2;
+        const startY = screenHeight - slotSize - 20;
+
+        // Clear previous elements
+        this.toolbarElements.forEach(el => el.destroy());
+        this.toolbarElements = [];
+        this.toolbarSlots = [];
 
         // Toolbar background
         const toolbarBg = this.add.rectangle(
-            this.scale.width / 2,
+            screenWidth / 2,
             startY + slotSize / 2,
-            totalWidth + 8,
-            slotSize + 8,
-            0x8B6914,
+            totalWidth + 24,
+            slotSize + 20,
+            0x5D4037,
             0.95
         );
-        toolbarBg.setStrokeStyle(3, 0x5D4E37);
-        this.toolbarContainer.add(toolbarBg);
+        toolbarBg.setStrokeStyle(3, 0x3E2723);
+        toolbarBg.setDepth(5000);
+        // Main camera ignores UI, UI camera sees it
+        this.cameras.main.ignore(toolbarBg);
+        this.toolbarElements.push(toolbarBg);
 
         // Create slots
-        this.toolbarSlots = [];
         for (let i = 0; i < numSlots; i++) {
-            const x = startX + 12 + i * (slotSize + slotSpacing);
-            const y = startY;
+            const slotX = startX + i * (slotSize + slotSpacing) + slotSize / 2;
+            const slotY = startY + slotSize / 2;
 
-            const slot = this.add.container(x, y);
+            // Slot background using square-buttons spritesheet (button #6)
+            const bg = this.add.sprite(slotX, slotY, 'square-buttons', 6);
+            bg.setDisplaySize(slotSize, slotSize);
+            bg.setDepth(5001);
+            this.cameras.main.ignore(bg);
+            this.toolbarElements.push(bg);
+            this.toolbarSlots.push(bg);
 
-            // Slot background
-            const bg = this.add.rectangle(slotSize/2, slotSize/2, slotSize, slotSize, 0xD4A574, 0.95);
-            bg.setStrokeStyle(2, i === this.selectedToolIndex ? 0xFFD700 : 0x8B6914);
-            slot.add(bg);
+            // Add selection highlight
+            if (i === this.selectedToolIndex) {
+                const highlight = this.add.rectangle(slotX, slotY, slotSize + 6, slotSize + 6);
+                highlight.setStrokeStyle(3, 0xFFD700);
+                highlight.setFillStyle(0, 0);
+                highlight.setDepth(5002);
+                this.cameras.main.ignore(highlight);
+                this.toolbarElements.push(highlight);
+            }
 
             const item = this.toolbarItems[i];
 
             // Add icon based on item type
             if (item.type === 'seed') {
-                // Use crops spritesheet for seeds
-                const icon = this.add.sprite(slotSize/2, slotSize/2, 'crops', item.spriteFrame);
-                icon.setScale(1.5);
-                slot.add(icon);
+                const icon = this.add.sprite(slotX, slotY, 'crops', item.spriteFrame);
+                icon.setScale(2.5);
+                icon.setDepth(5003);
+                this.cameras.main.ignore(icon);
+                this.toolbarElements.push(icon);
 
                 // Count display
                 if (item.count !== undefined && item.count > 0) {
-                    const countText = this.add.text(slotSize - 4, slotSize - 4, item.count.toString(), {
-                        fontSize: '10px',
-                        color: '#ffffff',
-                        backgroundColor: '#00000099',
-                        padding: { x: 2, y: 1 }
-                    });
+                    const countText = this.add.text(
+                        slotX + slotSize/2 - 4,
+                        slotY + slotSize/2 - 4,
+                        item.count.toString(),
+                        {
+                            fontSize: '14px',
+                            color: '#ffffff',
+                            backgroundColor: '#000000cc',
+                            padding: { x: 4, y: 2 }
+                        }
+                    );
                     countText.setOrigin(1, 1);
-                    slot.add(countText);
+                    countText.setDepth(5004);
+                    this.cameras.main.ignore(countText);
+                    this.toolbarElements.push(countText);
                 }
             } else {
-                // Tool icons using emoji or text
                 let iconText = '';
                 if (item.name === 'wateringCan') iconText = '💧';
                 else if (item.name === 'hand') iconText = '✋';
 
-                const icon = this.add.text(slotSize/2, slotSize/2, iconText, {
-                    fontSize: '18px'
-                });
+                const icon = this.add.text(slotX, slotY, iconText, { fontSize: '28px' });
                 icon.setOrigin(0.5);
-                slot.add(icon);
+                icon.setDepth(5003);
+                this.cameras.main.ignore(icon);
+                this.toolbarElements.push(icon);
             }
 
             // Make slot interactive
@@ -724,9 +758,6 @@ export class FarmingGame extends Scene {
             bg.on('pointerdown', () => {
                 this.selectToolbarSlot(i);
             });
-
-            this.toolbarContainer.add(slot);
-            this.toolbarSlots.push(slot);
         }
     }
 
@@ -735,21 +766,29 @@ export class FarmingGame extends Scene {
 
         this.selectedToolIndex = index;
 
-        // Update slot borders
-        this.toolbarSlots.forEach((slot, i) => {
-            const bg = slot.getAt(0) as Phaser.GameObjects.Rectangle;
-            bg.setStrokeStyle(2, i === index ? 0xFFD700 : 0x8B6914);
-        });
+        // Recreate toolbar to update selection highlight
+        this.updateToolbar();
     }
 
     private updateToolbar() {
-        // Destroy and recreate toolbar
-        this.toolbarSlots.forEach(slot => slot.destroy());
-        this.toolbarSlots = [];
-        if (this.toolbarContainer) {
-            this.toolbarContainer.destroy();
-        }
+        // Recreate toolbar (createToolbar handles cleanup)
         this.createToolbar();
+    }
+
+    private setupCameraIgnore() {
+        // UI camera should only render UI elements (those with depth >= 5000)
+        // Make it ignore all other game objects
+        this.children.list.forEach((child) => {
+            const gameObj = child as Phaser.GameObjects.GameObject & { depth?: number };
+            if (gameObj.depth === undefined || gameObj.depth < 5000) {
+                this.uiCamera.ignore(child);
+            }
+        });
+
+        // Also ignore the tilemap layers
+        if (this.groundLayer) this.uiCamera.ignore(this.groundLayer);
+        if (this.tilledDirtLayer) this.uiCamera.ignore(this.tilledDirtLayer);
+        if (this.player) this.uiCamera.ignore(this.player);
     }
 
     private createMobileControls() {
@@ -762,13 +801,13 @@ export class FarmingGame extends Scene {
         // Joystick base
         this.joystickBase = this.add.circle(joystickX, joystickY, baseRadius, 0x888888, 0.3);
         this.joystickBase.setStrokeStyle(2, 0xffffff, 0.5);
-        this.joystickBase.setScrollFactor(0);
-        this.joystickBase.setDepth(2000);
+        this.joystickBase.setDepth(5010);
+        this.cameras.main.ignore(this.joystickBase);
 
         // Joystick thumb
         this.joystickThumb = this.add.circle(joystickX, joystickY, thumbRadius, 0xffffff, 0.8);
-        this.joystickThumb.setScrollFactor(0);
-        this.joystickThumb.setDepth(2001);
+        this.joystickThumb.setDepth(5011);
+        this.cameras.main.ignore(this.joystickThumb);
 
         // Make joystick interactive
         this.joystickBase.setInteractive();
@@ -816,9 +855,9 @@ export class FarmingGame extends Scene {
             0.8
         );
         actionButton.setStrokeStyle(3, 0xffffff, 0.9);
-        actionButton.setScrollFactor(0);
-        actionButton.setDepth(2000);
+        actionButton.setDepth(5010);
         actionButton.setInteractive();
+        this.cameras.main.ignore(actionButton);
 
         // Action button text
         const actionText = this.add.text(
@@ -828,8 +867,8 @@ export class FarmingGame extends Scene {
             { fontSize: '32px' }
         );
         actionText.setOrigin(0.5);
-        actionText.setScrollFactor(0);
-        actionText.setDepth(2001);
+        actionText.setDepth(5011);
+        this.cameras.main.ignore(actionText);
 
         actionButton.on('pointerdown', () => {
             this.performAction();
@@ -993,6 +1032,8 @@ export class FarmingGame extends Scene {
         plant.setOrigin(0.5);
         plant.setDepth(y * this.TILE_SIZE + 5);
         plant.setName(`plant-${x}-${y}`);
+        // Make sure UI camera ignores this game object
+        this.uiCamera.ignore(plant);
     }
 
     private removePlant(x: number, y: number) {

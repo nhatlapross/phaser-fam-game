@@ -71,6 +71,11 @@ export class Preloader extends Scene
             frameWidth: 16,
             frameHeight: 16
         });
+        // Square buttons for UI (2 cols x 4 rows = 8 buttons, image is 96x192)
+        this.load.spritesheet('square-buttons', 'ui/Square Buttons 26x26.png', {
+            frameWidth: 48,
+            frameHeight: 48
+        });
         // Crops spritesheet (2 rows x 6 cols = 12 frames)
         // Row 1: wheat seed bag, growth stages 1-4, wheat harvest
         // Row 2: tomato seed bag, growth stages 1-4, tomato harvest
