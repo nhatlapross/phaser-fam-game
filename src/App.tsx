@@ -8,10 +8,10 @@ function App()
 {
     //  References to the PhaserGame component (game and scene are exposed)
     const phaserRef = useRef<IRefPhaserGame | null>(null);
-    const [showConnectButton, setShowConnectButton] = useState(true);
+    const [currentScene, setCurrentScene] = useState<string>('Login');
 
     // Wallet connection hooks
-    const { address, isConnected } = useAccount();
+    const { address, isConnected, status } = useAccount();
     const { disconnect } = useDisconnect();
 
     // Use ref for disconnect to avoid stale closure
@@ -33,10 +33,10 @@ function App()
             disconnectRef.current();
         };
 
-        // Listen for scene changes to show/hide connect button
+        // Listen for scene changes
         const handleSceneReady = (scene: { scene: { key: string } }) => {
-            // Show connect button only on Login scene
-            setShowConnectButton(scene.scene.key === 'Login');
+            console.log('Scene ready:', scene.scene.key);
+            setCurrentScene(scene.scene.key);
         };
 
         EventBus.on('check-wallet-connection', handleCheckConnection);
@@ -53,18 +53,22 @@ function App()
     // Notify Phaser when wallet connects or disconnects
     useEffect(() => {
         if (isConnected && address) {
+            console.log('Wallet connected:', address);
             EventBus.emit('wallet-connected', address);
-        } else if (!isConnected) {
+        } else if (status === 'disconnected') {
             console.log('Wallet disconnected');
             EventBus.emit('wallet-disconnected');
         }
-    }, [isConnected, address]);
+    }, [isConnected, address, status]);
+
+    // Determine if we should show the connect button
+    const shouldShowConnectButton = currentScene === 'Login' && !isConnected && status !== 'connecting';
 
     return (
         <div id="app">
             <PhaserGame ref={phaserRef} />
             {/* RainbowKit ConnectButton - shown in center on Login scene */}
-            {showConnectButton && !isConnected && (
+            {shouldShowConnectButton && (
                 <div style={{
                     position: 'fixed',
                     top: '50%',

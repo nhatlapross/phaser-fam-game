@@ -167,7 +167,36 @@ export class FarmingGame extends Scene {
         // Check if already connected
         EventBus.emit('check-wallet-connection');
 
+        // Handle screen resize
+        this.scale.on('resize', this.onResize, this);
+
         EventBus.emit('current-scene-ready', this);
+    }
+
+    private onResize(gameSize: Phaser.Structs.Size) {
+        // Update UI camera size
+        if (this.uiCamera) {
+            this.uiCamera.setSize(gameSize.width, gameSize.height);
+        }
+
+        // Recreate UI elements for new screen size
+        this.recreateUIForResize();
+    }
+
+    private recreateUIForResize() {
+        // Destroy and recreate mobile controls
+        if (this.joystickBase) this.joystickBase.destroy();
+        if (this.joystickThumb) this.joystickThumb.destroy();
+        if (this.actionButton) this.actionButton.destroy();
+        if (this.actionButtonText) this.actionButtonText.destroy();
+
+        this.createMobileControls();
+
+        // Recreate toolbar
+        this.updateToolbar();
+
+        // Recreate wallet display
+        this.createWalletDisplay();
     }
 
     private createWaterAnimation() {
@@ -1569,5 +1598,6 @@ export class FarmingGame extends Scene {
 
     shutdown() {
         EventBus.off('wallet-connected', this.onWalletConnected, this);
+        this.scale.off('resize', this.onResize, this);
     }
 }

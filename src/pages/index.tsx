@@ -1,9 +1,5 @@
 import Head from "next/head";
-import { Inter } from "next/font/google";
-import styles from "@/styles/Home.module.css";
 import dynamic from "next/dynamic";
-
-const inter = Inter({ subsets: ["latin"] });
 
 const AppWithoutSSR = dynamic(() => import("@/App"), { ssr: false });
 
@@ -11,14 +7,20 @@ export default function Home() {
     return (
         <>
             <Head>
-                <title>Phaser Nextjs Template</title>
-                <meta name="description" content="A Phaser 3 Next.js project template that demonstrates Next.js with React communication and uses Vite for bundling." />
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Farming Game</title>
+                <meta name="description" content="A farming game built with Phaser 3 and Next.js" />
+                {/* Mobile viewport - prevent zoom, enable fullscreen */}
+                <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+                {/* Mobile web app capable */}
+                <meta name="mobile-web-app-capable" content="yes" />
+                <meta name="apple-mobile-web-app-capable" content="yes" />
+                <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+                {/* Theme color for mobile browser */}
+                <meta name="theme-color" content="#1a1a2e" />
                 <link rel="icon" href="/favicon.png" />
+                <link rel="apple-touch-icon" href="/favicon.png" />
             </Head>
-            <main className={`${styles.main} ${inter.className}`}>
-                <AppWithoutSSR />
-            </main>
+            <AppWithoutSSR />
         </>
     );
 }

@@ -55,10 +55,15 @@ export class Login extends Scene {
             this.ignoreWalletEvents = true;
             this.time.delayedCall(1500, () => {
                 this.ignoreWalletEvents = false;
+                // Check connection after ignore period ends
+                EventBus.emit('check-wallet-connection');
             });
         } else {
-            // Check if already connected (only if not from logout)
-            EventBus.emit('check-wallet-connection');
+            // Check if already connected after a small delay to ensure listener is ready
+            this.time.delayedCall(100, () => {
+                console.log('Login: checking wallet connection...');
+                EventBus.emit('check-wallet-connection');
+            });
         }
 
         // Reset the flag after use
@@ -96,15 +101,21 @@ export class Login extends Scene {
     }
 
     private onWalletConnected(address: string) {
+        console.log('Login: onWalletConnected called with', address);
+
         // Ignore wallet events if coming from logout (to allow disconnect to complete)
         if (this.ignoreWalletEvents) {
+            console.log('Login: ignoring wallet event (from logout)');
             return;
         }
 
         // Safety check - make sure scene is active
         if (!this.scene.isActive('Login') || !this.add) {
+            console.log('Login: scene not active, skipping');
             return;
         }
+
+        console.log('Login: transitioning to FarmingGame...');
 
         // Show connected message briefly then transition
         const centerX = this.scale.width / 2;
