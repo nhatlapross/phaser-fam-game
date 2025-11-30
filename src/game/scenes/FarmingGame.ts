@@ -1412,11 +1412,14 @@ export class FarmingGame extends Scene {
     }
 
     private updateTimeDisplay() {
-        const hours = Math.floor(this.timeOfDay / 60);
-        const minutes = this.timeOfDay % 60;
-        const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        // Show current real time
+        const now = new Date();
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        const seconds = now.getSeconds();
+        const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 
-        this.timeText.setText(`Day ${this.dayCounter}\n${timeStr}`);
+        this.timeText.setText(timeStr);
     }
 
     private gameLoop() {
