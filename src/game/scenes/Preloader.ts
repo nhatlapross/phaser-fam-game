@@ -90,11 +90,25 @@ export class Preloader extends Scene
         this.load.image('icon-hand', 'icons/Hand.png');
         this.load.image('icon-watercan', 'icons/waterCan.png');
         this.load.image('icon-fertilizer', 'icons/ShitPlan.png');
+        this.load.image('icon-digest', 'icons/digest.png');
 
         // UI Big Play Button (2 cols x 2 rows = 4 frames, 96x32 each)
         this.load.spritesheet('ui-big-play-button', 'ui/UI Big Play Button.png', {
             frameWidth: 96,
             frameHeight: 32
+        });
+
+        // Chest spritesheet (5 cols x 2 rows = 10 frames, 48x48 each)
+        // Frame 0: closed chest, Frame 4: open chest
+        this.load.spritesheet('chest', 'objects/Chest.png', {
+            frameWidth: 48,
+            frameHeight: 48
+        });
+
+        // Settings menu panel (2 panels side by side)
+        this.load.spritesheet('settings-panel', 'ui/Setting menu.png', {
+            frameWidth: 125,
+            frameHeight: 140
         });
 
         // ========== New Plant Assets ==========
@@ -137,6 +151,12 @@ export class Preloader extends Scene
         this.load.image('mushroom-plant-5', 'objects/plant/mushroom/mush_plant_5.png');
         this.load.image('mushroom-plant-death', 'objects/plant/mushroom/mush_plant_death.png');
         this.load.image('mushroom-fruit', 'objects/plant/mushroom/mush-fruit.png');
+
+        // Factory (4 frames: 1-2 idle, 3-4 working)
+        this.load.image('factory-1', 'objects/factory/factory_1.png');
+        this.load.image('factory-2', 'objects/factory/factory_2.png');
+        this.load.image('factory-3', 'objects/factory/factory_3.png');
+        this.load.image('factory-4', 'objects/factory/factory_4.png');
     }
 
     create ()
