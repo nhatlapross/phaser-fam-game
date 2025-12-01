@@ -3,24 +3,127 @@ import { IRefPhaserGame, PhaserGame } from './PhaserGame';
 import { useAccount, useDisconnect } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { EventBus } from './game/EventBus';
+import { UserService } from './game/UserService'; // Import UserService
 
-function App()
-{
-    //  References to the PhaserGame component (game and scene are exposed)
+// RegistrationForm Component
+const RegistrationForm = ({ address, onRegisterSuccess, onCancel }: { address: string; onRegisterSuccess: (username: string) => void; onCancel: () => void }) => {
+    const [username, setUsername] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        setIsLoading(true);
+
+        if (!username.trim()) {
+            setError('Username cannot be empty.');
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            const user = await UserService.registerUser(address, username);
+            if (user) {
+                onRegisterSuccess(user.username);
+            } else {
+                setError('Registration failed. Please try again.');
+            }
+        } catch (err) {
+            console.error('Registration API error:', err);
+            setError('Network error during registration.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 10000,
+            backgroundColor: '#282c34',
+            padding: '40px',
+            borderRadius: '10px',
+            boxShadow: '0 5px 15px rgba(0,0,0,0.5)',
+            color: 'white',
+            textAlign: 'center',
+            maxWidth: '400px',
+            width: '90%'
+        }}>
+            <h2>Register New User</h2>
+            <p>Wallet Address: {address.slice(0, 6)}...{address.slice(-4)}</p>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+                <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Enter desired username"
+                    disabled={isLoading}
+                    style={{
+                        padding: '12px',
+                        borderRadius: '5px',
+                        border: '1px solid #4ade80',
+                        backgroundColor: '#3a3f47',
+                        color: 'white',
+                        fontSize: '16px'
+                    }}
+                />
+                {error && <p style={{ color: '#ef4444', fontSize: '14px', margin: '0' }}>{error}</p>}
+                <button
+                    type="submit"
+                    disabled={isLoading}
+                    style={{
+                        padding: '12px 20px',
+                        borderRadius: '5px',
+                        border: 'none',
+                        backgroundColor: isLoading ? '#6b7280' : '#4ade80',
+                        color: '#1a1a2e',
+                        fontSize: '18px',
+                        fontWeight: 'bold',
+                        cursor: isLoading ? 'not-allowed' : 'pointer',
+                        transition: 'background-color 0.2s ease-in-out'
+                    }}
+                >
+                    {isLoading ? 'Registering...' : 'Register and Play'}
+                </button>
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    disabled={isLoading}
+                    style={{
+                        padding: '10px 15px',
+                        borderRadius: '5px',
+                        border: '1px solid #ef4444',
+                        backgroundColor: 'transparent',
+                        color: '#ef4444',
+                        fontSize: '16px',
+                        cursor: isLoading ? 'not-allowed' : 'pointer'
+                    }}
+                >
+                    Cancel
+                </button>
+            </form>
+        </div>
+    );
+};
+
+function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const [currentScene, setCurrentScene] = useState<string>('Login');
+    const [showRegistrationForm, setShowRegistrationForm] = useState(false);
+    const [registrationAddress, setRegistrationAddress] = useState('');
 
-    // Wallet connection hooks
     const { address, isConnected, status } = useAccount();
     const { disconnect } = useDisconnect();
 
-    // Use ref for disconnect to avoid stale closure
     const disconnectRef = useRef(disconnect);
     useEffect(() => {
         disconnectRef.current = disconnect;
     }, [disconnect]);
 
-    // Listen for events from Phaser
     useEffect(() => {
         const handleCheckConnection = () => {
             if (isConnected && address) {
@@ -33,24 +136,36 @@ function App()
             disconnectRef.current();
         };
 
-        // Listen for scene changes
         const handleSceneReady = (scene: { scene: { key: string } }) => {
             console.log('Scene ready:', scene.scene.key);
             setCurrentScene(scene.scene.key);
         };
 
+        const handleShowRegistrationForm = (walletAddress: string) => {
+            setShowRegistrationForm(true);
+            setRegistrationAddress(walletAddress);
+        };
+
+        const handleHideRegistrationForm = () => {
+            setShowRegistrationForm(false);
+            setRegistrationAddress('');
+        };
+
         EventBus.on('check-wallet-connection', handleCheckConnection);
         EventBus.on('disconnect-wallet', handleDisconnectWallet);
         EventBus.on('current-scene-ready', handleSceneReady);
+        EventBus.on('show-registration-form', handleShowRegistrationForm);
+        EventBus.on('hide-registration-form', handleHideRegistrationForm);
 
         return () => {
             EventBus.off('check-wallet-connection', handleCheckConnection);
             EventBus.off('disconnect-wallet', handleDisconnectWallet);
             EventBus.off('current-scene-ready', handleSceneReady);
+            EventBus.off('show-registration-form', handleShowRegistrationForm);
+            EventBus.off('hide-registration-form', handleHideRegistrationForm);
         };
     }, [isConnected, address]);
 
-    // Notify Phaser when wallet connects or disconnects
     useEffect(() => {
         if (isConnected && address) {
             console.log('Wallet connected:', address);
@@ -58,16 +173,31 @@ function App()
         } else if (status === 'disconnected') {
             console.log('Wallet disconnected');
             EventBus.emit('wallet-disconnected');
+            // If disconnected, hide registration form if it was showing
+            setShowRegistrationForm(false);
+            setRegistrationAddress('');
         }
     }, [isConnected, address, status]);
 
-    // Determine if we should show the connect button
-    const shouldShowConnectButton = currentScene === 'Login' && !isConnected && status !== 'connecting';
+    const handleRegistrationSuccess = (username: string) => {
+        console.log('React: Registration successful, emitting event to Phaser.');
+        EventBus.emit('registration-complete', { address: registrationAddress, username });
+        setShowRegistrationForm(false);
+        setRegistrationAddress('');
+    };
+
+    const handleRegistrationCancel = () => {
+        console.log('React: Registration cancelled. Disconnecting wallet.');
+        disconnectRef.current(); // Disconnect wallet if registration is cancelled
+        setShowRegistrationForm(false);
+        setRegistrationAddress('');
+    };
+
+    const shouldShowConnectButton = currentScene === 'Login' && !isConnected && status !== 'connecting' && !showRegistrationForm;
 
     return (
         <div id="app">
             <PhaserGame ref={phaserRef} />
-            {/* RainbowKit ConnectButton - shown in center on Login scene */}
             {shouldShowConnectButton && (
                 <div style={{
                     position: 'fixed',
@@ -80,8 +210,15 @@ function App()
                     <ConnectButton />
                 </div>
             )}
+            {showRegistrationForm && registrationAddress && (
+                <RegistrationForm
+                    address={registrationAddress}
+                    onRegisterSuccess={handleRegistrationSuccess}
+                    onCancel={handleRegistrationCancel}
+                />
+            )}
         </div>
-    )
+    );
 }
 
-export default App
+export default App;

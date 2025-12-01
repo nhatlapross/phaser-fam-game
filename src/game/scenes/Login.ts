@@ -1,11 +1,13 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
+import { UserService } from '../UserService'; // Import UserService
 
 export class Login extends Scene {
     private titleText!: Phaser.GameObjects.Text;
     private subtitleText!: Phaser.GameObjects.Text;
     private fromLogout: boolean = false;
     private ignoreWalletEvents: boolean = false;
+    private connectedAddress: string | null = null; // Store connected address
 
     constructor() {
         super('Login');
@@ -48,6 +50,8 @@ export class Login extends Scene {
 
         // Listen for wallet connection
         EventBus.on('wallet-connected', this.onWalletConnected, this);
+        // Listen for registration complete from React
+        EventBus.on('registration-complete', this.onRegistrationComplete, this);
 
         // If coming from logout, ignore wallet events for a short time
         // to allow disconnect to complete
@@ -100,7 +104,7 @@ export class Login extends Scene {
         // This method is kept for compatibility but does nothing
     }
 
-    private onWalletConnected(address: string) {
+    private async onWalletConnected(address: string) {
         console.log('Login: onWalletConnected called with', address);
 
         // Ignore wallet events if coming from logout (to allow disconnect to complete)
@@ -115,8 +119,39 @@ export class Login extends Scene {
             return;
         }
 
-        console.log('Login: transitioning to FarmingGame...');
+        this.connectedAddress = address; // Store the connected address
 
+        // Check if user exists in DB
+        const user = await UserService.checkUser(address);
+
+        if (user) {
+            console.log('Login: User found in DB:', user.username);
+            EventBus.emit('hide-registration-form');
+            this.transitionToGame(address);
+        }
+        else {
+            console.log('Login: User not found in DB. Showing registration form.');
+            this._showRegistrationForm(address);
+        }
+    }
+
+    private _showRegistrationForm(address: string) {
+        // Hide Phaser UI elements that might conflict with the React form
+        this.titleText.setVisible(false);
+        this.subtitleText.setVisible(false);
+        // Emitting event for React to show registration form
+        EventBus.emit('show-registration-form', address);
+    }
+
+    private onRegistrationComplete(data: { address: string, username: string }) {
+        console.log('Login: Registration complete for:', data.username, data.address);
+        // Show Phaser UI elements again
+        this.titleText.setVisible(true);
+        this.subtitleText.setVisible(true);
+        this.transitionToGame(data.address);
+    }
+
+    private transitionToGame(address: string) {
         // Show connected message briefly then transition
         const centerX = this.scale.width / 2;
         const centerY = this.scale.height / 2;
@@ -147,5 +182,6 @@ export class Login extends Scene {
 
     shutdown() {
         EventBus.off('wallet-connected', this.onWalletConnected, this);
+        EventBus.off('registration-complete', this.onRegistrationComplete, this);
     }
 }
