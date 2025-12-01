@@ -1,6 +1,11 @@
 import "@/styles/globals.css";
 import type { AppProps } from "next/app";
-import { Web3Provider } from "@/components/Web3Provider";
+import dynamic from "next/dynamic";
+
+const Web3Provider = dynamic(
+  () => import("@/components/Web3Provider").then((mod) => mod.Web3Provider),
+  { ssr: false }
+);
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
