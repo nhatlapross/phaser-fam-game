@@ -179,6 +179,16 @@ export class FarmingGame extends Scene {
     private checkinModalElements: Phaser.GameObjects.GameObject[] = [];
     private readonly CHECKIN_STORAGE_KEY = 'fam_game_checkin_data';
 
+    // Mailbox/Mission system
+    private mailboxSprite!: Phaser.GameObjects.Sprite;
+    private mailboxModalOpen: boolean = false;
+    private mailboxModalElements: Phaser.GameObjects.GameObject[] = [];
+    private mailboxActiveTab: 'missions' | 'redeem' = 'missions';
+
+    // Marquee announcement
+    private marqueeText!: Phaser.GameObjects.Text;
+    private marqueeContainer!: Phaser.GameObjects.Container;
+
     constructor() {
         super('FarmingGame');
     }
@@ -195,6 +205,9 @@ export class FarmingGame extends Scene {
 
         // Create check-in sign
         this.createCheckinSign();
+
+        // Create mailbox
+        this.createMailbox();
 
         // Create player
         this.createPlayer();
@@ -219,6 +232,9 @@ export class FarmingGame extends Scene {
 
         // Create mobile controls
         this.createMobileControls();
+
+        // Create marquee announcement
+        this.createMarquee();
 
         // Make UI camera ignore all game world objects (everything except UI)
         this.setupCameraIgnore();
@@ -659,7 +675,7 @@ export class FarmingGame extends Scene {
         this.factorySprite.setDisplaySize(64, 64); // Scale up from 30x30
         // Set depth based on factory's Y position (bottom of sprite)
         // This allows player to appear in front when below factory, behind when above
-        this.factorySprite.setDepth(factoryY + 32); // +32 for bottom of 64px sprite
+        this.factorySprite.setDepth(factoryY + 20);
         this.factorySprite.setInteractive({ useHandCursor: true });
 
         // Create idle animation (frames 1-2)
@@ -694,7 +710,8 @@ export class FarmingGame extends Scene {
         // Create check-in sign (smaller size to fit pixel art style)
         this.checkinSign = this.add.image(signX, signY, 'icon-checkin');
         this.checkinSign.setDisplaySize(16, 16);
-        this.checkinSign.setDepth(signY + 16);
+        // Set depth based on bottom of the sign (Y + half height) for proper sorting with player
+        this.checkinSign.setDepth(signY);
         this.checkinSign.setInteractive({ useHandCursor: true });
 
         // Click handler
@@ -1087,6 +1104,792 @@ export class FarmingGame extends Scene {
         this.checkinModalOpen = false;
         this.checkinModalElements.forEach(el => el.destroy());
         this.checkinModalElements = [];
+    }
+
+    private createMailbox() {
+        // Place mailbox to the right of factory
+        const centerX = 25;
+        const centerY = 25;
+        const factoryY = (centerY - 5) * this.TILE_SIZE;
+        const mailboxX = (centerX + 4) * this.TILE_SIZE + this.TILE_SIZE / 2; // 3 tiles right of center
+        const mailboxY = factoryY + 16; // Aligned with factory, lower to cover base
+
+        // Create mailbox animation (slower)
+        this.anims.create({
+            key: 'mailbox-idle',
+            frames: this.anims.generateFrameNumbers('mailbox', { start: 0, end: 4 }),
+            frameRate: 3,
+            repeat: -1
+        });
+
+        // Create mailbox sprite (larger size)
+        this.mailboxSprite = this.add.sprite(mailboxX, mailboxY, 'mailbox');
+        this.mailboxSprite.setDisplaySize(32, 32);
+        this.mailboxSprite.setDepth(mailboxY + 16);
+        this.mailboxSprite.setInteractive({ useHandCursor: true });
+        this.mailboxSprite.play('mailbox-idle');
+
+        // Click handler
+        this.mailboxSprite.on('pointerdown', () => {
+            this.openMailboxModal();
+        });
+
+        // Hover effects
+        this.mailboxSprite.on('pointerover', () => {
+            this.mailboxSprite.setTint(0xffff88);
+        });
+
+        this.mailboxSprite.on('pointerout', () => {
+            this.mailboxSprite.clearTint();
+        });
+
+        // Make UI camera ignore
+        this.uiCamera?.ignore(this.mailboxSprite);
+
+        // Add decorative bushes below mailbox
+        const bushY = mailboxY + 16;
+        const bushFrame1 = 27; // Bush sprite frame
+        const bushFrame2 = 28; // Another bush sprite frame
+
+        // Left bush
+        const leftBush = this.add.sprite(mailboxX - 12, bushY, 'basic-plants', bushFrame1);
+        leftBush.setOrigin(0.5);
+        leftBush.setDepth(bushY);
+        this.uiCamera?.ignore(leftBush);
+
+        // Right bush
+        const rightBush = this.add.sprite(mailboxX + 12, bushY, 'basic-plants', bushFrame2);
+        rightBush.setOrigin(0.5);
+        rightBush.setDepth(bushY);
+        this.uiCamera?.ignore(rightBush);
+
+        // Center bush (slightly lower)
+        const centerBush = this.add.sprite(mailboxX, bushY + 6, 'basic-plants', bushFrame1);
+        centerBush.setOrigin(0.5);
+        centerBush.setDepth(bushY + 6);
+        this.uiCamera?.ignore(centerBush);
+    }
+
+    private openMailboxModal() {
+        if (this.mailboxModalOpen) return;
+        this.mailboxModalOpen = true;
+        this.mailboxActiveTab = 'missions';
+
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const modalWidth = 300;
+        const modalHeight = 280;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+
+        // Overlay
+        const overlay = this.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.6);
+        overlay.setDepth(5300);
+        overlay.setInteractive();
+        this.cameras.main.ignore(overlay);
+        this.mailboxModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5301);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+            event.stopPropagation();
+        });
+        this.cameras.main.ignore(modalBg);
+        this.mailboxModalElements.push(modalBg);
+
+        // Animate modal
+        modalBg.setScale(0);
+        this.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        this.time.delayedCall(100, () => {
+            // Title
+            const title = this.add.text(modalX, modalY - modalHeight / 2 + 35, 'Mailbox', {
+                fontSize: '14px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            title.setOrigin(0.5);
+            title.setDepth(5302);
+            title.setStroke('#5D4037', 2);
+            title.setAlpha(0);
+            this.cameras.main.ignore(title);
+            this.mailboxModalElements.push(title);
+            this.tweens.add({ targets: title, alpha: 1, duration: 150 });
+
+            // Tab buttons
+            const tabY = modalY - modalHeight / 2 + 65;
+            const tabWidth = 90;
+            const tabHeight = 26;
+
+            // Missions tab
+            const missionsTabBg = this.add.sprite(modalX - 55, tabY, 'square-buttons', 6);
+            missionsTabBg.setDisplaySize(tabWidth, tabHeight);
+            missionsTabBg.setDepth(5302);
+            missionsTabBg.setAlpha(0);
+            missionsTabBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(missionsTabBg);
+            this.mailboxModalElements.push(missionsTabBg);
+
+            const missionsTabText = this.add.text(modalX - 55, tabY, 'Missions', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            missionsTabText.setOrigin(0.5);
+            missionsTabText.setDepth(5303);
+            missionsTabText.setStroke('#5D4037', 1);
+            missionsTabText.setAlpha(0);
+            this.cameras.main.ignore(missionsTabText);
+            this.mailboxModalElements.push(missionsTabText);
+
+            // Redeem tab
+            const redeemTabBg = this.add.sprite(modalX + 55, tabY, 'square-buttons', 7);
+            redeemTabBg.setDisplaySize(tabWidth, tabHeight);
+            redeemTabBg.setDepth(5302);
+            redeemTabBg.setAlpha(0);
+            redeemTabBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(redeemTabBg);
+            this.mailboxModalElements.push(redeemTabBg);
+
+            const redeemTabText = this.add.text(modalX + 55, tabY, 'Redeem', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            redeemTabText.setOrigin(0.5);
+            redeemTabText.setDepth(5303);
+            redeemTabText.setStroke('#5D4037', 1);
+            redeemTabText.setAlpha(0);
+            this.cameras.main.ignore(redeemTabText);
+            this.mailboxModalElements.push(redeemTabText);
+
+            this.tweens.add({
+                targets: [missionsTabBg, missionsTabText, redeemTabBg, redeemTabText],
+                alpha: 1,
+                duration: 150
+            });
+
+            // Content area
+            const contentY = modalY + 20;
+            const contentElements: Phaser.GameObjects.GameObject[] = [];
+
+            // Function to show missions tab content
+            const showMissionsContent = () => {
+                // Clear previous content
+                contentElements.forEach(el => el.destroy());
+                contentElements.length = 0;
+
+                missionsTabBg.setTexture('square-buttons', 6);
+                redeemTabBg.setTexture('square-buttons', 7);
+
+                // Sample missions list
+                const missions = [
+                    { name: 'Water 5 plants', progress: '3/5', done: false },
+                    { name: 'Harvest 3 crops', progress: '1/3', done: false },
+                    { name: 'Check in today', progress: '1/1', done: true },
+                ];
+
+                missions.forEach((mission, index) => {
+                    const missionY = contentY - 40 + index * 35;
+
+                    const missionBg = this.add.sprite(modalX, missionY, 'square-buttons', mission.done ? 6 : 7);
+                    missionBg.setDisplaySize(240, 28);
+                    missionBg.setDepth(5302);
+                    if (mission.done) missionBg.setTint(0x4ade80);
+                    this.cameras.main.ignore(missionBg);
+                    this.mailboxModalElements.push(missionBg);
+                    contentElements.push(missionBg);
+
+                    const missionText = this.add.text(modalX - 50, missionY, mission.name, {
+                        fontSize: '9px',
+                        fontFamily: 'PixelFont',
+                        color: '#FFFFFF',
+                        resolution: 2
+                    });
+                    missionText.setOrigin(0, 0.5);
+                    missionText.setDepth(5303);
+                    missionText.setStroke('#5D4037', 1);
+                    this.cameras.main.ignore(missionText);
+                    this.mailboxModalElements.push(missionText);
+                    contentElements.push(missionText);
+
+                    const progressText = this.add.text(modalX + 90, missionY, mission.done ? '✓' : mission.progress, {
+                        fontSize: '9px',
+                        fontFamily: 'PixelFont',
+                        color: mission.done ? '#4ade80' : '#FFF8E1',
+                        resolution: 2
+                    });
+                    progressText.setOrigin(0.5);
+                    progressText.setDepth(5303);
+                    progressText.setStroke('#5D4037', 1);
+                    this.cameras.main.ignore(progressText);
+                    this.mailboxModalElements.push(progressText);
+                    contentElements.push(progressText);
+                });
+            };
+
+            // Function to show redeem tab content
+            const showRedeemContent = () => {
+                // Clear previous content
+                contentElements.forEach(el => el.destroy());
+                contentElements.length = 0;
+
+                missionsTabBg.setTexture('square-buttons', 7);
+                redeemTabBg.setTexture('square-buttons', 6);
+
+                // Redeem code label
+                const codeLabel = this.add.text(modalX, contentY - 50, 'Enter Redeem Code:', {
+                    fontSize: '10px',
+                    fontFamily: 'PixelFont',
+                    color: '#FFFFFF',
+                    resolution: 2
+                });
+                codeLabel.setOrigin(0.5);
+                codeLabel.setDepth(5302);
+                codeLabel.setStroke('#5D4037', 2);
+                this.cameras.main.ignore(codeLabel);
+                this.mailboxModalElements.push(codeLabel);
+                contentElements.push(codeLabel);
+
+                // Create HTML input for redeem code
+                const inputElement = document.createElement('input');
+                inputElement.type = 'text';
+                inputElement.placeholder = 'Enter code here...';
+                inputElement.maxLength = 20;
+                inputElement.style.cssText = `
+                    position: fixed;
+                    left: 50%;
+                    top: 50%;
+                    transform: translate(-70%, -10px);
+                    width: 160px;
+                    padding: 8px 12px;
+                    font-size: 12px;
+                    font-family: 'PixelFont', monospace;
+                    border: 3px solid #5D4037;
+                    border-radius: 8px;
+                    background-color: #FFF8E1;
+                    color: #5D4037;
+                    outline: none;
+                    text-align: center;
+                    z-index: 10001;
+                `;
+                document.body.appendChild(inputElement);
+                inputElement.focus();
+
+                // Store reference for cleanup
+                (this as unknown as { _redeemInput: HTMLInputElement })._redeemInput = inputElement;
+
+                // QR Scan button
+                const qrBtnBg = this.add.sprite(modalX + 95, contentY - 20, 'square-buttons', 6);
+                qrBtnBg.setDisplaySize(40, 32);
+                qrBtnBg.setDepth(5302);
+                qrBtnBg.setInteractive({ useHandCursor: true });
+                this.cameras.main.ignore(qrBtnBg);
+                this.mailboxModalElements.push(qrBtnBg);
+                contentElements.push(qrBtnBg);
+
+                const qrText = this.add.text(modalX + 95, contentY - 20, 'QR', {
+                    fontSize: '10px',
+                    fontFamily: 'PixelFont',
+                    color: '#FFFFFF',
+                    resolution: 2
+                });
+                qrText.setOrigin(0.5);
+                qrText.setDepth(5303);
+                qrText.setStroke('#5D4037', 1);
+                this.cameras.main.ignore(qrText);
+                this.mailboxModalElements.push(qrText);
+                contentElements.push(qrText);
+
+                qrBtnBg.on('pointerdown', () => {
+                    this.openQRScanner(inputElement);
+                });
+                qrBtnBg.on('pointerover', () => qrBtnBg.setTint(0xcccccc));
+                qrBtnBg.on('pointerout', () => qrBtnBg.clearTint());
+
+                // Redeem button
+                const redeemBtnBg = this.add.sprite(modalX, contentY + 40, 'square-buttons', 6);
+                redeemBtnBg.setDisplaySize(120, 32);
+                redeemBtnBg.setDepth(5302);
+                redeemBtnBg.setInteractive({ useHandCursor: true });
+                this.cameras.main.ignore(redeemBtnBg);
+                this.mailboxModalElements.push(redeemBtnBg);
+                contentElements.push(redeemBtnBg);
+
+                const redeemBtnText = this.add.text(modalX, contentY + 40, 'Redeem', {
+                    fontSize: '11px',
+                    fontFamily: 'PixelFont',
+                    color: '#FFFFFF',
+                    resolution: 2
+                });
+                redeemBtnText.setOrigin(0.5);
+                redeemBtnText.setDepth(5303);
+                redeemBtnText.setStroke('#5D4037', 1);
+                this.cameras.main.ignore(redeemBtnText);
+                this.mailboxModalElements.push(redeemBtnText);
+                contentElements.push(redeemBtnText);
+
+                redeemBtnBg.on('pointerdown', () => {
+                    const code = inputElement.value.trim();
+                    if (code) {
+                        this.processRedeemCode(code);
+                        inputElement.value = '';
+                    }
+                });
+                redeemBtnBg.on('pointerover', () => redeemBtnBg.setTint(0xcccccc));
+                redeemBtnBg.on('pointerout', () => redeemBtnBg.clearTint());
+            };
+
+            // Tab click handlers
+            missionsTabBg.on('pointerdown', () => {
+                if (this.mailboxActiveTab !== 'missions') {
+                    this.mailboxActiveTab = 'missions';
+                    // Remove redeem input if exists
+                    const redeemInput = (this as unknown as { _redeemInput?: HTMLInputElement })._redeemInput;
+                    if (redeemInput && redeemInput.parentNode) {
+                        redeemInput.parentNode.removeChild(redeemInput);
+                    }
+                    showMissionsContent();
+                }
+            });
+            missionsTabBg.on('pointerover', () => missionsTabBg.setTint(0xcccccc));
+            missionsTabBg.on('pointerout', () => missionsTabBg.clearTint());
+
+            redeemTabBg.on('pointerdown', () => {
+                if (this.mailboxActiveTab !== 'redeem') {
+                    this.mailboxActiveTab = 'redeem';
+                    showRedeemContent();
+                }
+            });
+            redeemTabBg.on('pointerover', () => redeemTabBg.setTint(0xcccccc));
+            redeemTabBg.on('pointerout', () => redeemTabBg.clearTint());
+
+            // Show initial content (missions tab)
+            showMissionsContent();
+
+            // Close button
+            const closeBtnBg = this.add.sprite(modalX + modalWidth / 2 - 20, modalY - modalHeight / 2 + 20, 'square-buttons', 7);
+            closeBtnBg.setDisplaySize(24, 24);
+            closeBtnBg.setDepth(5302);
+            closeBtnBg.setAlpha(0);
+            closeBtnBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(closeBtnBg);
+            this.mailboxModalElements.push(closeBtnBg);
+
+            const closeText = this.add.text(modalX + modalWidth / 2 - 20, modalY - modalHeight / 2 + 20, 'X', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            closeText.setOrigin(0.5);
+            closeText.setDepth(5303);
+            closeText.setStroke('#5D4037', 1);
+            closeText.setAlpha(0);
+            this.cameras.main.ignore(closeText);
+            this.mailboxModalElements.push(closeText);
+
+            this.tweens.add({
+                targets: [closeBtnBg, closeText],
+                alpha: 1,
+                duration: 150
+            });
+
+            closeBtnBg.on('pointerdown', () => this.closeMailboxModal());
+            closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+            closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+        });
+
+        // Close on overlay click
+        overlay.on('pointerdown', () => this.closeMailboxModal());
+    }
+
+    private qrScannerContainer: HTMLDivElement | null = null;
+
+    private async openQRScanner(inputElement: HTMLInputElement) {
+        // Dynamically import html5-qrcode
+        const { Html5Qrcode } = await import('html5-qrcode');
+
+        // Create scanner container
+        this.qrScannerContainer = document.createElement('div');
+        this.qrScannerContainer.id = 'qr-scanner-container';
+        this.qrScannerContainer.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10002;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        `;
+
+        // Scanner element
+        const scannerElement = document.createElement('div');
+        scannerElement.id = 'qr-reader';
+        scannerElement.style.cssText = `
+            width: 300px;
+            height: 300px;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+        `;
+
+        // Title
+        const title = document.createElement('div');
+        title.textContent = 'Scan QR Code';
+        title.style.cssText = `
+            color: white;
+            font-family: 'PixelFont', monospace;
+            font-size: 18px;
+            margin-bottom: 20px;
+        `;
+
+        // Close button
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Close';
+        closeBtn.style.cssText = `
+            margin-top: 20px;
+            padding: 12px 30px;
+            font-family: 'PixelFont', monospace;
+            font-size: 14px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        `;
+
+        this.qrScannerContainer.appendChild(title);
+        this.qrScannerContainer.appendChild(scannerElement);
+        this.qrScannerContainer.appendChild(closeBtn);
+        document.body.appendChild(this.qrScannerContainer);
+
+        // Initialize scanner
+        const html5QrCode = new Html5Qrcode('qr-reader');
+
+        const qrCodeSuccessCallback = (decodedText: string) => {
+            // Stop scanner
+            html5QrCode.stop().then(() => {
+                // Set the scanned code to input
+                inputElement.value = decodedText;
+                this.showToastMessage('QR Code scanned!', 0x4ade80);
+                this.closeQRScanner();
+            }).catch((err: Error) => {
+                console.error('Error stopping scanner:', err);
+            });
+        };
+
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+        // Start scanner with back camera
+        html5QrCode.start(
+            { facingMode: 'environment' },
+            config,
+            qrCodeSuccessCallback,
+            () => {} // Ignore errors during scanning
+        ).catch((err: Error) => {
+            console.error('Error starting scanner:', err);
+            this.showToastMessage('Camera access denied', 0xef4444);
+            this.closeQRScanner();
+        });
+
+        // Close button handler
+        closeBtn.addEventListener('click', () => {
+            html5QrCode.stop().then(() => {
+                this.closeQRScanner();
+            }).catch(() => {
+                this.closeQRScanner();
+            });
+        });
+    }
+
+    private closeQRScanner() {
+        if (this.qrScannerContainer && this.qrScannerContainer.parentNode) {
+            this.qrScannerContainer.parentNode.removeChild(this.qrScannerContainer);
+        }
+        this.qrScannerContainer = null;
+    }
+
+    private processRedeemCode(code: string) {
+        // Sample redeem codes - in production, validate against backend
+        const validCodes: Record<string, { reward: string; water?: number; seed?: PlantType; fertilizer?: number; icon?: string }> = {
+            'WATER10': { reward: '+10 Water', water: 10, icon: 'icon-watercan' },
+            'MUSHROOM': { reward: '+1 Mushroom Seed', seed: 'mushroom', icon: 'mushroom-seed' },
+            'FERT5': { reward: '+5 Fertilizer', fertilizer: 5, icon: 'icon-fertilizer' },
+            '111111': { reward: '+1 Social Seed', seed: 'social', icon: 'social-seed' },
+        };
+
+        const upperCode = code.toUpperCase();
+        // Also check original code for numeric codes like '111111'
+        const rewardData = validCodes[upperCode] || validCodes[code];
+
+        if (rewardData) {
+            // Apply rewards
+            if (rewardData.water) {
+                const wateringCanItem = this.toolbarItems.find(item => item.name === 'wateringCan');
+                if (wateringCanItem) {
+                    wateringCanItem.count = (wateringCanItem.count || 0) + rewardData.water;
+                }
+            }
+            if (rewardData.seed) {
+                this.seedCounts[rewardData.seed] += 1;
+            }
+            if (rewardData.fertilizer) {
+                const fertilizerItem = this.toolbarItems.find(item => item.name === 'fertilizer');
+                if (fertilizerItem) {
+                    fertilizerItem.count = (fertilizerItem.count || 0) + rewardData.fertilizer;
+                }
+            }
+
+            this.updateToolbar();
+            this.showRedeemResultModal(true, rewardData.reward, rewardData.icon);
+        } else {
+            this.showRedeemResultModal(false, 'Invalid Code');
+        }
+    }
+
+    private redeemResultModalElements: Phaser.GameObjects.GameObject[] = [];
+
+    private showRedeemResultModal(success: boolean, message: string, icon?: string) {
+        // Clear any existing result modal first
+        this.closeRedeemResultModal();
+
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+        const modalWidth = 180;
+        const modalHeight = 140;
+
+        // Hide the redeem input while showing result modal
+        const redeemInput = (this as unknown as { _redeemInput?: HTMLInputElement })._redeemInput;
+        if (redeemInput) {
+            redeemInput.style.display = 'none';
+        }
+
+        // Hide mailbox modal elements while showing result
+        this.mailboxModalElements.forEach(el => {
+            if (el && 'setVisible' in el) {
+                (el as Phaser.GameObjects.Sprite).setVisible(false);
+            }
+        });
+
+        // Overlay
+        const overlay = this.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.5);
+        overlay.setDepth(5500);
+        overlay.setInteractive();
+        this.cameras.main.ignore(overlay);
+        this.redeemResultModalElements.push(overlay);
+
+        // Modal background - use settings-panel frame 1 (same as mailbox)
+        const modalBg = this.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5501);
+        this.cameras.main.ignore(modalBg);
+        this.redeemResultModalElements.push(modalBg);
+
+        // Scale animation
+        modalBg.setScale(0);
+        this.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        this.time.delayedCall(100, () => {
+            // Title
+            const titleText = success ? 'Success!' : 'Failed';
+            const strokeColor = success ? '#2d7a3d' : '#8b1a1a';
+
+            const title = this.add.text(modalX, modalY - 45, titleText, {
+                fontSize: '14px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            title.setOrigin(0.5);
+            title.setDepth(5502);
+            title.setStroke(strokeColor, 3);
+            this.cameras.main.ignore(title);
+            this.redeemResultModalElements.push(title);
+
+            // Icon (if success and icon provided)
+            if (success && icon) {
+                const iconSprite = this.add.image(modalX, modalY - 5, icon);
+                iconSprite.setDisplaySize(40, 40);
+                iconSprite.setDepth(5502);
+                iconSprite.setAlpha(0);
+                this.cameras.main.ignore(iconSprite);
+                this.redeemResultModalElements.push(iconSprite);
+
+                this.tweens.add({
+                    targets: iconSprite,
+                    alpha: 1,
+                    duration: 150,
+                    onComplete: () => {
+                        // Add bounce animation to icon
+                        this.tweens.add({
+                            targets: iconSprite,
+                            y: modalY - 10,
+                            yoyo: true,
+                            repeat: 2,
+                            duration: 150,
+                            ease: 'Quad.easeInOut'
+                        });
+                    }
+                });
+            } else if (!success) {
+                // Show X icon for failure
+                const failIcon = this.add.text(modalX, modalY - 5, '✗', {
+                    fontSize: '32px',
+                    fontFamily: 'PixelFont',
+                    color: '#ef4444',
+                    resolution: 2
+                });
+                failIcon.setOrigin(0.5);
+                failIcon.setDepth(5502);
+                failIcon.setAlpha(0);
+                this.cameras.main.ignore(failIcon);
+                this.redeemResultModalElements.push(failIcon);
+                this.tweens.add({ targets: failIcon, alpha: 1, duration: 150 });
+            }
+
+            // Message
+            const msgText = this.add.text(modalX, modalY + 30, message, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2,
+                align: 'center'
+            });
+            msgText.setOrigin(0.5);
+            msgText.setDepth(5502);
+            msgText.setStroke('#5D4037', 2);
+            msgText.setAlpha(0);
+            this.cameras.main.ignore(msgText);
+            this.redeemResultModalElements.push(msgText);
+            this.tweens.add({ targets: msgText, alpha: 1, duration: 150 });
+
+            // OK Button
+            const okBtnBg = this.add.sprite(modalX, modalY + 55, 'square-buttons', 6);
+            okBtnBg.setDisplaySize(70, 28);
+            okBtnBg.setDepth(5502);
+            okBtnBg.setAlpha(0);
+            okBtnBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(okBtnBg);
+            this.redeemResultModalElements.push(okBtnBg);
+
+            const okText = this.add.text(modalX, modalY + 55, 'OK', {
+                fontSize: '11px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            okText.setOrigin(0.5);
+            okText.setDepth(5503);
+            okText.setStroke('#5D4037', 2);
+            okText.setAlpha(0);
+            this.cameras.main.ignore(okText);
+            this.redeemResultModalElements.push(okText);
+
+            this.tweens.add({
+                targets: [okBtnBg, okText],
+                alpha: 1,
+                duration: 150
+            });
+
+            okBtnBg.on('pointerdown', () => this.closeRedeemResultModal());
+            okBtnBg.on('pointerover', () => okBtnBg.setTint(0xcccccc));
+            okBtnBg.on('pointerout', () => okBtnBg.clearTint());
+        });
+
+        // Close on overlay click
+        overlay.on('pointerdown', () => this.closeRedeemResultModal());
+    }
+
+    private closeRedeemResultModal() {
+        this.redeemResultModalElements.forEach(el => {
+            if (el && el.destroy) {
+                el.destroy();
+            }
+        });
+        this.redeemResultModalElements = [];
+
+        // Show mailbox modal elements again
+        this.mailboxModalElements.forEach(el => {
+            if (el && 'setVisible' in el) {
+                (el as Phaser.GameObjects.Sprite).setVisible(true);
+            }
+        });
+
+        // Show the redeem input again
+        const redeemInput = (this as unknown as { _redeemInput?: HTMLInputElement })._redeemInput;
+        if (redeemInput) {
+            redeemInput.style.display = 'block';
+            redeemInput.value = ''; // Clear the input
+        }
+    }
+
+    // Simple toast message for QR scanner feedback
+    private showToastMessage(text: string, color: number) {
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+
+        const msgText = this.add.text(screenWidth / 2, screenHeight / 2 + 80, text, {
+            fontSize: '12px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        msgText.setOrigin(0.5);
+        msgText.setDepth(5600);
+        msgText.setStroke('#000000', 2);
+        msgText.setTint(color);
+        this.cameras.main.ignore(msgText);
+
+        this.tweens.add({
+            targets: msgText,
+            y: screenHeight / 2 + 60,
+            alpha: 0,
+            duration: 1500,
+            ease: 'Cubic.easeOut',
+            onComplete: () => {
+                msgText.destroy();
+            }
+        });
+    }
+
+    private closeMailboxModal() {
+        this.mailboxModalOpen = false;
+
+        // Remove HTML input if exists
+        const redeemInput = (this as unknown as { _redeemInput?: HTMLInputElement })._redeemInput;
+        if (redeemInput && redeemInput.parentNode) {
+            redeemInput.parentNode.removeChild(redeemInput);
+        }
+        (this as unknown as { _redeemInput?: HTMLInputElement })._redeemInput = undefined;
+
+        // Destroy all modal elements
+        this.mailboxModalElements.forEach(el => el.destroy());
+        this.mailboxModalElements = [];
     }
 
     private toggleFactoryModal() {
@@ -2692,6 +3495,7 @@ export class FarmingGame extends Scene {
         overlay.on('pointerdown', () => this.closeEditForm());
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     private createTextEditForm(formX: number, formY: number, formWidth: number, fieldName: string, currentValue: string) {
         // Create HTML input element for text editing
         const inputElement = document.createElement('input');
@@ -2802,6 +3606,7 @@ export class FarmingGame extends Scene {
         });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     private createAvatarEditForm(formX: number, formY: number, formWidth: number, currentValue: string) {
         // URL input label
         const urlLabel = this.add.text(formX, formY - 35, 'Enter Image URL:', {
@@ -3052,6 +3857,68 @@ export class FarmingGame extends Scene {
         if (this.groundLayer) this.uiCamera.ignore(this.groundLayer);
         if (this.tilledDirtLayer) this.uiCamera.ignore(this.tilledDirtLayer);
         if (this.player) this.uiCamera.ignore(this.player);
+    }
+
+    private createMarquee() {
+        const screenWidth = this.scale.width;
+        const marqueeY = 18; // Same row as time clock (uiY = 10 + padding)
+        const marqueeWidth = 400; // Wider marquee box
+        const marqueeHeight = 18;
+        const marqueeX = screenWidth / 2; // Center of screen
+        const message = '🎉 Cardano Meetup in First January 2026 with many gifts waiting for you! 🎁';
+
+        // Background bar (centered)
+        const marqueeBg = this.add.rectangle(marqueeX, marqueeY, marqueeWidth, marqueeHeight, 0x000000, 0.7);
+        marqueeBg.setDepth(5100);
+        this.cameras.main.ignore(marqueeBg);
+
+        // Create text (starts from right edge of the box)
+        const startX = marqueeX + marqueeWidth / 2;
+        this.marqueeText = this.add.text(startX, marqueeY, message, {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        this.marqueeText.setOrigin(0, 0.5);
+        this.marqueeText.setDepth(5101);
+        this.cameras.main.ignore(this.marqueeText);
+
+        // Create mask to hide text outside the box
+        const maskShape = this.make.graphics({ x: 0, y: 0 });
+        maskShape.fillStyle(0xffffff);
+        maskShape.fillRect(marqueeX - marqueeWidth / 2, marqueeY - marqueeHeight / 2, marqueeWidth, marqueeHeight);
+        const mask = maskShape.createGeometryMask();
+        this.marqueeText.setMask(mask);
+
+        // Animate text scrolling from right to left within the box
+        const textWidth = this.marqueeText.width;
+        const endX = marqueeX - marqueeWidth / 2 - textWidth;
+
+        const animateMarquee = () => {
+            // Show marquee
+            marqueeBg.setVisible(true);
+            this.marqueeText.setVisible(true);
+            this.marqueeText.x = startX;
+
+            this.tweens.add({
+                targets: this.marqueeText,
+                x: endX,
+                duration: 12000, // 12 seconds to scroll across
+                ease: 'Linear',
+                onComplete: () => {
+                    // Hide marquee after text finishes
+                    marqueeBg.setVisible(false);
+                    this.marqueeText.setVisible(false);
+
+                    // Wait 5 minutes (300000ms) then show again
+                    this.time.delayedCall(300000, () => {
+                        animateMarquee();
+                    });
+                }
+            });
+        };
+        animateMarquee();
     }
 
     private createMobileControls() {
