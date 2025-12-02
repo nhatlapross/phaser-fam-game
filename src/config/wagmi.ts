@@ -1,9 +1,25 @@
-import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { mainnet, polygon, optimism, arbitrum } from 'wagmi/chains';
+import { cookieStorage, createStorage } from '@wagmi/core';
+import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
+import { mainnet, polygon, optimism, arbitrum } from '@reown/appkit/networks';
 
-export const config = getDefaultConfig({
-    appName: 'Farming Game',
-    projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'demo-project-id',
-    chains: [mainnet, polygon, optimism, arbitrum],
+// Get projectId from environment
+export const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '';
+
+if (!projectId) {
+    console.warn('NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID is not set');
+}
+
+// Define networks
+export const networks = [mainnet, polygon, optimism, arbitrum];
+
+// Create Wagmi Adapter
+export const wagmiAdapter = new WagmiAdapter({
+    storage: createStorage({
+        storage: cookieStorage
+    }),
     ssr: true,
+    projectId,
+    networks
 });
+
+export const config = wagmiAdapter.wagmiConfig;

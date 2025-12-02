@@ -1,9 +1,9 @@
 import { useRef, useEffect, useState } from 'react';
 import { IRefPhaserGame, PhaserGame } from './PhaserGame';
 import { useAccount, useDisconnect } from 'wagmi';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useAppKit } from '@reown/appkit/react';
 import { EventBus } from './game/EventBus';
-import { UserService } from './game/UserService'; // Import UserService
+import { UserService } from './game/UserService';
 
 // RegistrationForm Component
 const RegistrationForm = ({ address, onRegisterSuccess, onCancel }: { address: string; onRegisterSuccess: (username: string) => void; onCancel: () => void }) => {
@@ -25,7 +25,7 @@ const RegistrationForm = ({ address, onRegisterSuccess, onCancel }: { address: s
         try {
             const user = await UserService.registerUser(address, username);
             if (user) {
-                onRegisterSuccess(user.username);
+                onRegisterSuccess(user.username || username);
             } else {
                 setError('Registration failed. Please try again.');
             }
@@ -118,6 +118,7 @@ function App() {
 
     const { address, isConnected, status } = useAccount();
     const { disconnect } = useDisconnect();
+    const { open } = useAppKit();
 
     const disconnectRef = useRef(disconnect);
     useEffect(() => {
@@ -207,7 +208,31 @@ function App() {
                     zIndex: 9999,
                     marginTop: '50px'
                 }}>
-                    <ConnectButton />
+                    <button
+                        onClick={() => open()}
+                        style={{
+                            padding: '16px 32px',
+                            borderRadius: '12px',
+                            border: 'none',
+                            backgroundColor: '#4ade80',
+                            color: '#1a1a2e',
+                            fontSize: '18px',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 14px rgba(74, 222, 128, 0.4)',
+                            transition: 'all 0.2s ease-in-out'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#22c55e';
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#4ade80';
+                            e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                    >
+                        Connect Wallet
+                    </button>
                 </div>
             )}
             {showRegistrationForm && registrationAddress && (

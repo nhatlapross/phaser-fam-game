@@ -157,6 +157,12 @@ export class Preloader extends Scene
         this.load.image('factory-2', 'objects/factory/factory_2.png');
         this.load.image('factory-3', 'objects/factory/factory_3.png');
         this.load.image('factory-4', 'objects/factory/factory_4.png');
+
+        // Default avatar for user profile
+        this.load.image('default-avatar', 'characters/avatar.png');
+
+        // Check-in icon
+        this.load.image('icon-checkin', 'icons/checkin.png');
     }
 
     create ()

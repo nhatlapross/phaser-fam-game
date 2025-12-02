@@ -28,11 +28,10 @@
         "build-nolog": "next build"
     },
     "dependencies": {
-        "@rainbow-me/rainbowkit": "^2.2.9",
-        "@react-native-async-storage/async-storage": "^2.2.0",
+        "@reown/appkit": "^1.8.14",
+        "@reown/appkit-adapter-wagmi": "^1.8.14",
         "@tanstack/react-query": "^5.90.11",
         "next": "15.3.1",
-        "or": "^0.2.0",
         "phaser": "^3.90.0",
         "react": "19.0.0",
         "react-dom": "19.0.0",

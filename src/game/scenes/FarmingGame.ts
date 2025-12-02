@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { ISLAND_MAP_DATA } from './IslandMapData';
+import { UserService } from '../UserService';
 
 // Plant types based on proposal
 type PlantType = 'social' | 'technical' | 'branded' | 'mushroom';
@@ -156,6 +157,13 @@ export class FarmingGame extends Scene {
     private walletAddress: string = '';
     private walletUIElements: Phaser.GameObjects.GameObject[] = [];
 
+    // User Profile UI
+    private userProfileElements: Phaser.GameObjects.GameObject[] = [];
+    private userProfileModalOpen: boolean = false;
+    private userProfileModalElements: Phaser.GameObjects.GameObject[] = [];
+    private avatarImage: Phaser.GameObjects.Image | null = null;
+    private loadedAvatarUrl: string | null = null;
+
     // Mobile controls
     private joystickBase!: Phaser.GameObjects.Arc;
     private joystickThumb!: Phaser.GameObjects.Arc;
@@ -164,6 +172,12 @@ export class FarmingGame extends Scene {
     private touchMoveTarget: { x: number, y: number } | null = null;
     private actionButton!: Phaser.GameObjects.Arc;
     private actionButtonText!: Phaser.GameObjects.Text;
+
+    // Check-in system
+    private checkinSign!: Phaser.GameObjects.Image;
+    private checkinModalOpen: boolean = false;
+    private checkinModalElements: Phaser.GameObjects.GameObject[] = [];
+    private readonly CHECKIN_STORAGE_KEY = 'fam_game_checkin_data';
 
     constructor() {
         super('FarmingGame');
@@ -178,6 +192,9 @@ export class FarmingGame extends Scene {
 
         // Create factory
         this.createFactory();
+
+        // Create check-in sign
+        this.createCheckinSign();
 
         // Create player
         this.createPlayer();
@@ -252,6 +269,9 @@ export class FarmingGame extends Scene {
 
         // Recreate wallet display
         this.createWalletDisplay();
+
+        // Recreate user profile UI
+        this.createUserProfileUI();
     }
 
     private createWaterAnimation() {
@@ -662,6 +682,411 @@ export class FarmingGame extends Scene {
 
         // Make UI camera ignore factory
         this.uiCamera?.ignore(this.factorySprite);
+    }
+
+    private createCheckinSign() {
+        // Place check-in sign near the farm plots (to the left of farm area)
+        const centerX = 25;
+        const centerY = 25;
+        const signX = (centerX - 3) * this.TILE_SIZE + this.TILE_SIZE / 2; // 3 tiles left of farm
+        const signY = (centerY - 1) * this.TILE_SIZE + this.TILE_SIZE / 2; // Aligned with top row
+
+        // Create check-in sign (smaller size to fit pixel art style)
+        this.checkinSign = this.add.image(signX, signY, 'icon-checkin');
+        this.checkinSign.setDisplaySize(16, 16);
+        this.checkinSign.setDepth(signY + 16);
+        this.checkinSign.setInteractive({ useHandCursor: true });
+
+        // Click handler
+        this.checkinSign.on('pointerdown', () => {
+            this.openCheckinModal();
+        });
+
+        // Hover effects - just tint, no scale change
+        this.checkinSign.on('pointerover', () => {
+            this.checkinSign.setTint(0xffff88);
+        });
+
+        this.checkinSign.on('pointerout', () => {
+            this.checkinSign.clearTint();
+        });
+
+        // Make UI camera ignore
+        this.uiCamera?.ignore(this.checkinSign);
+    }
+
+    private getCheckinData(): { checkedDays: number[]; lastCheckin: string; streak: number } {
+        if (typeof window === 'undefined') {
+            return { checkedDays: [], lastCheckin: '', streak: 0 };
+        }
+        const stored = localStorage.getItem(this.CHECKIN_STORAGE_KEY);
+        if (stored) {
+            try {
+                return JSON.parse(stored);
+            } catch {
+                return { checkedDays: [], lastCheckin: '', streak: 0 };
+            }
+        }
+        return { checkedDays: [], lastCheckin: '', streak: 0 };
+    }
+
+    private saveCheckinData(data: { checkedDays: number[]; lastCheckin: string; streak: number }) {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(this.CHECKIN_STORAGE_KEY, JSON.stringify(data));
+        }
+    }
+
+    private getTodayString(): string {
+        const today = new Date();
+        return `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
+    }
+
+    private getDayOfWeek(): number {
+        // Returns 0-6, where 0 is Sunday
+        return new Date().getDay();
+    }
+
+    private canCheckinToday(): boolean {
+        const data = this.getCheckinData();
+        return data.lastCheckin !== this.getTodayString();
+    }
+
+    private openCheckinModal() {
+        if (this.checkinModalOpen) return;
+        this.checkinModalOpen = true;
+
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const modalWidth = 320;
+        const modalHeight = 220;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+
+        // Overlay
+        const overlay = this.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.6);
+        overlay.setDepth(5300);
+        overlay.setInteractive();
+        this.cameras.main.ignore(overlay);
+        this.checkinModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5301);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+            event.stopPropagation();
+        });
+        this.cameras.main.ignore(modalBg);
+        this.checkinModalElements.push(modalBg);
+
+        // Animate modal
+        modalBg.setScale(0);
+        this.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        // Title
+        this.time.delayedCall(100, () => {
+            const title = this.add.text(modalX, modalY - modalHeight / 2 + 35, 'Daily Check-in', {
+                fontSize: '14px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            title.setOrigin(0.5);
+            title.setDepth(5302);
+            title.setStroke('#5D4037', 2);
+            title.setAlpha(0);
+            this.cameras.main.ignore(title);
+            this.checkinModalElements.push(title);
+
+            this.tweens.add({ targets: title, alpha: 1, duration: 150 });
+
+            // Get checkin data
+            const checkinData = this.getCheckinData();
+            const todayDayOfWeek = this.getDayOfWeek();
+            const canCheckin = this.canCheckinToday();
+
+            // Day names - Layout: 4 days on top row, 3 days on bottom row
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const dayBoxSize = 38;
+            const daySpacing = 8;
+            const rowSpacing = 45;
+            const row1Y = modalY - 35; // First row Y
+            const row2Y = row1Y + rowSpacing; // Second row Y
+
+            // Create day boxes in 2 rows
+            dayNames.forEach((dayName, index) => {
+                let dayX: number;
+                let dayY: number;
+
+                if (index < 4) {
+                    // First row: 4 days (Sun, Mon, Tue, Wed)
+                    const row1StartX = modalX - (4 * (dayBoxSize + daySpacing) - daySpacing) / 2 + dayBoxSize / 2;
+                    dayX = row1StartX + index * (dayBoxSize + daySpacing);
+                    dayY = row1Y;
+                } else {
+                    // Second row: 3 days (Thu, Fri, Sat) - centered
+                    const row2StartX = modalX - (3 * (dayBoxSize + daySpacing) - daySpacing) / 2 + dayBoxSize / 2;
+                    dayX = row2StartX + (index - 4) * (dayBoxSize + daySpacing);
+                    dayY = row2Y;
+                }
+
+                const isToday = index === todayDayOfWeek;
+                const isChecked = checkinData.checkedDays.includes(index);
+
+                // Day box background
+                const boxFrame = isChecked ? 6 : (isToday ? 6 : 7);
+                const dayBox = this.add.sprite(dayX, dayY, 'square-buttons', boxFrame);
+                dayBox.setDisplaySize(dayBoxSize, dayBoxSize);
+                dayBox.setDepth(5302);
+                dayBox.setAlpha(0);
+                this.cameras.main.ignore(dayBox);
+                this.checkinModalElements.push(dayBox);
+
+                if (isChecked) {
+                    dayBox.setTint(0x4ade80); // Green for checked
+                } else if (!isToday) {
+                    dayBox.setTint(0x888888); // Gray for past/future days
+                }
+
+                // Day name text
+                const dayText = this.add.text(dayX, dayY - 10, dayName, {
+                    fontSize: '8px',
+                    fontFamily: 'PixelFont',
+                    color: '#FFFFFF',
+                    resolution: 2
+                });
+                dayText.setOrigin(0.5);
+                dayText.setDepth(5303);
+                dayText.setStroke('#5D4037', 1);
+                dayText.setAlpha(0);
+                this.cameras.main.ignore(dayText);
+                this.checkinModalElements.push(dayText);
+
+                // Checkmark or day number
+                const checkSymbol = isChecked ? '✓' : (index + 1).toString();
+                const checkText = this.add.text(dayX, dayY + 6, checkSymbol, {
+                    fontSize: isChecked ? '12px' : '10px',
+                    fontFamily: 'PixelFont',
+                    color: isChecked ? '#FFFFFF' : '#FFF8E1',
+                    resolution: 2
+                });
+                checkText.setOrigin(0.5);
+                checkText.setDepth(5303);
+                checkText.setStroke('#5D4037', 1);
+                checkText.setAlpha(0);
+                this.cameras.main.ignore(checkText);
+                this.checkinModalElements.push(checkText);
+
+                // Fade in
+                this.tweens.add({
+                    targets: [dayBox, dayText, checkText],
+                    alpha: 1,
+                    duration: 150,
+                    delay: index * 30
+                });
+
+                // Make today's box clickable for check-in
+                if (isToday && canCheckin && !isChecked) {
+                    dayBox.setInteractive({ useHandCursor: true });
+                    dayBox.on('pointerover', () => dayBox.setTint(0xffff88));
+                    dayBox.on('pointerout', () => dayBox.clearTint());
+                    dayBox.on('pointerdown', () => {
+                        this.performCheckin(index, dayBox, checkText, checkinData);
+                    });
+                }
+            });
+
+            // Streak info - positioned below the 2 rows
+            const infoY = row2Y + 35;
+            const streakText = this.add.text(modalX, infoY, `Current Streak: ${checkinData.streak} day${checkinData.streak !== 1 ? 's' : ''}`, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFF8E1',
+                resolution: 2
+            });
+            streakText.setOrigin(0.5);
+            streakText.setDepth(5302);
+            streakText.setStroke('#5D4037', 2);
+            streakText.setAlpha(0);
+            this.cameras.main.ignore(streakText);
+            this.checkinModalElements.push(streakText);
+
+            this.tweens.add({ targets: streakText, alpha: 1, duration: 150, delay: 200 });
+
+            // Reward info
+            const rewardInfo = this.add.text(modalX, infoY + 16, 'Check in to get 1 Water!', {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#4ade80',
+                resolution: 2
+            });
+            rewardInfo.setOrigin(0.5);
+            rewardInfo.setDepth(5302);
+            rewardInfo.setStroke('#2d5a2d', 1);
+            rewardInfo.setAlpha(0);
+            this.cameras.main.ignore(rewardInfo);
+            this.checkinModalElements.push(rewardInfo);
+
+            this.tweens.add({ targets: rewardInfo, alpha: 1, duration: 150, delay: 250 });
+
+            // 7-day streak bonus info
+            const bonusInfo = this.add.text(modalX, infoY + 30, '7-day streak = Mushroom Seed!', {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#fbbf24',
+                resolution: 2
+            });
+            bonusInfo.setOrigin(0.5);
+            bonusInfo.setDepth(5302);
+            bonusInfo.setStroke('#5D4037', 1);
+            bonusInfo.setAlpha(0);
+            this.cameras.main.ignore(bonusInfo);
+            this.checkinModalElements.push(bonusInfo);
+
+            this.tweens.add({ targets: bonusInfo, alpha: 1, duration: 150, delay: 300 });
+
+            // Close button
+            const closeBtnBg = this.add.sprite(modalX + modalWidth / 2 - 20, modalY - modalHeight / 2 + 20, 'square-buttons', 7);
+            closeBtnBg.setDisplaySize(24, 24);
+            closeBtnBg.setDepth(5302);
+            closeBtnBg.setAlpha(0);
+            closeBtnBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(closeBtnBg);
+            this.checkinModalElements.push(closeBtnBg);
+
+            const closeText = this.add.text(modalX + modalWidth / 2 - 20, modalY - modalHeight / 2 + 20, 'X', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            closeText.setOrigin(0.5);
+            closeText.setDepth(5303);
+            closeText.setStroke('#5D4037', 1);
+            closeText.setAlpha(0);
+            this.cameras.main.ignore(closeText);
+            this.checkinModalElements.push(closeText);
+
+            this.tweens.add({
+                targets: [closeBtnBg, closeText],
+                alpha: 1,
+                duration: 150
+            });
+
+            closeBtnBg.on('pointerdown', () => this.closeCheckinModal());
+            closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+            closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+        });
+
+        // Close on overlay click
+        overlay.on('pointerdown', () => this.closeCheckinModal());
+    }
+
+    private performCheckin(dayIndex: number, dayBox: Phaser.GameObjects.Sprite, checkText: Phaser.GameObjects.Text, checkinData: { checkedDays: number[]; lastCheckin: string; streak: number }) {
+        // Update check-in data
+        const today = this.getTodayString();
+
+        // Calculate streak
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayString = `${yesterday.getFullYear()}-${yesterday.getMonth() + 1}-${yesterday.getDate()}`;
+
+        let newStreak = 1;
+        if (checkinData.lastCheckin === yesterdayString) {
+            newStreak = checkinData.streak + 1;
+        }
+
+        // Update checked days for this week
+        if (!checkinData.checkedDays.includes(dayIndex)) {
+            checkinData.checkedDays.push(dayIndex);
+        }
+
+        // Save
+        this.saveCheckinData({
+            checkedDays: checkinData.checkedDays,
+            lastCheckin: today,
+            streak: newStreak
+        });
+
+        // Update UI
+        dayBox.setTint(0x4ade80);
+        checkText.setText('✓');
+        checkText.setFontSize(12);
+        dayBox.disableInteractive();
+
+        // Animate check
+        this.tweens.add({
+            targets: dayBox,
+            scaleX: 1.2,
+            scaleY: 1.2,
+            duration: 100,
+            yoyo: true
+        });
+
+        // Give reward: +1 water
+        const wateringCanItem = this.toolbarItems.find(item => item.name === 'wateringCan');
+        if (wateringCanItem) {
+            wateringCanItem.count = (wateringCanItem.count || 0) + 1;
+        }
+
+        // Show reward notification
+        this.showCheckinReward('+1 Water!', 0x4ade80);
+
+        // Check for 7-day streak bonus
+        if (newStreak >= 7 && newStreak % 7 === 0) {
+            // Give mushroom seed
+            this.seedCounts.mushroom += 1;
+
+            // Show bonus notification after delay
+            this.time.delayedCall(1000, () => {
+                this.showCheckinReward('+1 Mushroom Seed!', 0xfbbf24);
+            });
+        }
+
+        // Update toolbar display
+        this.updateToolbar();
+    }
+
+    private showCheckinReward(text: string, color: number) {
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+
+        const rewardText = this.add.text(screenWidth / 2, screenHeight / 2 - 40, text, {
+            fontSize: '16px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        rewardText.setOrigin(0.5);
+        rewardText.setDepth(5400);
+        rewardText.setStroke('#000000', 3);
+        rewardText.setTint(color);
+        this.cameras.main.ignore(rewardText);
+
+        // Float up and fade out
+        this.tweens.add({
+            targets: rewardText,
+            y: screenHeight / 2 - 80,
+            alpha: 0,
+            duration: 1500,
+            ease: 'Cubic.easeOut',
+            onComplete: () => {
+                rewardText.destroy();
+            }
+        });
+    }
+
+    private closeCheckinModal() {
+        this.checkinModalOpen = false;
+        this.checkinModalElements.forEach(el => el.destroy());
+        this.checkinModalElements = [];
     }
 
     private toggleFactoryModal() {
@@ -1213,6 +1638,9 @@ export class FarmingGame extends Scene {
         this.cameras.main.ignore(this.timeText);
         this.updateTimeDisplay();
 
+        // User Profile (top right)
+        this.createUserProfileUI();
+
         // Toolbar (bottom center)
         this.createToolbar();
     }
@@ -1731,82 +2159,10 @@ export class FarmingGame extends Scene {
     }
 
     private createWalletDisplay() {
-        // Safety check - ensure scene and cameras are ready
-        if (!this.sys || !this.cameras || !this.cameras.main) {
-            console.log('FarmingGame: scene not ready for wallet display');
-            return;
-        }
-
-        // Clear previous wallet UI
+        // Wallet display is now integrated into user profile UI
+        // Clear any previous wallet UI elements
         this.walletUIElements.forEach(el => el.destroy());
         this.walletUIElements = [];
-
-        if (!this.walletAddress) return;
-
-        // Position in top-right corner
-        const screenWidth = this.scale.width;
-        const buttonWidth = 96;
-        const buttonHeight = 32;
-        const padding = 10;
-        const gap = 6;
-
-        // Logout button position (rightmost)
-        const logoutX = screenWidth - buttonWidth / 2 - padding;
-        const y = buttonHeight / 2 + padding;
-
-        // Wallet button position (left of logout)
-        const walletX = logoutX - buttonWidth - gap;
-
-        // Background button for wallet (frame #0 - empty normal state)
-        const bg = this.add.sprite(walletX, y, 'ui-big-play-button', 0);
-        bg.setDepth(5010);
-        this.cameras.main.ignore(bg);
-        this.walletUIElements.push(bg);
-
-        // Shortened wallet address (4...4)
-        const shortAddress = `${this.walletAddress.slice(0, 6)}...${this.walletAddress.slice(-4)}`;
-
-        // Wallet address text with pixel font
-        const addressText = this.add.text(walletX, y, shortAddress, {
-            fontFamily: 'PixelFont',
-            fontSize: '12px',
-            color: '#5D4037',
-            resolution: 2
-        });
-        addressText.setOrigin(0.5);
-        addressText.setDepth(5011);
-        this.cameras.main.ignore(addressText);
-        this.walletUIElements.push(addressText);
-
-        // Logout button (using ui-big-play-button frame #0, same size as wallet)
-        const logoutBg = this.add.sprite(logoutX, y, 'ui-big-play-button', 0);
-        logoutBg.setDepth(5010);
-        logoutBg.setInteractive({ useHandCursor: true });
-        this.cameras.main.ignore(logoutBg);
-        this.walletUIElements.push(logoutBg);
-
-        // Logout text
-        const logoutText = this.add.text(logoutX, y, 'Log out', {
-            fontFamily: 'PixelFont',
-            fontSize: '12px',
-            color: '#5D4037',
-            resolution: 2
-        });
-        logoutText.setOrigin(0.5);
-        logoutText.setDepth(5011);
-        this.cameras.main.ignore(logoutText);
-        this.walletUIElements.push(logoutText);
-
-        // Logout button interaction (use tint instead of frame to avoid "play" text)
-        logoutBg.on('pointerover', () => {
-            logoutBg.setTint(0xcccccc); // darken on hover
-        });
-        logoutBg.on('pointerout', () => {
-            logoutBg.clearTint(); // clear tint
-        });
-        logoutBg.on('pointerdown', () => {
-            this.handleLogout();
-        });
     }
 
     private handleLogout() {
@@ -1818,11 +2174,868 @@ export class FarmingGame extends Scene {
         this.walletUIElements.forEach(el => el.destroy());
         this.walletUIElements = [];
 
+        // Clear user profile UI
+        this.userProfileElements.forEach(el => el.destroy());
+        this.userProfileElements = [];
+
+        // Clear user data from storage
+        UserService.clearAuthData();
+
+        // Close modal if open
+        this.closeProfileModal();
+
         // Transition to Login scene with fromLogout flag
         this.cameras.main.fadeOut(300, 0, 0, 0);
         this.cameras.main.once('camerafadeoutcomplete', () => {
             this.scene.start('Login', { fromLogout: true });
         });
+    }
+
+    private createUserProfileUI() {
+        // Clear previous elements
+        this.userProfileElements.forEach(el => el.destroy());
+        this.userProfileElements = [];
+
+        const user = UserService.getStoredUser();
+        if (!user) return;
+
+        const screenWidth = this.scale.width;
+        const padding = 10;
+        const avatarSize = 50;
+        const panelWidth = 140;
+        const panelHeight = 85;
+
+        // Position in top-right corner
+        const panelX = screenWidth - panelWidth / 2 - padding;
+        const panelY = panelHeight / 2 + padding;
+
+        // Background panel using settings-panel sprite (pixel style)
+        const bg = this.add.sprite(panelX, panelY, 'settings-panel', 1);
+        bg.setDisplaySize(panelWidth, panelHeight);
+        bg.setDepth(5020);
+        bg.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(bg);
+        this.userProfileElements.push(bg);
+
+        // Avatar frame using square-buttons sprite (pixel style)
+        const avatarBgX = panelX - panelWidth / 2 + 18 + avatarSize / 2;
+        const avatarBgY = panelY - 5;
+
+        const avatarFrame = this.add.sprite(avatarBgX, avatarBgY, 'square-buttons', 6);
+        avatarFrame.setDisplaySize(avatarSize + 10, avatarSize + 10);
+        avatarFrame.setDepth(5021);
+        this.cameras.main.ignore(avatarFrame);
+        this.userProfileElements.push(avatarFrame);
+
+        // Avatar image - use default if no avatar URL
+        if (user.avatar) {
+            // Load external avatar image
+            this.loadExternalAvatar(user.avatar, avatarBgX, avatarBgY, avatarSize);
+        } else {
+            // Use default avatar
+            const avatar = this.add.image(avatarBgX, avatarBgY, 'default-avatar');
+            avatar.setDisplaySize(avatarSize, avatarSize);
+            avatar.setDepth(5022);
+            this.cameras.main.ignore(avatar);
+            this.userProfileElements.push(avatar);
+            this.avatarImage = avatar;
+        }
+
+        // Info section (right of avatar)
+        const infoX = avatarBgX + avatarSize / 2 + 8;
+        const infoStartY = panelY - 28;
+
+        // Username
+        const username = user.username || 'Player';
+        const nameText = this.add.text(infoX, infoStartY, username.length > 7 ? username.slice(0, 6) + '..' : username, {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#5D4037',
+            resolution: 2
+        });
+        nameText.setDepth(5023);
+        this.cameras.main.ignore(nameText);
+        this.userProfileElements.push(nameText);
+
+        // Wallet address (short) - right below username
+        const shortWallet = `${user.address.slice(0, 4)}..${user.address.slice(-4)}`;
+        const walletText = this.add.text(infoX, infoStartY + 14, shortWallet, {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#8D6E63',
+            resolution: 2
+        });
+        walletText.setDepth(5023);
+        this.cameras.main.ignore(walletText);
+        this.userProfileElements.push(walletText);
+
+        // XP
+        const xpText = this.add.text(infoX, infoStartY + 28, `XP: ${user.xp}`, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#5D4037',
+            resolution: 2
+        });
+        xpText.setDepth(5023);
+        this.cameras.main.ignore(xpText);
+        this.userProfileElements.push(xpText);
+
+        // Score (reputation)
+        const scoreText = this.add.text(infoX, infoStartY + 42, `Sc: ${user.reputationScore}`, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#5D4037',
+            resolution: 2
+        });
+        scoreText.setDepth(5023);
+        this.cameras.main.ignore(scoreText);
+        this.userProfileElements.push(scoreText);
+
+        // Click handler to open profile modal
+        bg.on('pointerdown', () => {
+            this.openProfileModal();
+        });
+
+        // Hover effect using tint
+        bg.on('pointerover', () => {
+            bg.setTint(0xcccccc);
+        });
+        bg.on('pointerout', () => {
+            bg.clearTint();
+        });
+    }
+
+    private loadExternalAvatar(url: string, x: number, y: number, size: number) {
+        // Avoid reloading the same avatar
+        if (this.loadedAvatarUrl === url && this.avatarImage) {
+            return;
+        }
+
+        const key = 'avatar-' + Date.now();
+        this.load.image(key, url);
+        this.load.once('complete', () => {
+            if (this.textures.exists(key)) {
+                const avatar = this.add.image(x, y, key);
+                avatar.setDisplaySize(size, size);
+                avatar.setDepth(5022);
+                this.cameras.main.ignore(avatar);
+                this.userProfileElements.push(avatar);
+                this.avatarImage = avatar;
+                this.loadedAvatarUrl = url;
+            }
+        });
+        this.load.start();
+    }
+
+    private openProfileModal() {
+        if (this.userProfileModalOpen) return;
+        this.userProfileModalOpen = true;
+
+        const user = UserService.getStoredUser();
+        if (!user) return;
+
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const modalWidth = 240;
+        const modalHeight = 260;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+
+        // Overlay background (dimming)
+        const overlay = this.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.5);
+        overlay.setDepth(5100);
+        overlay.setInteractive();
+        this.cameras.main.ignore(overlay);
+        this.userProfileModalElements.push(overlay);
+
+        // Modal background using settings-panel sprite (pixel style)
+        const modalBg = this.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5101);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+            event.stopPropagation();
+        });
+        this.cameras.main.ignore(modalBg);
+        this.userProfileModalElements.push(modalBg);
+
+        // Animate modal in
+        modalBg.setScale(0);
+        this.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        // Title (delayed to appear after panel animation)
+        this.time.delayedCall(100, () => {
+            // const titleText = this.add.text(modalX, modalY - modalHeight / 2 + 28, 'PROFILE', {
+            //     fontSize: '16px',
+            //     fontFamily: 'PixelFont',
+            //     color: '#5D4037',
+            //     resolution: 2
+            // });
+            // titleText.setOrigin(0.5);
+            // titleText.setDepth(5102);
+            // titleText.setAlpha(0);
+            // this.cameras.main.ignore(titleText);
+            // this.userProfileModalElements.push(titleText);
+
+            // this.tweens.add({
+            //     targets: titleText,
+            //     alpha: 1,
+            //     duration: 150
+            // });
+
+            // Avatar section (centered)
+            const avatarY = modalY - 50;
+            const avatarSize = 64;
+
+            // Avatar frame using square-buttons sprite
+            const avatarFrame = this.add.sprite(modalX, avatarY, 'square-buttons', 6);
+            avatarFrame.setDisplaySize(avatarSize + 12, avatarSize + 12);
+            avatarFrame.setDepth(5102);
+            avatarFrame.setAlpha(0);
+            avatarFrame.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(avatarFrame);
+            this.userProfileModalElements.push(avatarFrame);
+
+            this.tweens.add({
+                targets: avatarFrame,
+                alpha: 1,
+                duration: 150
+            });
+
+            // Avatar image
+            const modalAvatar = this.add.image(modalX, avatarY, 'default-avatar');
+            modalAvatar.setDisplaySize(avatarSize, avatarSize);
+            modalAvatar.setDepth(5103);
+            modalAvatar.setAlpha(0);
+            this.cameras.main.ignore(modalAvatar);
+            this.userProfileModalElements.push(modalAvatar);
+
+            this.tweens.add({
+                targets: modalAvatar,
+                alpha: 1,
+                duration: 150
+            });
+
+            // Edit avatar button (small text below avatar)
+            const editAvatarBtn = this.add.text(modalX, avatarY + avatarSize / 2 + 12, 'Edit Avatar', {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#4ade80',
+                resolution: 2
+            });
+            editAvatarBtn.setOrigin(0.5);
+            editAvatarBtn.setDepth(5104);
+            editAvatarBtn.setAlpha(0);
+            editAvatarBtn.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(editAvatarBtn);
+            this.userProfileModalElements.push(editAvatarBtn);
+
+            this.tweens.add({
+                targets: editAvatarBtn,
+                alpha: 1,
+                duration: 150
+            });
+
+            editAvatarBtn.on('pointerdown', () => {
+                this.openEditField('avatar', user.avatar || '');
+            });
+            editAvatarBtn.on('pointerover', () => editAvatarBtn.setColor('#86efac'));
+            editAvatarBtn.on('pointerout', () => editAvatarBtn.setColor('#4ade80'));
+
+            // Also make avatar frame clickable for edit
+            avatarFrame.on('pointerdown', () => {
+                this.openEditField('avatar', user.avatar || '');
+            });
+            avatarFrame.on('pointerover', () => avatarFrame.setTint(0xcccccc));
+            avatarFrame.on('pointerout', () => avatarFrame.clearTint());
+
+            // Profile fields - positioned more inside the panel
+            const fieldStartY = avatarY + avatarSize / 2 + 35;
+            const fieldSpacing = 28;
+            const labelX = modalX - modalWidth / 2 + 35;
+            const valueX = modalX - modalWidth / 2 + 100;
+            const editX = modalX + modalWidth / 2 - 45;
+
+            // Username field with edit button
+            this.createProfileField('Name', user.username || 'Not set', labelX, valueX, editX, fieldStartY, 'username');
+
+            // XP (read-only)
+            const xpLabel = this.add.text(labelX, fieldStartY + fieldSpacing, 'XP:', {
+                fontSize: '11px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            xpLabel.setDepth(5102);
+            xpLabel.setAlpha(0);
+            xpLabel.setStroke('#5D4037', 2);
+            this.cameras.main.ignore(xpLabel);
+            this.userProfileModalElements.push(xpLabel);
+
+            const xpValue = this.add.text(valueX, fieldStartY + fieldSpacing, user.xp.toString(), {
+                fontSize: '11px',
+                fontFamily: 'PixelFont',
+                color: '#FFF8E1',
+                resolution: 2
+            });
+            xpValue.setDepth(5102);
+            xpValue.setAlpha(0);
+            xpValue.setStroke('#5D4037', 2);
+            this.cameras.main.ignore(xpValue);
+            this.userProfileModalElements.push(xpValue);
+
+            // Score (read-only)
+            const scoreLabel = this.add.text(labelX, fieldStartY + fieldSpacing * 2, 'Score:', {
+                fontSize: '11px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            scoreLabel.setDepth(5102);
+            scoreLabel.setAlpha(0);
+            scoreLabel.setStroke('#5D4037', 2);
+            this.cameras.main.ignore(scoreLabel);
+            this.userProfileModalElements.push(scoreLabel);
+
+            const scoreValue = this.add.text(valueX, fieldStartY + fieldSpacing * 2, user.reputationScore.toString(), {
+                fontSize: '11px',
+                fontFamily: 'PixelFont',
+                color: '#FFF8E1',
+                resolution: 2
+            });
+            scoreValue.setDepth(5102);
+            scoreValue.setAlpha(0);
+            scoreValue.setStroke('#5D4037', 2);
+            this.cameras.main.ignore(scoreValue);
+            this.userProfileModalElements.push(scoreValue);
+
+            // Fade in all field elements
+            this.tweens.add({
+                targets: [xpLabel, xpValue, scoreLabel, scoreValue],
+                alpha: 1,
+                duration: 150,
+                delay: 50
+            });
+
+            // Logout button at bottom of modal
+            const logoutY = modalY + modalHeight / 2 - 30;
+            const logoutBg = this.add.sprite(modalX, logoutY, 'square-buttons', 7);
+            logoutBg.setDisplaySize(110, 34);
+            logoutBg.setDepth(5102);
+            logoutBg.setAlpha(0);
+            logoutBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(logoutBg);
+            this.userProfileModalElements.push(logoutBg);
+
+            const logoutText = this.add.text(modalX, logoutY, 'Log Out', {
+                fontSize: '12px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            logoutText.setOrigin(0.5);
+            logoutText.setDepth(5103);
+            logoutText.setAlpha(0);
+            logoutText.setStroke('#5D4037', 2);
+            this.cameras.main.ignore(logoutText);
+            this.userProfileModalElements.push(logoutText);
+
+            this.tweens.add({
+                targets: [logoutBg, logoutText],
+                alpha: 1,
+                duration: 150,
+                delay: 100
+            });
+
+            logoutBg.on('pointerdown', () => {
+                this.closeProfileModal();
+                this.handleLogout();
+            });
+            logoutBg.on('pointerover', () => logoutBg.setTint(0xcccccc));
+            logoutBg.on('pointerout', () => logoutBg.clearTint());
+        });
+
+        // Click overlay to close
+        overlay.on('pointerdown', () => {
+            this.closeProfileModal();
+        });
+    }
+
+    private createProfileField(label: string, value: string, labelX: number, valueX: number, editX: number, y: number, fieldName: string) {
+        const labelText = this.add.text(labelX, y, label + ':', {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        labelText.setDepth(5102);
+        labelText.setAlpha(0);
+        labelText.setStroke('#5D4037', 2);
+        this.cameras.main.ignore(labelText);
+        this.userProfileModalElements.push(labelText);
+
+        const displayValue = value.length > 10 ? value.slice(0, 9) + '..' : value;
+        const valueText = this.add.text(valueX, y, displayValue, {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFF8E1',
+            resolution: 2
+        });
+        valueText.setDepth(5102);
+        valueText.setAlpha(0);
+        valueText.setStroke('#5D4037', 2);
+        this.cameras.main.ignore(valueText);
+        this.userProfileModalElements.push(valueText);
+
+        // Edit button using text with pixel style
+        const editBtn = this.add.text(editX, y, 'Edit', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#4ade80',
+            resolution: 2
+        });
+        editBtn.setDepth(5102);
+        editBtn.setAlpha(0);
+        editBtn.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(editBtn);
+        this.userProfileModalElements.push(editBtn);
+
+        // Fade in
+        this.tweens.add({
+            targets: [labelText, valueText, editBtn],
+            alpha: 1,
+            duration: 150,
+            delay: 50
+        });
+
+        editBtn.on('pointerdown', () => {
+            this.openEditField(fieldName, value);
+        });
+        editBtn.on('pointerover', () => editBtn.setColor('#86efac'));
+        editBtn.on('pointerout', () => editBtn.setColor('#4ade80'));
+    }
+
+    private editFormElements: Phaser.GameObjects.GameObject[] = [];
+    private editFormOpen: boolean = false;
+
+    private openEditField(fieldName: string, currentValue: string) {
+        if (this.editFormOpen) return;
+        this.editFormOpen = true;
+
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const formWidth = 280;
+        const formHeight = fieldName === 'avatar' ? 200 : 160;
+        const formX = screenWidth / 2;
+        const formY = screenHeight / 2;
+
+        // Overlay
+        const overlay = this.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.7);
+        overlay.setDepth(5200);
+        overlay.setInteractive();
+        this.cameras.main.ignore(overlay);
+        this.editFormElements.push(overlay);
+
+        // Form background
+        const formBg = this.add.sprite(formX, formY, 'settings-panel', 1);
+        formBg.setDisplaySize(formWidth, formHeight);
+        formBg.setDepth(5201);
+        formBg.setInteractive();
+        formBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+            event.stopPropagation();
+        });
+        this.cameras.main.ignore(formBg);
+        this.editFormElements.push(formBg);
+
+        // Animate form
+        formBg.setScale(0);
+        this.tweens.add({
+            targets: formBg,
+            scaleX: formWidth / 125,
+            scaleY: formHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        // Title
+        const titleText = fieldName === 'avatar' ? 'Edit Avatar' : 'Edit Username';
+        const title = this.add.text(formX, formY - formHeight / 2 + 25, titleText, {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(5202);
+        title.setStroke('#5D4037', 2);
+        title.setAlpha(0);
+        this.cameras.main.ignore(title);
+        this.editFormElements.push(title);
+
+        this.time.delayedCall(100, () => {
+            this.tweens.add({ targets: title, alpha: 1, duration: 150 });
+
+            if (fieldName === 'avatar') {
+                this.createAvatarEditForm(formX, formY, formWidth, currentValue);
+            } else {
+                this.createTextEditForm(formX, formY, formWidth, fieldName, currentValue);
+            }
+        });
+
+        // Close on overlay click
+        overlay.on('pointerdown', () => this.closeEditForm());
+    }
+
+    private createTextEditForm(formX: number, formY: number, formWidth: number, fieldName: string, currentValue: string) {
+        // Create HTML input element for text editing
+        const inputElement = document.createElement('input');
+        inputElement.type = 'text';
+        inputElement.value = currentValue;
+        inputElement.placeholder = `Enter ${fieldName}...`;
+        inputElement.maxLength = 20;
+        inputElement.style.cssText = `
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -20px);
+            width: 200px;
+            padding: 10px 15px;
+            font-size: 14px;
+            font-family: 'PixelFont', monospace;
+            border: 3px solid #5D4037;
+            border-radius: 8px;
+            background-color: #FFF8E1;
+            color: #5D4037;
+            outline: none;
+            text-align: center;
+            z-index: 10001;
+        `;
+        document.body.appendChild(inputElement);
+        inputElement.focus();
+
+        // Store reference for cleanup
+        (this as unknown as { _editInput: HTMLInputElement })._editInput = inputElement;
+
+        // Save button
+        const saveBtnBg = this.add.sprite(formX - 50, formY + 40, 'square-buttons', 6);
+        saveBtnBg.setDisplaySize(80, 32);
+        saveBtnBg.setDepth(5202);
+        saveBtnBg.setAlpha(0);
+        saveBtnBg.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(saveBtnBg);
+        this.editFormElements.push(saveBtnBg);
+
+        const saveText = this.add.text(formX - 50, formY + 40, 'Save', {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        saveText.setOrigin(0.5);
+        saveText.setDepth(5203);
+        saveText.setStroke('#5D4037', 2);
+        saveText.setAlpha(0);
+        this.cameras.main.ignore(saveText);
+        this.editFormElements.push(saveText);
+
+        // Cancel button
+        const cancelBtnBg = this.add.sprite(formX + 50, formY + 40, 'square-buttons', 7);
+        cancelBtnBg.setDisplaySize(80, 32);
+        cancelBtnBg.setDepth(5202);
+        cancelBtnBg.setAlpha(0);
+        cancelBtnBg.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(cancelBtnBg);
+        this.editFormElements.push(cancelBtnBg);
+
+        const cancelText = this.add.text(formX + 50, formY + 40, 'Cancel', {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        cancelText.setOrigin(0.5);
+        cancelText.setDepth(5203);
+        cancelText.setStroke('#5D4037', 2);
+        cancelText.setAlpha(0);
+        this.cameras.main.ignore(cancelText);
+        this.editFormElements.push(cancelText);
+
+        // Fade in buttons
+        this.tweens.add({
+            targets: [saveBtnBg, saveText, cancelBtnBg, cancelText],
+            alpha: 1,
+            duration: 150
+        });
+
+        // Button events
+        saveBtnBg.on('pointerdown', () => {
+            const newValue = inputElement.value.trim();
+            if (newValue && newValue !== currentValue) {
+                this.updateUserField(fieldName, newValue);
+            }
+            this.closeEditForm();
+        });
+        saveBtnBg.on('pointerover', () => saveBtnBg.setTint(0xcccccc));
+        saveBtnBg.on('pointerout', () => saveBtnBg.clearTint());
+
+        cancelBtnBg.on('pointerdown', () => this.closeEditForm());
+        cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
+        cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
+
+        // Enter key to save
+        inputElement.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const newValue = inputElement.value.trim();
+                if (newValue && newValue !== currentValue) {
+                    this.updateUserField(fieldName, newValue);
+                }
+                this.closeEditForm();
+            } else if (e.key === 'Escape') {
+                this.closeEditForm();
+            }
+        });
+    }
+
+    private createAvatarEditForm(formX: number, formY: number, formWidth: number, currentValue: string) {
+        // URL input label
+        const urlLabel = this.add.text(formX, formY - 35, 'Enter Image URL:', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        urlLabel.setOrigin(0.5);
+        urlLabel.setDepth(5202);
+        urlLabel.setStroke('#5D4037', 2);
+        urlLabel.setAlpha(0);
+        this.cameras.main.ignore(urlLabel);
+        this.editFormElements.push(urlLabel);
+
+        this.tweens.add({ targets: urlLabel, alpha: 1, duration: 150 });
+
+        // Create HTML input for URL
+        const inputElement = document.createElement('input');
+        inputElement.type = 'text';
+        inputElement.value = currentValue;
+        inputElement.placeholder = 'https://example.com/avatar.png';
+        inputElement.style.cssText = `
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -15px);
+            width: 220px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-family: 'PixelFont', monospace;
+            border: 3px solid #5D4037;
+            border-radius: 8px;
+            background-color: #FFF8E1;
+            color: #5D4037;
+            outline: none;
+            text-align: center;
+            z-index: 10001;
+        `;
+        document.body.appendChild(inputElement);
+        inputElement.focus();
+
+        (this as unknown as { _editInput: HTMLInputElement })._editInput = inputElement;
+
+        // Or upload label
+        const orLabel = this.add.text(formX, formY + 20, '- or -', {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        orLabel.setOrigin(0.5);
+        orLabel.setDepth(5202);
+        orLabel.setStroke('#5D4037', 2);
+        orLabel.setAlpha(0);
+        this.cameras.main.ignore(orLabel);
+        this.editFormElements.push(orLabel);
+
+        this.tweens.add({ targets: orLabel, alpha: 1, duration: 150, delay: 50 });
+
+        // Upload button
+        const uploadBtnBg = this.add.sprite(formX, formY + 45, 'square-buttons', 6);
+        uploadBtnBg.setDisplaySize(120, 28);
+        uploadBtnBg.setDepth(5202);
+        uploadBtnBg.setAlpha(0);
+        uploadBtnBg.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(uploadBtnBg);
+        this.editFormElements.push(uploadBtnBg);
+
+        const uploadText = this.add.text(formX, formY + 45, 'Upload Image', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        uploadText.setOrigin(0.5);
+        uploadText.setDepth(5203);
+        uploadText.setStroke('#5D4037', 2);
+        uploadText.setAlpha(0);
+        this.cameras.main.ignore(uploadText);
+        this.editFormElements.push(uploadText);
+
+        this.tweens.add({
+            targets: [uploadBtnBg, uploadText],
+            alpha: 1,
+            duration: 150,
+            delay: 50
+        });
+
+        // Hidden file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+
+        uploadBtnBg.on('pointerdown', () => fileInput.click());
+        uploadBtnBg.on('pointerover', () => uploadBtnBg.setTint(0xcccccc));
+        uploadBtnBg.on('pointerout', () => uploadBtnBg.clearTint());
+
+        fileInput.addEventListener('change', (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const base64 = event.target?.result as string;
+                    inputElement.value = base64;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Store file input for cleanup
+        (this as unknown as { _fileInput: HTMLInputElement })._fileInput = fileInput;
+
+        // Save and Cancel buttons
+        const saveBtnBg = this.add.sprite(formX - 50, formY + 80, 'square-buttons', 6);
+        saveBtnBg.setDisplaySize(80, 32);
+        saveBtnBg.setDepth(5202);
+        saveBtnBg.setAlpha(0);
+        saveBtnBg.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(saveBtnBg);
+        this.editFormElements.push(saveBtnBg);
+
+        const saveText = this.add.text(formX - 50, formY + 80, 'Save', {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        saveText.setOrigin(0.5);
+        saveText.setDepth(5203);
+        saveText.setStroke('#5D4037', 2);
+        saveText.setAlpha(0);
+        this.cameras.main.ignore(saveText);
+        this.editFormElements.push(saveText);
+
+        const cancelBtnBg = this.add.sprite(formX + 50, formY + 80, 'square-buttons', 7);
+        cancelBtnBg.setDisplaySize(80, 32);
+        cancelBtnBg.setDepth(5202);
+        cancelBtnBg.setAlpha(0);
+        cancelBtnBg.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(cancelBtnBg);
+        this.editFormElements.push(cancelBtnBg);
+
+        const cancelText = this.add.text(formX + 50, formY + 80, 'Cancel', {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        cancelText.setOrigin(0.5);
+        cancelText.setDepth(5203);
+        cancelText.setStroke('#5D4037', 2);
+        cancelText.setAlpha(0);
+        this.cameras.main.ignore(cancelText);
+        this.editFormElements.push(cancelText);
+
+        this.tweens.add({
+            targets: [saveBtnBg, saveText, cancelBtnBg, cancelText],
+            alpha: 1,
+            duration: 150,
+            delay: 100
+        });
+
+        saveBtnBg.on('pointerdown', () => {
+            const newValue = inputElement.value.trim();
+            if (newValue && newValue !== currentValue) {
+                this.updateUserField('avatar', newValue);
+            }
+            this.closeEditForm();
+        });
+        saveBtnBg.on('pointerover', () => saveBtnBg.setTint(0xcccccc));
+        saveBtnBg.on('pointerout', () => saveBtnBg.clearTint());
+
+        cancelBtnBg.on('pointerdown', () => this.closeEditForm());
+        cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
+        cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
+
+        inputElement.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const newValue = inputElement.value.trim();
+                if (newValue && newValue !== currentValue) {
+                    this.updateUserField('avatar', newValue);
+                }
+                this.closeEditForm();
+            } else if (e.key === 'Escape') {
+                this.closeEditForm();
+            }
+        });
+    }
+
+    private closeEditForm() {
+        this.editFormOpen = false;
+
+        // Remove HTML elements
+        const editInput = (this as unknown as { _editInput?: HTMLInputElement })._editInput;
+        if (editInput && editInput.parentNode) {
+            editInput.parentNode.removeChild(editInput);
+        }
+        (this as unknown as { _editInput?: HTMLInputElement })._editInput = undefined;
+
+        const fileInput = (this as unknown as { _fileInput?: HTMLInputElement })._fileInput;
+        if (fileInput && fileInput.parentNode) {
+            fileInput.parentNode.removeChild(fileInput);
+        }
+        (this as unknown as { _fileInput?: HTMLInputElement })._fileInput = undefined;
+
+        // Destroy Phaser elements
+        this.editFormElements.forEach(el => el.destroy());
+        this.editFormElements = [];
+    }
+
+    private async updateUserField(fieldName: string, value: string) {
+        const updates: { username?: string; avatar?: string } = {};
+        if (fieldName === 'username') {
+            updates.username = value;
+        } else if (fieldName === 'avatar') {
+            updates.avatar = value;
+        }
+
+        const updatedUser = await UserService.updateUser(updates);
+        if (updatedUser) {
+            // Refresh UI
+            this.closeProfileModal();
+            this.createUserProfileUI();
+            this.openProfileModal();
+        }
+    }
+
+    private closeProfileModal() {
+        this.userProfileModalOpen = false;
+        this.userProfileModalElements.forEach(el => el.destroy());
+        this.userProfileModalElements = [];
     }
 
     private setupCameraIgnore() {
