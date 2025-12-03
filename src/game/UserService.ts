@@ -206,7 +206,7 @@ export class UserService {
 
         try {
             const response = await fetch(
-                `${UserService.API_BASE_URL}/users/me`,
+                `${UserService.API_BASE_URL}/user/profile`,
                 {
                     method: "PATCH",
                     headers: {

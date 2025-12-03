@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { ISLAND_MAP_DATA } from './IslandMapData';
 import { UserService } from '../UserService';
+import { MissionService, Mission } from '../MissionService';
 
 // Plant types based on proposal
 type PlantType = 'social' | 'technical' | 'branded' | 'mushroom';
@@ -184,6 +185,9 @@ export class FarmingGame extends Scene {
     private mailboxModalOpen: boolean = false;
     private mailboxModalElements: Phaser.GameObjects.GameObject[] = [];
     private mailboxActiveTab: 'missions' | 'redeem' = 'missions';
+    private cachedMissions: Mission[] | null = null;
+    private missionsCacheTime: number = 0;
+    private readonly MISSIONS_CACHE_DURATION = 60000; // 1 minute cache
 
     // Marquee announcement
     private marqueeText!: Phaser.GameObjects.Text;
@@ -1281,12 +1285,34 @@ export class FarmingGame extends Scene {
                 duration: 150
             });
 
+            // Refresh button (small, top-right of modal)
+            const refreshBtnX = modalX + modalWidth / 2 - 30;
+            const refreshBtnY = modalY - modalHeight / 2 + 35;
+            const refreshBtn = this.add.text(refreshBtnX, refreshBtnY, '↻', {
+                fontSize: '16px',
+                fontFamily: 'Arial',
+                color: '#4ade80',
+                resolution: 2
+            });
+            refreshBtn.setOrigin(0.5);
+            refreshBtn.setDepth(5302);
+            refreshBtn.setAlpha(0);
+            refreshBtn.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(refreshBtn);
+            this.mailboxModalElements.push(refreshBtn);
+
+            this.tweens.add({
+                targets: refreshBtn,
+                alpha: 1,
+                duration: 150
+            });
+
             // Content area
             const contentY = modalY + 20;
             const contentElements: Phaser.GameObjects.GameObject[] = [];
 
             // Function to show missions tab content
-            const showMissionsContent = () => {
+            const showMissionsContent = async () => {
                 // Clear previous content
                 contentElements.forEach(el => el.destroy());
                 contentElements.length = 0;
@@ -1294,49 +1320,176 @@ export class FarmingGame extends Scene {
                 missionsTabBg.setTexture('square-buttons', 6);
                 redeemTabBg.setTexture('square-buttons', 7);
 
-                // Sample missions list
-                const missions = [
-                    { name: 'Water 5 plants', progress: '3/5', done: false },
-                    { name: 'Harvest 3 crops', progress: '1/3', done: false },
-                    { name: 'Check in today', progress: '1/1', done: true },
-                ];
+                let missions: Mission[] | null = null;
+                const now = Date.now();
 
-                missions.forEach((mission, index) => {
-                    const missionY = contentY - 40 + index * 35;
-
-                    const missionBg = this.add.sprite(modalX, missionY, 'square-buttons', mission.done ? 6 : 7);
-                    missionBg.setDisplaySize(240, 28);
-                    missionBg.setDepth(5302);
-                    if (mission.done) missionBg.setTint(0x4ade80);
-                    this.cameras.main.ignore(missionBg);
-                    this.mailboxModalElements.push(missionBg);
-                    contentElements.push(missionBg);
-
-                    const missionText = this.add.text(modalX - 50, missionY, mission.name, {
-                        fontSize: '9px',
+                // Check if we have cached missions that are still valid
+                if (this.cachedMissions && (now - this.missionsCacheTime) < this.MISSIONS_CACHE_DURATION) {
+                    // Use cached missions
+                    missions = this.cachedMissions;
+                } else {
+                    // Show loading text only when fetching from API
+                    const loadingText = this.add.text(modalX, contentY, 'Loading missions...', {
+                        fontSize: '10px',
                         fontFamily: 'PixelFont',
                         color: '#FFFFFF',
                         resolution: 2
                     });
-                    missionText.setOrigin(0, 0.5);
-                    missionText.setDepth(5303);
-                    missionText.setStroke('#5D4037', 1);
-                    this.cameras.main.ignore(missionText);
-                    this.mailboxModalElements.push(missionText);
-                    contentElements.push(missionText);
+                    loadingText.setOrigin(0.5);
+                    loadingText.setDepth(5302);
+                    loadingText.setStroke('#5D4037', 2);
+                    this.cameras.main.ignore(loadingText);
+                    this.mailboxModalElements.push(loadingText);
+                    contentElements.push(loadingText);
 
-                    const progressText = this.add.text(modalX + 90, missionY, mission.done ? '✓' : mission.progress, {
-                        fontSize: '9px',
+                    // Fetch missions from API
+                    missions = await MissionService.getMissions();
+
+                    // Cache the missions
+                    if (missions) {
+                        this.cachedMissions = missions;
+                        this.missionsCacheTime = now;
+                    }
+
+                    // Remove loading text
+                    loadingText.destroy();
+                    contentElements.length = 0;
+                }
+
+                if (!missions || missions.length === 0) {
+                    // Show no missions message
+                    const noMissionsText = this.add.text(modalX, contentY, 'No missions available', {
+                        fontSize: '10px',
                         fontFamily: 'PixelFont',
-                        color: mission.done ? '#4ade80' : '#FFF8E1',
+                        color: '#999999',
+                        resolution: 2
+                    });
+                    noMissionsText.setOrigin(0.5);
+                    noMissionsText.setDepth(5302);
+                    noMissionsText.setStroke('#5D4037', 2);
+                    this.cameras.main.ignore(noMissionsText);
+                    this.mailboxModalElements.push(noMissionsText);
+                    contentElements.push(noMissionsText);
+                    return;
+                }
+
+                // Display missions with beautiful redesigned UI
+                missions.forEach((mission, index) => {
+                    const missionY = contentY - 50 + index * 50;
+                    const isDone = mission.status === 'completed' || mission.status === 'claimed';
+                    const progressPercent = (mission.progress / mission.target) * 100;
+
+                    // Mission card container with border
+                    const cardWidth = 270;
+                    const cardHeight = 42;
+                    
+                    // Card border (darker)
+                    const cardBorder = this.add.rectangle(modalX, missionY, cardWidth + 4, cardHeight + 4, 0x8B7355);
+                    cardBorder.setDepth(5302);
+                    this.cameras.main.ignore(cardBorder);
+                    this.mailboxModalElements.push(cardBorder);
+                    contentElements.push(cardBorder);
+
+                    // Card background (lighter)
+                    const cardBg = this.add.rectangle(modalX, missionY, cardWidth, cardHeight, 0xD4C4A8);
+                    cardBg.setDepth(5303);
+                    cardBg.setInteractive({ useHandCursor: true });
+                    this.cameras.main.ignore(cardBg);
+                    this.mailboxModalElements.push(cardBg);
+                    contentElements.push(cardBg);
+
+                    // Status icon with colored background circle
+                    const iconX = modalX - 120;
+                    const iconBg = this.add.circle(iconX, missionY, 10, isDone ? 0x4ade80 : 0xfbbf24);
+                    iconBg.setDepth(5304);
+                    this.cameras.main.ignore(iconBg);
+                    this.mailboxModalElements.push(iconBg);
+                    contentElements.push(iconBg);
+
+                    const statusIcon = this.add.text(iconX, missionY, isDone ? '✓' : '!', {
+                        fontSize: '12px',
+                        fontFamily: 'Arial',
+                        color: '#FFFFFF',
+                        resolution: 2
+                    });
+                    statusIcon.setOrigin(0.5);
+                    statusIcon.setDepth(5305);
+                    this.cameras.main.ignore(statusIcon);
+                    this.mailboxModalElements.push(statusIcon);
+                    contentElements.push(statusIcon);
+
+                    // Mission name (larger, bolder)
+                    const nameX = modalX - 100;
+                    const missionName = this.add.text(nameX, missionY - 10, mission.name, {
+                        fontSize: '11px',
+                        fontFamily: 'PixelFont',
+                        color: isDone ? '#16a34a' : '#5D4037',
+                        resolution: 2
+                    });
+                    missionName.setOrigin(0, 0.5);
+                    missionName.setDepth(5304);
+                    this.cameras.main.ignore(missionName);
+                    this.mailboxModalElements.push(missionName);
+                    contentElements.push(missionName);
+
+                    // Progress bar with better visibility
+                    const barWidth = 190;
+                    const barHeight = 10;
+                    const barX = modalX - 100;
+                    const barY = missionY + 8;
+                    
+                    // Progress bar border
+                    const barBorder = this.add.rectangle(barX, barY, barWidth + 2, barHeight + 2, 0x8B7355);
+                    barBorder.setOrigin(0, 0.5);
+                    barBorder.setDepth(5304);
+                    this.cameras.main.ignore(barBorder);
+                    this.mailboxModalElements.push(barBorder);
+                    contentElements.push(barBorder);
+
+                    // Progress bar background (light)
+                    const progressBarBg = this.add.rectangle(barX + 1, barY, barWidth, barHeight, 0xFFF8E1);
+                    progressBarBg.setOrigin(0, 0.5);
+                    progressBarBg.setDepth(5305);
+                    this.cameras.main.ignore(progressBarBg);
+                    this.mailboxModalElements.push(progressBarBg);
+                    contentElements.push(progressBarBg);
+
+                    // Progress bar fill (bright and visible)
+                    const fillWidth = Math.max(2, (barWidth * progressPercent) / 100);
+                    const progressBarFill = this.add.rectangle(barX + 1, barY, fillWidth, barHeight, isDone ? 0x22c55e : 0xf59e0b);
+                    progressBarFill.setOrigin(0, 0.5);
+                    progressBarFill.setDepth(5306);
+                    this.cameras.main.ignore(progressBarFill);
+                    this.mailboxModalElements.push(progressBarFill);
+                    contentElements.push(progressBarFill);
+
+                    // Progress text (right side, larger)
+                    const progressText = this.add.text(modalX + 110, missionY, `${mission.progress}/${mission.target}`, {
+                        fontSize: '11px',
+                        fontFamily: 'PixelFont',
+                        color: isDone ? '#16a34a' : '#5D4037',
                         resolution: 2
                     });
                     progressText.setOrigin(0.5);
-                    progressText.setDepth(5303);
-                    progressText.setStroke('#5D4037', 1);
+                    progressText.setDepth(5304);
                     this.cameras.main.ignore(progressText);
                     this.mailboxModalElements.push(progressText);
                     contentElements.push(progressText);
+
+                    // Hover effects
+                    cardBg.on('pointerover', () => {
+                        cardBg.setFillStyle(0xE8D9C0);
+                        missionName.setColor('#f59e0b');
+                    });
+                    cardBg.on('pointerout', () => {
+                        cardBg.setFillStyle(0xD4C4A8);
+                        missionName.setColor(isDone ? '#16a34a' : '#5D4037');
+                    });
+
+                    // Click to show details
+                    cardBg.on('pointerdown', () => {
+                        this.showMissionDetails(mission);
+                    });
                 });
             };
 
@@ -1475,6 +1628,31 @@ export class FarmingGame extends Scene {
             });
             redeemTabBg.on('pointerover', () => redeemTabBg.setTint(0xcccccc));
             redeemTabBg.on('pointerout', () => redeemTabBg.clearTint());
+
+            // Refresh button handler
+            refreshBtn.on('pointerdown', () => {
+                // Clear cache to force refresh
+                this.cachedMissions = null;
+                this.missionsCacheTime = 0;
+                
+                // Animate refresh button
+                this.tweens.add({
+                    targets: refreshBtn,
+                    angle: 360,
+                    duration: 500,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        refreshBtn.setAngle(0);
+                    }
+                });
+                
+                // Reload missions
+                if (this.mailboxActiveTab === 'missions') {
+                    showMissionsContent();
+                }
+            });
+            refreshBtn.on('pointerover', () => refreshBtn.setColor('#86efac'));
+            refreshBtn.on('pointerout', () => refreshBtn.setColor('#4ade80'));
 
             // Show initial content (missions tab)
             showMissionsContent();
@@ -1890,6 +2068,291 @@ export class FarmingGame extends Scene {
         // Destroy all modal elements
         this.mailboxModalElements.forEach(el => el.destroy());
         this.mailboxModalElements = [];
+    }
+
+    private missionDetailsModalElements: Phaser.GameObjects.GameObject[] = [];
+
+    private showMissionDetails(mission: Mission) {
+        // Clear any existing details modal
+        this.missionDetailsModalElements.forEach(el => el.destroy());
+        this.missionDetailsModalElements = [];
+
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const modalWidth = 300;
+        const modalHeight = 280;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+
+        const isDone = mission.status === 'completed' || mission.status === 'claimed';
+        const progressPercent = (mission.progress / mission.target) * 100;
+
+        // Overlay
+        const overlay = this.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.8);
+        overlay.setDepth(5400);
+        overlay.setInteractive();
+        this.cameras.main.ignore(overlay);
+        this.missionDetailsModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5401);
+        modalBg.setInteractive();
+        this.cameras.main.ignore(modalBg);
+        this.missionDetailsModalElements.push(modalBg);
+
+        // Animate modal in
+        modalBg.setScale(0);
+        this.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        // Status badge (top)
+        const badgeY = modalY - modalHeight / 2 + 30;
+        const badgeBg = this.add.sprite(modalX, badgeY, 'square-buttons', isDone ? 6 : 7);
+        badgeBg.setDisplaySize(100, 24);
+        badgeBg.setDepth(5402);
+        if (isDone) badgeBg.setTint(0x4ade80);
+        this.cameras.main.ignore(badgeBg);
+        this.missionDetailsModalElements.push(badgeBg);
+
+        const statusText = this.add.text(modalX, badgeY, isDone ? '✓ COMPLETED' : '◆ IN PROGRESS', {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        statusText.setOrigin(0.5);
+        statusText.setDepth(5403);
+        statusText.setStroke('#5D4037', 1);
+        this.cameras.main.ignore(statusText);
+        this.missionDetailsModalElements.push(statusText);
+
+        // Mission name (title)
+        const title = this.add.text(modalX, modalY - modalHeight / 2 + 60, mission.name, {
+            fontSize: '13px',
+            fontFamily: 'PixelFont',
+            color: '#fbbf24',
+            resolution: 2,
+            wordWrap: { width: modalWidth - 40 }
+        });
+        title.setOrigin(0.5);
+        title.setDepth(5402);
+        title.setStroke('#5D4037', 2);
+        this.cameras.main.ignore(title);
+        this.missionDetailsModalElements.push(title);
+
+        // Description box
+        const descY = modalY - 50;
+        const descBox = this.add.rectangle(modalX, descY, modalWidth - 40, 50, 0x8B7355, 0.3);
+        descBox.setDepth(5402);
+        this.cameras.main.ignore(descBox);
+        this.missionDetailsModalElements.push(descBox);
+
+        const description = this.add.text(modalX, descY, mission.description, {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFF8E1',
+            resolution: 2,
+            wordWrap: { width: modalWidth - 60 },
+            align: 'center'
+        });
+        description.setOrigin(0.5);
+        description.setDepth(5403);
+        description.setStroke('#5D4037', 1);
+        this.cameras.main.ignore(description);
+        this.missionDetailsModalElements.push(description);
+
+        // Progress section
+        const progressY = modalY + 10;
+        const progressLabel = this.add.text(modalX, progressY - 15, 'PROGRESS', {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#a3a3a3',
+            resolution: 2
+        });
+        progressLabel.setOrigin(0.5);
+        progressLabel.setDepth(5402);
+        progressLabel.setStroke('#5D4037', 1);
+        this.cameras.main.ignore(progressLabel);
+        this.missionDetailsModalElements.push(progressLabel);
+
+        // Progress bar
+        const barWidth = 200;
+        const barHeight = 12;
+        const barX = modalX - barWidth / 2;
+        
+        const progressBarBg = this.add.rectangle(barX, progressY, barWidth, barHeight, 0x5D4037);
+        progressBarBg.setOrigin(0, 0.5);
+        progressBarBg.setDepth(5402);
+        this.cameras.main.ignore(progressBarBg);
+        this.missionDetailsModalElements.push(progressBarBg);
+
+        const fillWidth = (barWidth * progressPercent) / 100;
+        const progressBarFill = this.add.rectangle(barX, progressY, fillWidth, barHeight, isDone ? 0x4ade80 : 0xfbbf24);
+        progressBarFill.setOrigin(0, 0.5);
+        progressBarFill.setDepth(5403);
+        this.cameras.main.ignore(progressBarFill);
+        this.missionDetailsModalElements.push(progressBarFill);
+
+        // Progress text
+        const progressText = this.add.text(modalX, progressY + 20, `${mission.progress} / ${mission.target}`, {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: isDone ? '#4ade80' : '#fbbf24',
+            resolution: 2
+        });
+        progressText.setOrigin(0.5);
+        progressText.setDepth(5402);
+        progressText.setStroke('#5D4037', 2);
+        this.cameras.main.ignore(progressText);
+        this.missionDetailsModalElements.push(progressText);
+
+        // Rewards section
+        const rewardY = modalY + 55;
+        const rewardLabel = this.add.text(modalX, rewardY, 'REWARDS', {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#a3a3a3',
+            resolution: 2
+        });
+        rewardLabel.setOrigin(0.5);
+        rewardLabel.setDepth(5402);
+        rewardLabel.setStroke('#5D4037', 1);
+        this.cameras.main.ignore(rewardLabel);
+        this.missionDetailsModalElements.push(rewardLabel);
+
+        // Rewards container
+        const rewardBoxY = rewardY + 25;
+        const rewardBox = this.add.rectangle(modalX, rewardBoxY, modalWidth - 40, 60, 0x8B7355, 0.3);
+        rewardBox.setDepth(5402);
+        this.cameras.main.ignore(rewardBox);
+        this.missionDetailsModalElements.push(rewardBox);
+
+        let rewardYOffset = rewardBoxY - 20;
+        
+        // XP Reward
+        if (mission.reward.xp) {
+            const xpIcon = this.add.text(modalX - 80, rewardYOffset, '⭐', {
+                fontSize: '14px',
+                fontFamily: 'Arial',
+                color: '#fbbf24',
+                resolution: 2
+            });
+            xpIcon.setOrigin(0.5);
+            xpIcon.setDepth(5403);
+            this.cameras.main.ignore(xpIcon);
+            this.missionDetailsModalElements.push(xpIcon);
+
+            const xpText = this.add.text(modalX - 55, rewardYOffset, `XP: +${mission.reward.xp}`, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#fbbf24',
+                resolution: 2
+            });
+            xpText.setOrigin(0, 0.5);
+            xpText.setDepth(5403);
+            xpText.setStroke('#5D4037', 1);
+            this.cameras.main.ignore(xpText);
+            this.missionDetailsModalElements.push(xpText);
+            
+            rewardYOffset += 18;
+        }
+
+        // Reputation Reward
+        if (mission.reward.reputation) {
+            const repIcon = this.add.text(modalX - 80, rewardYOffset, '♦', {
+                fontSize: '14px',
+                fontFamily: 'Arial',
+                color: '#a78bfa',
+                resolution: 2
+            });
+            repIcon.setOrigin(0.5);
+            repIcon.setDepth(5403);
+            this.cameras.main.ignore(repIcon);
+            this.missionDetailsModalElements.push(repIcon);
+
+            const repText = this.add.text(modalX - 55, rewardYOffset, `Reputation: +${mission.reward.reputation}`, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#a78bfa',
+                resolution: 2
+            });
+            repText.setOrigin(0, 0.5);
+            repText.setDepth(5403);
+            repText.setStroke('#5D4037', 1);
+            this.cameras.main.ignore(repText);
+            this.missionDetailsModalElements.push(repText);
+            
+            rewardYOffset += 18;
+        }
+
+        // Item Rewards
+        if (mission.reward.items && mission.reward.items.length > 0) {
+            mission.reward.items.forEach(item => {
+                const itemIcon = this.add.text(modalX - 80, rewardYOffset, '🎁', {
+                    fontSize: '12px',
+                    fontFamily: 'Arial',
+                    resolution: 2
+                });
+                itemIcon.setOrigin(0.5);
+                itemIcon.setDepth(5403);
+                this.cameras.main.ignore(itemIcon);
+                this.missionDetailsModalElements.push(itemIcon);
+
+                const itemText = this.add.text(modalX - 55, rewardYOffset, `${item.type}: x${item.amount}`, {
+                    fontSize: '9px',
+                    fontFamily: 'PixelFont',
+                    color: '#4ade80',
+                    resolution: 2
+                });
+                itemText.setOrigin(0, 0.5);
+                itemText.setDepth(5403);
+                itemText.setStroke('#5D4037', 1);
+                this.cameras.main.ignore(itemText);
+                this.missionDetailsModalElements.push(itemText);
+                
+                rewardYOffset += 18;
+            });
+        }
+
+        // Close button
+        const closeBtnY = modalY + modalHeight / 2 - 25;
+        const closeBtnBg = this.add.sprite(modalX, closeBtnY, 'square-buttons', 7);
+        closeBtnBg.setDisplaySize(80, 28);
+        closeBtnBg.setDepth(5402);
+        closeBtnBg.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(closeBtnBg);
+        this.missionDetailsModalElements.push(closeBtnBg);
+
+        const closeBtnText = this.add.text(modalX, closeBtnY, 'Close', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        closeBtnText.setOrigin(0.5);
+        closeBtnText.setDepth(5403);
+        closeBtnText.setStroke('#5D4037', 1);
+        this.cameras.main.ignore(closeBtnText);
+        this.missionDetailsModalElements.push(closeBtnText);
+
+        closeBtnBg.on('pointerdown', () => {
+            this.missionDetailsModalElements.forEach(el => el.destroy());
+            this.missionDetailsModalElements = [];
+        });
+        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+
+        overlay.on('pointerdown', () => {
+            this.missionDetailsModalElements.forEach(el => el.destroy());
+            this.missionDetailsModalElements = [];
+        });
     }
 
     private toggleFactoryModal() {
@@ -2998,6 +3461,10 @@ export class FarmingGame extends Scene {
         // Clear previous elements
         this.userProfileElements.forEach(el => el.destroy());
         this.userProfileElements = [];
+        
+        // Reset avatar tracking since we destroyed it
+        this.avatarImage = null;
+        this.loadedAvatarUrl = null;
 
         const user = UserService.getStoredUser();
         if (!user) return;
@@ -3521,6 +3988,35 @@ export class FarmingGame extends Scene {
             z-index: 10001;
         `;
         document.body.appendChild(inputElement);
+        
+        // Prevent Phaser from capturing keyboard events while typing
+        inputElement.addEventListener('keydown', (e) => {
+            // Handle Enter and Escape before stopping propagation
+            if (e.key === 'Enter') {
+                const newValue = inputElement.value.trim();
+                if (newValue && newValue !== currentValue) {
+                    this.updateUserField(fieldName, newValue);
+                }
+                this.closeEditForm();
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            } else if (e.key === 'Escape') {
+                this.closeEditForm();
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            // Stop all other keys from reaching Phaser
+            e.stopPropagation();
+        });
+        inputElement.addEventListener('keyup', (e) => {
+            e.stopPropagation();
+        });
+        inputElement.addEventListener('keypress', (e) => {
+            e.stopPropagation();
+        });
+        
         inputElement.focus();
 
         // Store reference for cleanup
@@ -3591,19 +4087,6 @@ export class FarmingGame extends Scene {
         cancelBtnBg.on('pointerdown', () => this.closeEditForm());
         cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
         cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
-
-        // Enter key to save
-        inputElement.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                const newValue = inputElement.value.trim();
-                if (newValue && newValue !== currentValue) {
-                    this.updateUserField(fieldName, newValue);
-                }
-                this.closeEditForm();
-            } else if (e.key === 'Escape') {
-                this.closeEditForm();
-            }
-        });
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -3647,6 +4130,35 @@ export class FarmingGame extends Scene {
             z-index: 10001;
         `;
         document.body.appendChild(inputElement);
+        
+        // Prevent Phaser from capturing keyboard events while typing
+        inputElement.addEventListener('keydown', (e) => {
+            // Handle Enter and Escape before stopping propagation
+            if (e.key === 'Enter') {
+                const newValue = inputElement.value.trim();
+                if (newValue && newValue !== currentValue) {
+                    this.updateUserField('avatar', newValue);
+                }
+                this.closeEditForm();
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            } else if (e.key === 'Escape') {
+                this.closeEditForm();
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            // Stop all other keys from reaching Phaser
+            e.stopPropagation();
+        });
+        inputElement.addEventListener('keyup', (e) => {
+            e.stopPropagation();
+        });
+        inputElement.addEventListener('keypress', (e) => {
+            e.stopPropagation();
+        });
+        
         inputElement.focus();
 
         (this as unknown as { _editInput: HTMLInputElement })._editInput = inputElement;
@@ -3707,15 +4219,47 @@ export class FarmingGame extends Scene {
         uploadBtnBg.on('pointerover', () => uploadBtnBg.setTint(0xcccccc));
         uploadBtnBg.on('pointerout', () => uploadBtnBg.clearTint());
 
-        fileInput.addEventListener('change', (e) => {
+        fileInput.addEventListener('change', async (e) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const base64 = event.target?.result as string;
-                    inputElement.value = base64;
-                };
-                reader.readAsDataURL(file);
+                // Show uploading status
+                uploadText.setText('Uploading...');
+                uploadBtnBg.disableInteractive();
+                
+                try {
+                    // Import IPFSService dynamically
+                    const { IPFSService } = await import('../../services/ipfsService');
+                    
+                    // Upload to IPFS
+                    const ipfsUrl = await IPFSService.uploadImage(file);
+                    
+                    // Set the IPFS URL in the input
+                    inputElement.value = ipfsUrl;
+                    
+                    // Show success
+                    uploadText.setText('Uploaded!');
+                    uploadText.setColor('#4ade80');
+                    
+                    // Reset after 2 seconds
+                    setTimeout(() => {
+                        uploadText.setText('Upload Image');
+                        uploadText.setColor('#FFFFFF');
+                        uploadBtnBg.setInteractive({ useHandCursor: true });
+                    }, 2000);
+                } catch (error) {
+                    console.error('IPFS upload failed:', error);
+                    
+                    // Show error
+                    uploadText.setText('Upload Failed');
+                    uploadText.setColor('#ff4444');
+                    
+                    // Reset after 2 seconds
+                    setTimeout(() => {
+                        uploadText.setText('Upload Image');
+                        uploadText.setColor('#FFFFFF');
+                        uploadBtnBg.setInteractive({ useHandCursor: true });
+                    }, 2000);
+                }
             }
         });
 
@@ -3785,18 +4329,6 @@ export class FarmingGame extends Scene {
         cancelBtnBg.on('pointerdown', () => this.closeEditForm());
         cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
         cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
-
-        inputElement.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                const newValue = inputElement.value.trim();
-                if (newValue && newValue !== currentValue) {
-                    this.updateUserField('avatar', newValue);
-                }
-                this.closeEditForm();
-            } else if (e.key === 'Escape') {
-                this.closeEditForm();
-            }
-        });
     }
 
     private closeEditForm() {
