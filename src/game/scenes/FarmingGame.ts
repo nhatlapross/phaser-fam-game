@@ -193,6 +193,27 @@ export class FarmingGame extends Scene {
     private marqueeText!: Phaser.GameObjects.Text;
     private marqueeContainer!: Phaser.GameObjects.Container;
 
+    // Shop system
+    private shopSprite!: Phaser.GameObjects.Sprite;
+    private shopModalOpen: boolean = false;
+    private shopModalElements: Phaser.GameObjects.GameObject[] = [];
+    private shopActiveTab: 'gold' | 'gem' | 'cash' = 'gold';
+
+    // Currency system
+    private playerGold: number = 1000; // Starting gold
+    private playerGems: number = 50; // Starting gems
+
+    // Shop purchase limits (reset weekly/daily)
+    private shopPurchaseLimits: {
+        shovel: { count: number; lastReset: number }; // 1/week
+        growthWater: { count: number; lastReset: number }; // 1/day
+        mushroomExchange: { count: number; lastReset: number }; // 2/week
+    } = {
+        shovel: { count: 0, lastReset: Date.now() },
+        growthWater: { count: 0, lastReset: Date.now() },
+        mushroomExchange: { count: 0, lastReset: Date.now() }
+    };
+
     constructor() {
         super('FarmingGame');
     }
@@ -212,6 +233,9 @@ export class FarmingGame extends Scene {
 
         // Create mailbox
         this.createMailbox();
+
+        // Create shop
+        this.createShop();
 
         // Create player
         this.createPlayer();
@@ -484,6 +508,11 @@ export class FarmingGame extends Scene {
         const factoryY = centerY - 5;
         const factoryExclusionRadius = 3; // Tiles to exclude around factory
 
+        // Shop exclusion zone (shop is at centerX - 5, centerY - 5)
+        const shopX = centerX - 5;
+        const shopY = centerY - 5;
+        const shopExclusionRadius = 3; // Tiles to exclude around shop
+
         for (let i = 0; i < plantCount; i++) {
             // Random position on the island (rows 11-39, cols 10-39)
             const x = Phaser.Math.Between(11, 38);
@@ -496,6 +525,10 @@ export class FarmingGame extends Scene {
             // Skip if position is in factory exclusion zone
             const distFromFactory = Math.max(Math.abs(x - factoryX), Math.abs(y - factoryY));
             if (distFromFactory < factoryExclusionRadius) continue;
+
+            // Skip if position is in shop exclusion zone
+            const distFromShop = Math.max(Math.abs(x - shopX), Math.abs(y - shopY));
+            if (distFromShop < shopExclusionRadius) continue;
 
             // Skip if not on land
             if (!this.isLandTile(x, y)) continue;
@@ -1174,6 +1207,578 @@ export class FarmingGame extends Scene {
         this.uiCamera?.ignore(centerBush);
     }
 
+    private createShop() {
+        // Place shop to the left of factory
+        const centerX = 25;
+        const centerY = 25;
+        const factoryX = centerX * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const factoryY = (centerY - 5) * this.TILE_SIZE;
+        const shopX = factoryX - 80; // 5 tiles left of factory
+        const shopY = factoryY + 24; // Move forward (down) to be more visible
+
+        // Create shop animation
+        this.anims.create({
+            key: 'shop-idle',
+            frames: this.anims.generateFrameNumbers('shop', { start: 0, end: 1 }),
+            frameRate: 2,
+            repeat: -1
+        });
+
+        // Create shop sprite - owl should be similar size to player (player is 48x48 displayed as ~24x24)
+        this.shopSprite = this.add.sprite(shopX, shopY, 'shop');
+        this.shopSprite.setDisplaySize(81, 60); // 75% of original 108x80, owl ~24px tall
+        // Set depth based on bottom of shop sprite for proper Y-sorting with player
+        // Player depth is set to player.y, so shop depth should be shopY (bottom of shop)
+        this.shopSprite.setDepth(shopY+20);
+        this.shopSprite.setInteractive({ useHandCursor: true });
+        this.shopSprite.play('shop-idle');
+
+        // Click handler
+        this.shopSprite.on('pointerdown', () => {
+            this.openShopModal();
+        });
+
+        // Hover effects
+        this.shopSprite.on('pointerover', () => {
+            this.shopSprite.setTint(0xffff88);
+        });
+
+        this.shopSprite.on('pointerout', () => {
+            this.shopSprite.clearTint();
+        });
+
+        // Make UI camera ignore
+        this.uiCamera?.ignore(this.shopSprite);
+    }
+
+    private openShopModal() {
+        if (this.shopModalOpen) return;
+        this.shopModalOpen = true;
+        this.shopActiveTab = 'gold';
+
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const modalWidth = 340;
+        const modalHeight = 360; // Increased height for items
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+
+        // Overlay
+        const overlay = this.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.6);
+        overlay.setDepth(5300);
+        overlay.setInteractive();
+        overlay.on('pointerdown', () => {
+            this.closeShopModal();
+        });
+        this.cameras.main.ignore(overlay);
+        this.shopModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5301);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+            event.stopPropagation();
+        });
+        this.cameras.main.ignore(modalBg);
+        this.shopModalElements.push(modalBg);
+
+        // Animate modal
+        modalBg.setScale(0);
+        this.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        this.time.delayedCall(100, () => {
+            // Title
+            const title = this.add.text(modalX, modalY - modalHeight / 2 + 65, 'SHOP', {
+                fontSize: '16px',
+                fontFamily: 'PixelFont',
+                color: '#ffffffff',
+                resolution: 2
+            });
+            title.setOrigin(0.5);
+            title.setDepth(5302);
+            title.setStroke('#5D4037', 3);
+            title.setAlpha(0);
+            this.cameras.main.ignore(title);
+            this.shopModalElements.push(title);
+            this.tweens.add({ targets: title, alpha: 1, duration: 150 });
+
+            // Tab buttons
+            const tabY = modalY - modalHeight / 2 + 90;
+            const tabWidth = 80;
+            const tabHeight = 24;
+
+            // Gold tab
+            const goldTabBg = this.add.sprite(modalX - 95, tabY, 'square-buttons', 6);
+            goldTabBg.setDisplaySize(tabWidth, tabHeight);
+            goldTabBg.setDepth(5302);
+            goldTabBg.setAlpha(0);
+            goldTabBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(goldTabBg);
+            this.shopModalElements.push(goldTabBg);
+
+            const goldTabText = this.add.text(modalX - 95, tabY, '💰 Gold', {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            goldTabText.setOrigin(0.5);
+            goldTabText.setDepth(5303);
+            goldTabText.setStroke('#5D4037', 1);
+            goldTabText.setAlpha(0);
+            this.cameras.main.ignore(goldTabText);
+            this.shopModalElements.push(goldTabText);
+
+            // Gem tab
+            const gemTabBg = this.add.sprite(modalX, tabY, 'square-buttons', 7);
+            gemTabBg.setDisplaySize(tabWidth, tabHeight);
+            gemTabBg.setDepth(5302);
+            gemTabBg.setAlpha(0);
+            gemTabBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(gemTabBg);
+            this.shopModalElements.push(gemTabBg);
+
+            const gemTabText = this.add.text(modalX, tabY, '💎 Gem', {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            gemTabText.setOrigin(0.5);
+            gemTabText.setDepth(5303);
+            gemTabText.setStroke('#5D4037', 1);
+            gemTabText.setAlpha(0);
+            this.cameras.main.ignore(gemTabText);
+            this.shopModalElements.push(gemTabText);
+
+            // Cash tab
+            const cashTabBg = this.add.sprite(modalX + 95, tabY, 'square-buttons', 7);
+            cashTabBg.setDisplaySize(tabWidth, tabHeight);
+            cashTabBg.setDepth(5302);
+            cashTabBg.setAlpha(0);
+            cashTabBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(cashTabBg);
+            this.shopModalElements.push(cashTabBg);
+
+            const cashTabText = this.add.text(modalX + 95, tabY, '💵 Cash', {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            cashTabText.setOrigin(0.5);
+            cashTabText.setDepth(5303);
+            cashTabText.setStroke('#5D4037', 1);
+            cashTabText.setAlpha(0);
+            this.cameras.main.ignore(cashTabText);
+            this.shopModalElements.push(cashTabText);
+
+            this.tweens.add({
+                targets: [goldTabBg, goldTabText, gemTabBg, gemTabText, cashTabBg, cashTabText],
+                alpha: 1,
+                duration: 150
+            });
+
+            // Close button
+            const closeBtn = this.add.text(modalX + modalWidth / 2 - 20, modalY - modalHeight / 2 + 20, '✕', {
+                fontSize: '14px',
+                fontFamily: 'Arial',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            closeBtn.setOrigin(0.5);
+            closeBtn.setDepth(5302);
+            closeBtn.setAlpha(0);
+            closeBtn.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(closeBtn);
+            this.shopModalElements.push(closeBtn);
+
+            closeBtn.on('pointerover', () => closeBtn.setColor('#ff6666'));
+            closeBtn.on('pointerout', () => closeBtn.setColor('#FFFFFF'));
+            closeBtn.on('pointerdown', () => this.closeShopModal());
+
+            this.tweens.add({ targets: closeBtn, alpha: 1, duration: 150 });
+
+            // Content area
+            const contentY = modalY + 40;
+            const contentElements: Phaser.GameObjects.GameObject[] = [];
+
+            // Function to show Gold shop content
+            const showGoldContent = () => {
+                contentElements.forEach(el => el.destroy());
+                contentElements.length = 0;
+
+                goldTabBg.setTexture('square-buttons', 6);
+                gemTabBg.setTexture('square-buttons', 7);
+                cashTabBg.setTexture('square-buttons', 7);
+
+                const items = [
+                    { name: '🔧 Shovel', price: 500, desc: 'Remove dead plants', limit: '1/wk', key: 'shovel' },
+                    { name: '🧤 Gloves', price: 30, desc: 'Catch bugs', limit: '', key: 'gloves' },
+                    { name: '💧 Growth Water', price: 100, desc: '-1h grow time', limit: '1/day', key: 'growthWater' },
+                    { name: '🐟 Fish Food', price: 20, desc: 'Feed fish', limit: '', key: 'fishFood' },
+                    { name: '🍄 Mushroom Trade', price: 0, desc: '5 Algae = 1 Spore', limit: '2/wk', key: 'mushroomExchange' }
+                ];
+
+                items.forEach((item, index) => {
+                    const itemY = contentY - 80 + index * 36;
+                    this.createShopItem(modalX, itemY, item, 'gold', contentElements, null);
+                });
+            };
+
+            // Function to show Gem shop content
+            const showGemContent = () => {
+                contentElements.forEach(el => el.destroy());
+                contentElements.length = 0;
+
+                goldTabBg.setTexture('square-buttons', 7);
+                gemTabBg.setTexture('square-buttons', 6);
+                cashTabBg.setTexture('square-buttons', 7);
+
+                const items = [
+                    { name: '🌱 Algae Seed', price: 10, desc: '+1 Algae seed', limit: '', key: 'algaeSeed' },
+                    { name: '🍄 Mushroom Spore', price: 50, desc: '+1 Mushroom seed', limit: '', key: 'mushroomSeed' },
+                    { name: '⚡ Mid Booster', price: 500, desc: '-12h grow time', limit: '', key: 'mediumGrowth' },
+                    { name: '🚀 High Booster', price: 1000, desc: '-24h grow time', limit: '', key: 'highGrowth' },
+                    { name: '💰 Gold Exchange', price: 100, desc: '+1000 Gold', limit: '', key: 'goldExchange' }
+                ];
+
+                items.forEach((item, index) => {
+                    const itemY = contentY - 80 + index * 36;
+                    this.createShopItem(modalX, itemY, item, 'gem', contentElements, null);
+                });
+            };
+
+            // Function to show Cash shop content
+            const showCashContent = () => {
+                contentElements.forEach(el => el.destroy());
+                contentElements.length = 0;
+
+                goldTabBg.setTexture('square-buttons', 7);
+                gemTabBg.setTexture('square-buttons', 7);
+                cashTabBg.setTexture('square-buttons', 6);
+
+                const items = [
+                    { name: '💎 100 Gems', price: 5, desc: '$5 USD', limit: '', key: 'gems100' },
+                    { name: '💎 500 Gems', price: 20, desc: '$20 USD', limit: '', key: 'gems500' },
+                    { name: '💎 1200 Gems', price: 50, desc: '$50 USD', limit: '', key: 'gems1200' },
+                    { name: '💎 2400 Gems', price: 100, desc: '$100 USD', limit: '', key: 'gems2400' },
+                    { name: '🏝️ Land Slot 2', price: 15, desc: '$15 USD', limit: '', key: 'land2' },
+                    { name: '🏝️ Land Slot 3', price: 50, desc: '$50 USD', limit: '', key: 'land3' }
+                ];
+
+                items.forEach((item, index) => {
+                    const itemY = contentY - 90 + index * 32;
+                    this.createShopItem(modalX, itemY, item, 'cash', contentElements, null);
+                });
+            };
+
+            // Tab click handlers
+            goldTabBg.on('pointerdown', () => {
+                this.shopActiveTab = 'gold';
+                showGoldContent();
+            });
+
+            gemTabBg.on('pointerdown', () => {
+                this.shopActiveTab = 'gem';
+                showGemContent();
+            });
+
+            cashTabBg.on('pointerdown', () => {
+                this.shopActiveTab = 'cash';
+                showCashContent();
+            });
+
+            // Show initial content (Gold tab)
+            showGoldContent();
+        });
+    }
+
+    private createShopItem(
+        modalX: number,
+        itemY: number,
+        item: { name: string; price: number; desc: string; limit: string; key: string },
+        currency: 'gold' | 'gem' | 'cash',
+        contentElements: Phaser.GameObjects.GameObject[],
+        currencyText: Phaser.GameObjects.Text | null
+    ) {
+        const cardWidth = 260;
+        const cardHeight = 30;
+        const cardX = modalX + 10; // Shift card to center in modal
+
+        // Card border
+        const cardBorder = this.add.rectangle(cardX, itemY, cardWidth + 2, cardHeight + 2, 0x8B7355);
+        cardBorder.setDepth(5302);
+        this.cameras.main.ignore(cardBorder);
+        this.shopModalElements.push(cardBorder);
+        contentElements.push(cardBorder);
+
+        // Card background
+        const cardBg = this.add.rectangle(cardX, itemY, cardWidth, cardHeight, 0xD4C4A8);
+        cardBg.setDepth(5303);
+        cardBg.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(cardBg);
+        this.shopModalElements.push(cardBg);
+        contentElements.push(cardBg);
+
+        // Calculate positions relative to card center
+        const leftEdge = cardX - cardWidth / 2 + 10; // 10px padding from left
+
+        // Item name
+        const nameText = this.add.text(leftEdge, itemY - 5, item.name, {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#5D4037',
+            resolution: 2
+        });
+        nameText.setOrigin(0, 0.5);
+        nameText.setDepth(5304);
+        this.cameras.main.ignore(nameText);
+        this.shopModalElements.push(nameText);
+        contentElements.push(nameText);
+
+        // Description
+        const descText = this.add.text(leftEdge, itemY + 7, item.desc, {
+            fontSize: '7px',
+            fontFamily: 'PixelFont',
+            color: '#8B7355',
+            resolution: 2
+        });
+        descText.setOrigin(0, 0.5);
+        descText.setDepth(5304);
+        this.cameras.main.ignore(descText);
+        this.shopModalElements.push(descText);
+        contentElements.push(descText);
+
+        // Limit text (if any) - positioned in middle area
+        if (item.limit) {
+            const limitText = this.add.text(cardX + 25, itemY, item.limit, {
+                fontSize: '7px',
+                fontFamily: 'PixelFont',
+                color: '#e74c3c',
+                resolution: 2
+            });
+            limitText.setOrigin(0.5);
+            limitText.setDepth(5304);
+            this.cameras.main.ignore(limitText);
+            this.shopModalElements.push(limitText);
+            contentElements.push(limitText);
+        }
+
+        // Price/Buy button - positioned from right edge
+        const priceIcon = currency === 'gold' ? '💰' : currency === 'gem' ? '💎' : '💵';
+        const priceText = currency === 'cash' ? `$${item.price}` : `${priceIcon}${item.price}`;
+        const btnX = cardX + cardWidth / 2 - 35; // 35px from right edge
+
+        const buyBtn = this.add.sprite(btnX, itemY, 'square-buttons', 6);
+        buyBtn.setDisplaySize(55, 22);
+        buyBtn.setDepth(5304);
+        buyBtn.setInteractive({ useHandCursor: true });
+        this.cameras.main.ignore(buyBtn);
+        this.shopModalElements.push(buyBtn);
+        contentElements.push(buyBtn);
+
+        const buyText = this.add.text(btnX, itemY, priceText, {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        buyText.setOrigin(0.5);
+        buyText.setDepth(5305);
+        buyText.setStroke('#5D4037', 1);
+        this.cameras.main.ignore(buyText);
+        this.shopModalElements.push(buyText);
+        contentElements.push(buyText);
+
+        // Hover effects
+        cardBg.on('pointerover', () => {
+            cardBg.setFillStyle(0xE8D9C0);
+            nameText.setColor('#f59e0b');
+        });
+        cardBg.on('pointerout', () => {
+            cardBg.setFillStyle(0xD4C4A8);
+            nameText.setColor('#5D4037');
+        });
+
+        // Buy button click
+        buyBtn.on('pointerover', () => buyBtn.setTint(0xffff88));
+        buyBtn.on('pointerout', () => buyBtn.clearTint());
+        buyBtn.on('pointerdown', () => {
+            this.handleShopPurchase(item, currency, currencyText);
+        });
+    }
+
+    private handleShopPurchase(
+        item: { name: string; price: number; desc: string; limit: string; key: string },
+        currency: 'gold' | 'gem' | 'cash',
+        currencyText: Phaser.GameObjects.Text | null
+    ) {
+        // Check purchase limits
+        const now = Date.now();
+        const oneDay = 24 * 60 * 60 * 1000;
+        const oneWeek = 7 * oneDay;
+
+        if (item.key === 'shovel') {
+            if (now - this.shopPurchaseLimits.shovel.lastReset > oneWeek) {
+                this.shopPurchaseLimits.shovel = { count: 0, lastReset: now };
+            }
+            if (this.shopPurchaseLimits.shovel.count >= 1) {
+                this.showShopMessage('Weekly limit reached!', '#e74c3c');
+                return;
+            }
+        }
+
+        if (item.key === 'growthWater') {
+            if (now - this.shopPurchaseLimits.growthWater.lastReset > oneDay) {
+                this.shopPurchaseLimits.growthWater = { count: 0, lastReset: now };
+            }
+            if (this.shopPurchaseLimits.growthWater.count >= 1) {
+                this.showShopMessage('Daily limit reached!', '#e74c3c');
+                return;
+            }
+        }
+
+        if (item.key === 'mushroomExchange') {
+            if (now - this.shopPurchaseLimits.mushroomExchange.lastReset > oneWeek) {
+                this.shopPurchaseLimits.mushroomExchange = { count: 0, lastReset: now };
+            }
+            if (this.shopPurchaseLimits.mushroomExchange.count >= 2) {
+                this.showShopMessage('Weekly limit reached!', '#e74c3c');
+                return;
+            }
+            // Check for 5 mature algae (social plants)
+            const algaeCount = this.chestInventory.reduce((total, slot) =>
+                slot.type === 'social' ? total + slot.count : total, 0);
+            if (algaeCount < 5) {
+                this.showShopMessage('Need 5 mature Algae!', '#e74c3c');
+                return;
+            }
+        }
+
+        // Check currency
+        if (currency === 'gold' && item.price > 0) {
+            if (this.playerGold < item.price) {
+                this.showShopMessage('Not enough Gold!', '#e74c3c');
+                return;
+            }
+            this.playerGold -= item.price;
+            if (currencyText) currencyText.setText(`💰 ${this.playerGold}`);
+        } else if (currency === 'gem') {
+            if (this.playerGems < item.price) {
+                this.showShopMessage('Not enough Gems!', '#e74c3c');
+                return;
+            }
+            this.playerGems -= item.price;
+            if (currencyText) currencyText.setText(`💎 ${this.playerGems}`);
+        } else if (currency === 'cash') {
+            // IAP - show message for now
+            this.showShopMessage('IAP not available yet', '#f59e0b');
+            return;
+        }
+
+        // Apply purchase effect
+        switch (item.key) {
+            case 'shovel':
+                this.shopPurchaseLimits.shovel.count++;
+                this.showShopMessage('Purchased Shovel!', '#4ade80');
+                break;
+            case 'gloves':
+                this.showShopMessage('Purchased Gloves!', '#4ade80');
+                break;
+            case 'growthWater':
+                this.shopPurchaseLimits.growthWater.count++;
+                const waterItem = this.toolbarItems.find(t => t.name === 'wateringCan');
+                if (waterItem) waterItem.count = (waterItem.count || 0) + 10;
+                this.showShopMessage('Purchased Growth Water!', '#4ade80');
+                break;
+            case 'fishFood':
+                this.showShopMessage('Purchased Fish Food!', '#4ade80');
+                break;
+            case 'mushroomExchange':
+                this.shopPurchaseLimits.mushroomExchange.count++;
+                // Remove 5 social fruits from chest
+                let toRemove = 5;
+                for (let i = 0; i < this.chestInventory.length && toRemove > 0; i++) {
+                    if (this.chestInventory[i].type === 'social') {
+                        const remove = Math.min(this.chestInventory[i].count, toRemove);
+                        this.chestInventory[i].count -= remove;
+                        toRemove -= remove;
+                    }
+                }
+                this.chestInventory = this.chestInventory.filter(slot => slot.count > 0);
+                // Add mushroom seed
+                this.seedCounts.mushroom++;
+                this.showShopMessage('Trade success! +1 Spore', '#4ade80');
+                break;
+            case 'algaeSeed':
+                this.seedCounts.social++;
+                this.showShopMessage('Purchased Algae Seed!', '#4ade80');
+                break;
+            case 'mushroomSeed':
+                this.seedCounts.mushroom++;
+                this.showShopMessage('Purchased Mushroom Spore!', '#4ade80');
+                break;
+            case 'mediumGrowth':
+                const fertItem = this.toolbarItems.find(t => t.name === 'fertilizer');
+                if (fertItem) fertItem.count = (fertItem.count || 0) + 3;
+                this.showShopMessage('Purchased Mid Booster!', '#4ade80');
+                break;
+            case 'highGrowth':
+                const fertItem2 = this.toolbarItems.find(t => t.name === 'fertilizer');
+                if (fertItem2) fertItem2.count = (fertItem2.count || 0) + 5;
+                this.showShopMessage('Purchased High Booster!', '#4ade80');
+                break;
+            case 'goldExchange':
+                this.playerGold += 1000;
+                this.showShopMessage('Trade success! +1000 Gold', '#4ade80');
+                break;
+        }
+
+        // Update toolbar and profile UI
+        this.updateToolbar();
+        this.createUserProfileUI(); // Refresh to show updated currency
+    }
+
+    private showShopMessage(message: string, color: string) {
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+
+        const msgText = this.add.text(screenWidth / 2, screenHeight / 2 + 120, message, {
+            fontSize: '12px',
+            fontFamily: 'PixelFont',
+            color: color,
+            resolution: 2
+        });
+        msgText.setOrigin(0.5);
+        msgText.setDepth(5400);
+        msgText.setStroke('#000000', 2);
+        this.cameras.main.ignore(msgText);
+
+        this.tweens.add({
+            targets: msgText,
+            alpha: 0,
+            y: msgText.y - 30,
+            duration: 1500,
+            ease: 'Power2',
+            onComplete: () => msgText.destroy()
+        });
+    }
+
+    private closeShopModal() {
+        this.shopModalOpen = false;
+        this.shopModalElements.forEach(el => el.destroy());
+        this.shopModalElements = [];
+    }
+
     private openMailboxModal() {
         if (this.mailboxModalOpen) return;
         this.mailboxModalOpen = true;
@@ -1375,23 +1980,24 @@ export class FarmingGame extends Scene {
 
                 // Display missions with beautiful redesigned UI
                 missions.forEach((mission, index) => {
-                    const missionY = contentY - 50 + index * 50;
+                    const missionY = contentY - 50 + index * 45;
                     const isDone = mission.status === 'completed' || mission.status === 'claimed';
                     const progressPercent = (mission.progress / mission.target) * 100;
 
                     // Mission card container with border
-                    const cardWidth = 270;
-                    const cardHeight = 42;
-                    
+                    const cardWidth = 230; // Reduced from 270
+                    const cardHeight = 38; // Reduced from 42
+                    const cardX = modalX + 10; // Shift slightly right to center
+
                     // Card border (darker)
-                    const cardBorder = this.add.rectangle(modalX, missionY, cardWidth + 4, cardHeight + 4, 0x8B7355);
+                    const cardBorder = this.add.rectangle(cardX, missionY, cardWidth + 3, cardHeight + 3, 0x8B7355);
                     cardBorder.setDepth(5302);
                     this.cameras.main.ignore(cardBorder);
                     this.mailboxModalElements.push(cardBorder);
                     contentElements.push(cardBorder);
 
                     // Card background (lighter)
-                    const cardBg = this.add.rectangle(modalX, missionY, cardWidth, cardHeight, 0xD4C4A8);
+                    const cardBg = this.add.rectangle(cardX, missionY, cardWidth, cardHeight, 0xD4C4A8);
                     cardBg.setDepth(5303);
                     cardBg.setInteractive({ useHandCursor: true });
                     this.cameras.main.ignore(cardBg);
@@ -1399,15 +2005,15 @@ export class FarmingGame extends Scene {
                     contentElements.push(cardBg);
 
                     // Status icon with colored background circle
-                    const iconX = modalX - 120;
-                    const iconBg = this.add.circle(iconX, missionY, 10, isDone ? 0x4ade80 : 0xfbbf24);
+                    const iconX = cardX - cardWidth / 2 + 15;
+                    const iconBg = this.add.circle(iconX, missionY, 8, isDone ? 0x4ade80 : 0xfbbf24);
                     iconBg.setDepth(5304);
                     this.cameras.main.ignore(iconBg);
                     this.mailboxModalElements.push(iconBg);
                     contentElements.push(iconBg);
 
                     const statusIcon = this.add.text(iconX, missionY, isDone ? '✓' : '!', {
-                        fontSize: '12px',
+                        fontSize: '10px',
                         fontFamily: 'Arial',
                         color: '#FFFFFF',
                         resolution: 2
@@ -1418,10 +2024,10 @@ export class FarmingGame extends Scene {
                     this.mailboxModalElements.push(statusIcon);
                     contentElements.push(statusIcon);
 
-                    // Mission name (larger, bolder)
-                    const nameX = modalX - 100;
-                    const missionName = this.add.text(nameX, missionY - 10, mission.name, {
-                        fontSize: '11px',
+                    // Mission name
+                    const nameX = cardX - cardWidth / 2 + 30;
+                    const missionName = this.add.text(nameX, missionY - 8, mission.name, {
+                        fontSize: '9px',
                         fontFamily: 'PixelFont',
                         color: isDone ? '#16a34a' : '#5D4037',
                         resolution: 2
@@ -1432,12 +2038,12 @@ export class FarmingGame extends Scene {
                     this.mailboxModalElements.push(missionName);
                     contentElements.push(missionName);
 
-                    // Progress bar with better visibility
-                    const barWidth = 190;
-                    const barHeight = 10;
-                    const barX = modalX - 100;
+                    // Progress bar
+                    const barWidth = 120; // Reduced from 190
+                    const barHeight = 8; // Reduced from 10
+                    const barX = cardX - cardWidth / 2 + 35;
                     const barY = missionY + 8;
-                    
+
                     // Progress bar border
                     const barBorder = this.add.rectangle(barX, barY, barWidth + 2, barHeight + 2, 0x8B7355);
                     barBorder.setOrigin(0, 0.5);
@@ -1463,9 +2069,9 @@ export class FarmingGame extends Scene {
                     this.mailboxModalElements.push(progressBarFill);
                     contentElements.push(progressBarFill);
 
-                    // Progress text (right side, larger)
-                    const progressText = this.add.text(modalX + 110, missionY, `${mission.progress}/${mission.target}`, {
-                        fontSize: '11px',
+                    // Progress text (right side)
+                    const progressText = this.add.text(cardX + cardWidth / 2 - 25, missionY, `${mission.progress}/${mission.target}`, {
+                        fontSize: '9px',
                         fontFamily: 'PixelFont',
                         color: isDone ? '#16a34a' : '#5D4037',
                         resolution: 2
@@ -3461,7 +4067,7 @@ export class FarmingGame extends Scene {
         // Clear previous elements
         this.userProfileElements.forEach(el => el.destroy());
         this.userProfileElements = [];
-        
+
         // Reset avatar tracking since we destroyed it
         this.avatarImage = null;
         this.loadedAvatarUrl = null;
@@ -3473,7 +4079,7 @@ export class FarmingGame extends Scene {
         const padding = 10;
         const avatarSize = 50;
         const panelWidth = 140;
-        const panelHeight = 85;
+        const panelHeight = 105; // Increased to fit currency
 
         // Position in top-right corner
         const panelX = screenWidth - panelWidth / 2 - padding;
@@ -3560,6 +4166,34 @@ export class FarmingGame extends Scene {
         scoreText.setDepth(5023);
         this.cameras.main.ignore(scoreText);
         this.userProfileElements.push(scoreText);
+
+        // Currency row (Gold and Gem) - below avatar
+        const currencyY = panelY + panelHeight / 2 - 22;
+        const currencyStartX = panelX - panelWidth / 2 + 25;
+
+        // Gold
+        const goldText = this.add.text(currencyStartX, currencyY, `💰 ${this.playerGold}`, {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        goldText.setDepth(5023);
+        goldText.setStroke('#5D4037', 2);
+        this.cameras.main.ignore(goldText);
+        this.userProfileElements.push(goldText);
+
+        // Gem
+        const gemText = this.add.text(currencyStartX + 60, currencyY, `💎 ${this.playerGems}`, {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#4FC3F7',
+            resolution: 2
+        });
+        gemText.setDepth(5023);
+        gemText.setStroke('#1565C0', 2);
+        this.cameras.main.ignore(gemText);
+        this.userProfileElements.push(gemText);
 
         // Click handler to open profile modal
         bg.on('pointerdown', () => {
