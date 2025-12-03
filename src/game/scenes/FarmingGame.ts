@@ -2998,6 +2998,10 @@ export class FarmingGame extends Scene {
         // Clear previous elements
         this.userProfileElements.forEach(el => el.destroy());
         this.userProfileElements = [];
+        
+        // Reset avatar tracking since we destroyed it
+        this.avatarImage = null;
+        this.loadedAvatarUrl = null;
 
         const user = UserService.getStoredUser();
         if (!user) return;
@@ -3521,6 +3525,35 @@ export class FarmingGame extends Scene {
             z-index: 10001;
         `;
         document.body.appendChild(inputElement);
+        
+        // Prevent Phaser from capturing keyboard events while typing
+        inputElement.addEventListener('keydown', (e) => {
+            // Handle Enter and Escape before stopping propagation
+            if (e.key === 'Enter') {
+                const newValue = inputElement.value.trim();
+                if (newValue && newValue !== currentValue) {
+                    this.updateUserField(fieldName, newValue);
+                }
+                this.closeEditForm();
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            } else if (e.key === 'Escape') {
+                this.closeEditForm();
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            // Stop all other keys from reaching Phaser
+            e.stopPropagation();
+        });
+        inputElement.addEventListener('keyup', (e) => {
+            e.stopPropagation();
+        });
+        inputElement.addEventListener('keypress', (e) => {
+            e.stopPropagation();
+        });
+        
         inputElement.focus();
 
         // Store reference for cleanup
@@ -3591,19 +3624,6 @@ export class FarmingGame extends Scene {
         cancelBtnBg.on('pointerdown', () => this.closeEditForm());
         cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
         cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
-
-        // Enter key to save
-        inputElement.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                const newValue = inputElement.value.trim();
-                if (newValue && newValue !== currentValue) {
-                    this.updateUserField(fieldName, newValue);
-                }
-                this.closeEditForm();
-            } else if (e.key === 'Escape') {
-                this.closeEditForm();
-            }
-        });
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -3647,6 +3667,35 @@ export class FarmingGame extends Scene {
             z-index: 10001;
         `;
         document.body.appendChild(inputElement);
+        
+        // Prevent Phaser from capturing keyboard events while typing
+        inputElement.addEventListener('keydown', (e) => {
+            // Handle Enter and Escape before stopping propagation
+            if (e.key === 'Enter') {
+                const newValue = inputElement.value.trim();
+                if (newValue && newValue !== currentValue) {
+                    this.updateUserField('avatar', newValue);
+                }
+                this.closeEditForm();
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            } else if (e.key === 'Escape') {
+                this.closeEditForm();
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            // Stop all other keys from reaching Phaser
+            e.stopPropagation();
+        });
+        inputElement.addEventListener('keyup', (e) => {
+            e.stopPropagation();
+        });
+        inputElement.addEventListener('keypress', (e) => {
+            e.stopPropagation();
+        });
+        
         inputElement.focus();
 
         (this as unknown as { _editInput: HTMLInputElement })._editInput = inputElement;
@@ -3707,15 +3756,47 @@ export class FarmingGame extends Scene {
         uploadBtnBg.on('pointerover', () => uploadBtnBg.setTint(0xcccccc));
         uploadBtnBg.on('pointerout', () => uploadBtnBg.clearTint());
 
-        fileInput.addEventListener('change', (e) => {
+        fileInput.addEventListener('change', async (e) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const base64 = event.target?.result as string;
-                    inputElement.value = base64;
-                };
-                reader.readAsDataURL(file);
+                // Show uploading status
+                uploadText.setText('Uploading...');
+                uploadBtnBg.disableInteractive();
+                
+                try {
+                    // Import IPFSService dynamically
+                    const { IPFSService } = await import('../../services/ipfsService');
+                    
+                    // Upload to IPFS
+                    const ipfsUrl = await IPFSService.uploadImage(file);
+                    
+                    // Set the IPFS URL in the input
+                    inputElement.value = ipfsUrl;
+                    
+                    // Show success
+                    uploadText.setText('Uploaded!');
+                    uploadText.setColor('#4ade80');
+                    
+                    // Reset after 2 seconds
+                    setTimeout(() => {
+                        uploadText.setText('Upload Image');
+                        uploadText.setColor('#FFFFFF');
+                        uploadBtnBg.setInteractive({ useHandCursor: true });
+                    }, 2000);
+                } catch (error) {
+                    console.error('IPFS upload failed:', error);
+                    
+                    // Show error
+                    uploadText.setText('Upload Failed');
+                    uploadText.setColor('#ff4444');
+                    
+                    // Reset after 2 seconds
+                    setTimeout(() => {
+                        uploadText.setText('Upload Image');
+                        uploadText.setColor('#FFFFFF');
+                        uploadBtnBg.setInteractive({ useHandCursor: true });
+                    }, 2000);
+                }
             }
         });
 
@@ -3785,18 +3866,6 @@ export class FarmingGame extends Scene {
         cancelBtnBg.on('pointerdown', () => this.closeEditForm());
         cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
         cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
-
-        inputElement.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                const newValue = inputElement.value.trim();
-                if (newValue && newValue !== currentValue) {
-                    this.updateUserField('avatar', newValue);
-                }
-                this.closeEditForm();
-            } else if (e.key === 'Escape') {
-                this.closeEditForm();
-            }
-        });
     }
 
     private closeEditForm() {
