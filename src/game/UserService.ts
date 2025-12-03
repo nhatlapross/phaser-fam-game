@@ -153,8 +153,6 @@ export class UserService {
                     body: JSON.stringify({
                         walletAddress,
                         username,
-                        network: "sui",
-                        avatar: null,
                     }),
                 }
             );
