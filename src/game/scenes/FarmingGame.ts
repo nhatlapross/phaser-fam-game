@@ -3,6 +3,8 @@ import { EventBus } from '../EventBus';
 import { ISLAND_MAP_DATA } from './IslandMapData';
 import { UserService } from '../UserService';
 import { MissionService, Mission } from '../MissionService';
+import { SeedService } from '../SeedService';
+import { FertilizerService } from '../FertilizerService';
 
 // Plant types based on proposal
 type PlantType = 'social' | 'technical' | 'branded' | 'mushroom';
@@ -113,20 +115,30 @@ export class FarmingGame extends Scene {
     private seedSelectorElements: Phaser.GameObjects.GameObject[] = [];
     private seedOptionJustClicked: boolean = false; // Prevent movement when clicking seed options
 
-    // Seed counts per type (each type starts with 5 seeds)
+    // Seed counts per type (loaded from API, defaults to 0)
     private seedCounts: Record<PlantType, number> = {
-        social: 5,
-        technical: 5,
-        branded: 5,
-        mushroom: 5
+        social: 0,
+        technical: 0,
+        branded: 0,
+        mushroom: 0
     };
+
+    // Fertilizer counts per type (loaded from API, defaults to 0)
+    private fertilizerCounts: Record<'common' | 'rare' | 'epic', number> = {
+        common: 0,
+        rare: 0,
+        epic: 0
+    };
+    private selectedFertilizerIndex: number = 0; // Index in fertilizer types (0=common, 1=rare, 2=epic)
+    private fertilizerSelectorOpen: boolean = false;
+    private fertilizerSelectorElements: Phaser.GameObjects.GameObject[] = [];
 
     // Toolbar items (6 slots: hand, watering can, seed, fertilizer, digest, chest)
     private toolbarItems: ToolbarItem[] = [
         { type: 'tool', name: 'hand' },
         { type: 'tool', name: 'wateringCan', count: 100 },
         { type: 'seed', name: 'seed' }, // count is managed by seedCounts
-        { type: 'tool', name: 'fertilizer', count: 5 },
+        { type: 'tool', name: 'fertilizer' }, // count is managed by fertilizerCounts
         { type: 'tool', name: 'digest' },
         { type: 'tool', name: 'chest' },
     ];
@@ -283,6 +295,10 @@ export class FarmingGame extends Scene {
         // Check if already connected
         EventBus.emit('check-wallet-connection');
 
+        // Fetch seed and fertilizer inventory on scene start (if user is already logged in)
+        this.fetchSeedInventory();
+        this.fetchFertilizerInventory();
+
         // Handle screen resize
         this.scale.on('resize', this.onResize, this);
 
@@ -316,6 +332,87 @@ export class FarmingGame extends Scene {
 
         // Recreate user profile UI
         this.createUserProfileUI();
+    }
+
+    /**
+     * Fetches seed inventory from API and updates local seed counts
+     */
+    private async fetchSeedInventory() {
+        try {
+            const inventory = await SeedService.getSeedInventory();
+
+            // Reset all seed counts to 0 first
+            this.seedCounts = {
+                social: 0,
+                technical: 0,
+                branded: 0,
+                mushroom: 0
+            };
+
+            // Validate that inventory is an array
+            if (!Array.isArray(inventory)) {
+                console.warn('Seed inventory is not an array:', inventory);
+                this.updateToolbar();
+                return;
+            }
+
+            // Update seed counts from API response
+            inventory.forEach(item => {
+                if (item && item.type) {
+                    const plantType = SeedService.mapSeedTypeToPlantType(item.type);
+                    this.seedCounts[plantType] = item.quantity;
+                }
+            });
+
+            console.log('Seed inventory updated:', this.seedCounts);
+
+            // Update toolbar to reflect new counts
+            this.updateToolbar();
+        } catch (error) {
+            console.error('Error fetching seed inventory:', error);
+            // Update toolbar anyway to show 0 counts
+            this.updateToolbar();
+        }
+    }
+
+    /**
+     * Fetches fertilizer inventory from API and updates local fertilizer counts
+     */
+    private async fetchFertilizerInventory() {
+        try {
+            const inventory = await FertilizerService.getFertilizerInventory();
+
+            // Reset all fertilizer counts to 0 first
+            this.fertilizerCounts = {
+                common: 0,
+                rare: 0,
+                epic: 0
+            };
+
+            // Validate that inventory is an array
+            if (!Array.isArray(inventory)) {
+                console.warn('Fertilizer inventory is not an array:', inventory);
+                this.updateToolbar();
+                return;
+            }
+
+            // Update fertilizer counts from API response
+            inventory.forEach(item => {
+                if (item && item.items && item.items.type) {
+                    const fertilizerType = FertilizerService.mapFertilizerType(item.items.type);
+                    this.fertilizerCounts[fertilizerType] = item.quantity;
+                }
+            });
+
+            console.log('Fertilizer inventory updated:', this.fertilizerCounts);
+
+            // Update toolbar to reflect new counts
+            this.updateToolbar();
+        } catch (error) {
+            console.error('Error fetching fertilizer inventory:', error);
+            // Update toolbar anyway to show 0 counts
+            this.updateToolbar();
+        }
     }
 
     private createWaterAnimation() {
@@ -2435,10 +2532,8 @@ export class FarmingGame extends Scene {
                 this.seedCounts[rewardData.seed] += 1;
             }
             if (rewardData.fertilizer) {
-                const fertilizerItem = this.toolbarItems.find(item => item.name === 'fertilizer');
-                if (fertilizerItem) {
-                    fertilizerItem.count = (fertilizerItem.count || 0) + rewardData.fertilizer;
-                }
+                // Add to common fertilizer by default
+                this.fertilizerCounts.common += rewardData.fertilizer;
             }
 
             this.updateToolbar();
@@ -3308,12 +3403,9 @@ export class FarmingGame extends Scene {
             return;
         }
 
-        // Add fertilizer to inventory
-        const fertilizer = this.toolbarItems.find(item => item.name === 'fertilizer');
-        if (fertilizer && fertilizer.count !== undefined) {
-            fertilizer.count++;
-            this.updateToolbar();
-        }
+        // Add fertilizer to inventory (common type from factory)
+        this.fertilizerCounts.common++;
+        this.updateToolbar();
 
         // Remove bag with animation
         this.tweens.add({
@@ -3641,12 +3733,47 @@ export class FarmingGame extends Scene {
                     this.cameras.main.ignore(countText);
                     this.toolbarElements.push(countText);
                 }
+            } else if (item.name === 'fertilizer') {
+                // Fertilizer icon
+                const icon = this.add.sprite(slotX, slotY, 'icon-fertilizer');
+                icon.setDisplaySize(slotSize - 12, slotSize - 12);
+                icon.setDepth(5003);
+                this.cameras.main.ignore(icon);
+                this.toolbarElements.push(icon);
+
+                // Small indicator arrow for fertilizer selection
+                const arrow = this.add.text(slotX + slotSize/2 - 6, slotY - slotSize/2 + 4, '▼', {
+                    fontSize: '10px',
+                    color: '#FFD700'
+                });
+                arrow.setDepth(5004);
+                this.cameras.main.ignore(arrow);
+                this.toolbarElements.push(arrow);
+
+                // Count display - show count for currently selected fertilizer type
+                const fertilizerTypes: ('common' | 'rare' | 'epic')[] = ['common', 'rare', 'epic'];
+                const selectedFertilizerType = fertilizerTypes[this.selectedFertilizerIndex];
+                const currentFertilizerCount = this.fertilizerCounts[selectedFertilizerType];
+                const countText = this.add.text(
+                    slotX + slotSize/2 - 4,
+                    slotY + slotSize/2 - 4,
+                    currentFertilizerCount.toString(),
+                    {
+                        fontSize: '14px',
+                        color: currentFertilizerCount > 0 ? '#ffffff' : '#ff6666',
+                        backgroundColor: '#000000cc',
+                        padding: { x: 4, y: 2 }
+                    }
+                );
+                countText.setOrigin(1, 1);
+                countText.setDepth(5004);
+                this.cameras.main.ignore(countText);
+                this.toolbarElements.push(countText);
             } else {
                 // Tool icons
                 let iconKey = '';
                 if (item.name === 'wateringCan') iconKey = 'icon-watercan';
                 else if (item.name === 'hand') iconKey = 'icon-hand';
-                else if (item.name === 'fertilizer') iconKey = 'icon-fertilizer';
                 else if (item.name === 'digest') iconKey = 'icon-digest';
 
                 if (iconKey) {
@@ -3684,12 +3811,20 @@ export class FarmingGame extends Scene {
                     // Toggle seed selector
                     this.toggleSeedSelector();
                     this.closeChestPanel();
+                    this.closeFertilizerSelector();
+                } else if (item.name === 'fertilizer') {
+                    // Toggle fertilizer selector
+                    this.toggleFertilizerSelector();
+                    this.closeSeedSelector();
+                    this.closeChestPanel();
                 } else if (item.name === 'chest') {
                     // Toggle chest panel
                     this.toggleChestPanel();
                     this.closeSeedSelector();
+                    this.closeFertilizerSelector();
                 } else {
                     this.closeSeedSelector();
+                    this.closeFertilizerSelector();
                     this.closeChestPanel();
                 }
                 this.selectToolbarSlot(i);
@@ -3798,6 +3933,114 @@ export class FarmingGame extends Scene {
         this.seedSelectorOpen = false;
         this.seedSelectorElements.forEach(el => el.destroy());
         this.seedSelectorElements = [];
+    }
+
+    // ========== Fertilizer Selector Methods ==========
+
+    private toggleFertilizerSelector() {
+        if (this.fertilizerSelectorOpen) {
+            this.closeFertilizerSelector();
+        } else {
+            this.openFertilizerSelector();
+        }
+    }
+
+    private openFertilizerSelector() {
+        this.closeFertilizerSelector();
+        this.fertilizerSelectorOpen = true;
+
+        const slotSize = 48;
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const numSlots = this.toolbarItems.length;
+        const slotSpacing = 8;
+        const totalWidth = (slotSize + slotSpacing) * numSlots - slotSpacing;
+        const startX = (screenWidth - totalWidth) / 2;
+        const startY = screenHeight - slotSize - 20;
+
+        // Find fertilizer slot position (index 3)
+        const fertilizerSlotIndex = this.toolbarItems.findIndex(item => item.name === 'fertilizer');
+        const fertilizerSlotX = startX + fertilizerSlotIndex * (slotSize + slotSpacing) + slotSize / 2;
+        const selectorY = startY - 10;
+
+        const fertilizerTypes: ('common' | 'rare' | 'epic')[] = ['common', 'rare', 'epic'];
+        const fertilizerLabels = { common: 'Common', rare: 'Rare', epic: 'Epic' };
+        const fertilizerColors = { common: 0x888888, rare: 0x4488ff, epic: 0xaa44ff };
+
+        // Selector background
+        const selectorBg = this.add.rectangle(
+            fertilizerSlotX,
+            selectorY - (fertilizerTypes.length * (slotSize + 4)) / 2,
+            slotSize + 16,
+            fertilizerTypes.length * (slotSize + 4) + 8,
+            0x5D4037,
+            0.95
+        );
+        selectorBg.setStrokeStyle(2, 0x3E2723);
+        selectorBg.setDepth(5100);
+        this.cameras.main.ignore(selectorBg);
+        this.fertilizerSelectorElements.push(selectorBg);
+
+        // Create fertilizer options
+        fertilizerTypes.forEach((fertilizerType, index) => {
+            const optionY = selectorY - (slotSize + 4) * (index + 1);
+
+            // Option background
+            const optionBg = this.add.sprite(fertilizerSlotX, optionY, 'square-buttons',
+                index === this.selectedFertilizerIndex ? 4 : 6);
+            optionBg.setDisplaySize(slotSize, slotSize);
+            optionBg.setDepth(5101);
+            optionBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(optionBg);
+            this.fertilizerSelectorElements.push(optionBg);
+
+            // Fertilizer icon with color tint
+            const icon = this.add.sprite(fertilizerSlotX, optionY, 'icon-fertilizer');
+            icon.setDisplaySize(slotSize - 8, slotSize - 8);
+            icon.setTint(fertilizerColors[fertilizerType]);
+            icon.setDepth(5102);
+            this.cameras.main.ignore(icon);
+            this.fertilizerSelectorElements.push(icon);
+
+            // Fertilizer count for this type
+            const fertilizerCount = this.fertilizerCounts[fertilizerType];
+            const countText = this.add.text(
+                fertilizerSlotX + slotSize/2 - 4,
+                optionY + slotSize/2 - 4,
+                fertilizerCount.toString(),
+                {
+                    fontSize: '12px',
+                    color: fertilizerCount > 0 ? '#ffffff' : '#ff6666',
+                    backgroundColor: '#000000cc',
+                    padding: { x: 3, y: 1 }
+                }
+            );
+            countText.setOrigin(1, 1);
+            countText.setDepth(5103);
+            this.cameras.main.ignore(countText);
+            this.fertilizerSelectorElements.push(countText);
+
+            // Click handler
+            optionBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+                event.stopPropagation();
+                this.selectedFertilizerIndex = index;
+                this.closeFertilizerSelector();
+                this.updateToolbar();
+            });
+
+            optionBg.on('pointerover', () => {
+                optionBg.setFrame(4);
+            });
+            optionBg.on('pointerout', () => {
+                optionBg.setFrame(index === this.selectedFertilizerIndex ? 4 : 6);
+            });
+        });
+    }
+
+    private closeFertilizerSelector() {
+        this.fertilizerSelectorOpen = false;
+        this.fertilizerSelectorElements.forEach(el => el.destroy());
+        this.fertilizerSelectorElements = [];
     }
 
     // ========== Chest Panel Methods ==========
@@ -4028,6 +4271,10 @@ export class FarmingGame extends Scene {
         console.log('FarmingGame: wallet connected', address);
         this.walletAddress = address;
         this.createWalletDisplay();
+        
+        // Fetch seed and fertilizer inventory from API
+        this.fetchSeedInventory();
+        this.fetchFertilizerInventory();
     }
 
     private createWalletDisplay() {
@@ -5343,11 +5590,15 @@ export class FarmingGame extends Scene {
 
     private fertilizeCrop(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
-        const fertilizer = this.toolbarItems.find(item => item.name === 'fertilizer');
+        
+        // Get selected fertilizer type
+        const fertilizerTypes: ('common' | 'rare' | 'epic')[] = ['common', 'rare', 'epic'];
+        const selectedFertilizerType = fertilizerTypes[this.selectedFertilizerIndex];
+        const currentFertilizerCount = this.fertilizerCounts[selectedFertilizerType];
 
-        // Check if we have fertilizer
-        if (!fertilizer || fertilizer.count === undefined || fertilizer.count <= 0) {
-            console.log('No fertilizer left!');
+        // Check if we have fertilizer of the selected type
+        if (currentFertilizerCount <= 0) {
+            console.log('No', selectedFertilizerType, 'fertilizer left!');
             return;
         }
 
@@ -5375,16 +5626,16 @@ export class FarmingGame extends Scene {
             if (state.plantStage < maxStage) {
                 // Fertilizer grows plant by 2 stages (but not beyond max)
                 state.plantStage = Math.min(state.plantStage + 2, maxStage);
-                fertilizer.count--;
+                this.fertilizerCounts[selectedFertilizerType]--;
                 this.updateToolbar();
 
                 // Update plant sprite
                 this.updatePlantSprite(x, y, state.cropType, state.plantStage, false, state.isWilted);
 
-                console.log('Fertilized and grew to stage', state.plantStage, 'at', tileKey, '- Fertilizer left:', fertilizer.count);
+                console.log('Fertilized with', selectedFertilizerType, 'and grew to stage', state.plantStage, 'at', tileKey, '- Fertilizer left:', this.fertilizerCounts[selectedFertilizerType]);
             } else {
                 // Still consume fertilizer but just reset timer
-                fertilizer.count--;
+                this.fertilizerCounts[selectedFertilizerType]--;
                 this.updateToolbar();
                 console.log('Plant is already fully grown at', tileKey, '- Care timer reset');
             }
