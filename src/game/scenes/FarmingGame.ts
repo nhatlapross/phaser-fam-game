@@ -113,12 +113,12 @@ export class FarmingGame extends Scene {
     private seedSelectorElements: Phaser.GameObjects.GameObject[] = [];
     private seedOptionJustClicked: boolean = false; // Prevent movement when clicking seed options
 
-    // Seed counts per type (each type starts with 5 seeds)
+    // Seed counts per type (loaded from API, defaults to 0)
     private seedCounts: Record<PlantType, number> = {
-        social: 5,
-        technical: 5,
-        branded: 5,
-        mushroom: 5
+        social: 0,
+        technical: 0,
+        branded: 0,
+        mushroom: 0
     };
 
     // Toolbar items (6 slots: hand, watering can, seed, fertilizer, digest, chest)
@@ -283,6 +283,9 @@ export class FarmingGame extends Scene {
         // Check if already connected
         EventBus.emit('check-wallet-connection');
 
+        // Fetch seed inventory on scene start (if user is already logged in)
+        this.fetchSeedInventory();
+
         // Handle screen resize
         this.scale.on('resize', this.onResize, this);
 
@@ -316,6 +319,36 @@ export class FarmingGame extends Scene {
 
         // Recreate user profile UI
         this.createUserProfileUI();
+    }
+
+    /**
+     * Fetches seed inventory from API and updates local seed counts
+     */
+    private async fetchSeedInventory() {
+        try {
+            const inventory = await UserService.getSeedInventory();
+
+            // Reset all seed counts to 0 first
+            this.seedCounts = {
+                social: 0,
+                technical: 0,
+                branded: 0,
+                mushroom: 0
+            };
+
+            // Update seed counts from API response
+            inventory.forEach(item => {
+                const plantType = UserService.mapSeedTypeToPlantType(item.type);
+                this.seedCounts[plantType] = item.quantity;
+            });
+
+            console.log('Seed inventory updated:', this.seedCounts);
+
+            // Update toolbar to reflect new counts
+            this.updateToolbar();
+        } catch (error) {
+            console.error('Error fetching seed inventory:', error);
+        }
     }
 
     private createWaterAnimation() {
@@ -4028,6 +4061,9 @@ export class FarmingGame extends Scene {
         console.log('FarmingGame: wallet connected', address);
         this.walletAddress = address;
         this.createWalletDisplay();
+        
+        // Fetch seed inventory from API
+        this.fetchSeedInventory();
     }
 
     private createWalletDisplay() {
