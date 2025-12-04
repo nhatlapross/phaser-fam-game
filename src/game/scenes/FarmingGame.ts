@@ -41,6 +41,8 @@ interface TileState {
     lastCareTime?: number; // Timestamp of last watering/fertilizing
     healthBarBg?: Phaser.GameObjects.Rectangle; // Health bar background
     healthBarFill?: Phaser.GameObjects.Rectangle; // Health bar fill (green->red)
+    locked?: boolean; // Whether plot is locked (needs to be purchased)
+    plotIndex?: number; // Index of plot (0-15 for 4x4 grid)
 }
 
 // New crop definitions using image keys instead of sprite frames
@@ -225,6 +227,14 @@ export class FarmingGame extends Scene {
         growthWater: { count: 0, lastReset: Date.now() },
         mushroomExchange: { count: 0, lastReset: Date.now() }
     };
+
+    // Farm plot ownership system
+    private readonly TOTAL_FARM_PLOTS = 16; // 4x4 grid
+    private readonly INITIAL_OWNED_PLOTS = 2; // Player starts with 2 plots
+    private ownedPlotsCount: number = this.INITIAL_OWNED_PLOTS;
+    private lockedPlotOverlays: Map<string, Phaser.GameObjects.Container> = new Map();
+    private buyPlotModalOpen: boolean = false;
+    private buyPlotModalElements: Phaser.GameObjects.GameObject[] = [];
 
     constructor() {
         super('FarmingGame');
@@ -772,29 +782,68 @@ export class FarmingGame extends Scene {
     }
 
     private createFarmPlots() {
-        // Create 6 farm plots at the center of the island in a 3x2 grid
-        // Center of rectangular island is around (25, 25)
-        const centerX = 25;
-        const centerY = 25;
-
+        // Create 16 farm plots at the center of the island in a 4x4 grid
         // Tilled dirt tile variations: 0, 1, 2, 8, 9, 10
         const tilledDirtTiles = [0, 1, 2, 8, 9, 10];
 
-        // Create 3x2 grid of farm plots using random tilled-dirt tiles
-        const plotPositions = [
-            { x: centerX - 1, y: centerY - 1 }, // Top left
-            { x: centerX, y: centerY - 1 },     // Top center
-            { x: centerX + 1, y: centerY - 1 }, // Top right
-            { x: centerX - 1, y: centerY },     // Bottom left
-            { x: centerX, y: centerY },         // Bottom center
-            { x: centerX + 1, y: centerY },     // Bottom right
-        ];
+        // Create 4x4 grid of farm plots (16 total)
+        // Plots are numbered 0-15, left to right, top to bottom
+        const plotPositions = this.getPlotPositions();
 
-        // Place random tilled-dirt tiles for each plot
-        plotPositions.forEach((pos) => {
+        // Place tilled-dirt tiles for each plot
+        plotPositions.forEach((pos, index) => {
             const randomTileIndex = Phaser.Math.RND.pick(tilledDirtTiles);
             this.tilledDirtLayer.putTileAt(randomTileIndex, pos.x, pos.y);
+
+            // Create lock overlay for locked plots (index >= ownedPlotsCount)
+            if (index >= this.ownedPlotsCount) {
+                this.createLockedPlotOverlay(pos.x, pos.y, index);
+            }
         });
+    }
+
+    private getPlotPositions(): { x: number; y: number }[] {
+        const centerX = 25;
+        const centerY = 25;
+        // 4x4 grid centered around (centerX, centerY)
+        // Starting from top-left: (centerX-1, centerY-1) to (centerX+2, centerY+2)
+        const positions: { x: number; y: number }[] = [];
+        for (let row = 0; row < 4; row++) {
+            for (let col = 0; col < 4; col++) {
+                positions.push({
+                    x: centerX - 1 + col,
+                    y: centerY - 1 + row
+                });
+            }
+        }
+        return positions;
+    }
+
+    private createLockedPlotOverlay(tileX: number, tileY: number, plotIndex: number) {
+        const worldX = tileX * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const worldY = tileY * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const key = `${tileX},${tileY}`;
+
+        // Create container for lock overlay
+        const container = this.add.container(worldX, worldY);
+        container.setDepth(100);
+
+        // Lock land image overlay
+        const lockImage = this.add.image(0, 0, 'lock-land');
+        lockImage.setDisplaySize(this.TILE_SIZE, this.TILE_SIZE);
+        container.add(lockImage);
+
+        // Make interactive
+        lockImage.setInteractive({ useHandCursor: true });
+        lockImage.on('pointerdown', () => {
+            this.showBuyPlotModal(tileX, tileY, plotIndex);
+        });
+
+        // Store reference
+        this.lockedPlotOverlays.set(key, container);
+
+        // Make UI camera ignore this
+        this.uiCamera?.ignore(container);
     }
 
     private createFactory() {
@@ -2009,15 +2058,33 @@ export class FarmingGame extends Scene {
                 duration: 150
             });
 
-            // Content area
+            // Content area with scrollable container
             const contentY = modalY + 20;
             const contentElements: Phaser.GameObjects.GameObject[] = [];
+
+            // Scrollable area setup
+            const scrollAreaTop = modalY - modalHeight / 2 + 85;
+            const scrollAreaHeight = 160;
+
+            // Create mask for scroll area
+            const maskGraphics = this.make.graphics({ x: 0, y: 0 });
+            maskGraphics.fillStyle(0xffffff);
+            maskGraphics.fillRect(modalX - modalWidth / 2 + 10, scrollAreaTop, modalWidth - 20, scrollAreaHeight);
+            const scrollMask = maskGraphics.createGeometryMask();
+            this.mailboxModalElements.push(maskGraphics);
+
+            // Scroll state
+            let scrollOffset = 0;
+            let maxScrollOffset = 0;
+            let isDragging = false;
+            let lastPointerY = 0;
 
             // Function to show missions tab content
             const showMissionsContent = async () => {
                 // Clear previous content
                 contentElements.forEach(el => el.destroy());
                 contentElements.length = 0;
+                scrollOffset = 0;
 
                 missionsTabBg.setTexture('square-buttons', 6);
                 redeemTabBg.setTexture('square-buttons', 7);
@@ -2075,41 +2142,62 @@ export class FarmingGame extends Scene {
                     return;
                 }
 
+                // Calculate total content height and max scroll
+                const cardHeight = 38;
+                const cardSpacing = 45;
+                const totalContentHeight = missions.length * cardSpacing;
+                maxScrollOffset = Math.max(0, totalContentHeight - scrollAreaHeight);
+
+                // Function to update element positions based on scroll
+                const updateScrollPositions = () => {
+                    contentElements.forEach((el: Phaser.GameObjects.GameObject) => {
+                        const gameObj = el as unknown as { y: number; originalY?: number };
+                        if (gameObj.originalY !== undefined) {
+                            gameObj.y = gameObj.originalY - scrollOffset;
+                        }
+                    });
+                };
+
                 // Display missions with beautiful redesigned UI
                 missions.forEach((mission, index) => {
-                    const missionY = contentY - 50 + index * 45;
+                    const baseY = scrollAreaTop + 20 + index * cardSpacing;
                     const isDone = mission.status === 'completed' || mission.status === 'claimed';
                     const progressPercent = (mission.progress / mission.target) * 100;
 
                     // Mission card container with border
-                    const cardWidth = 230; // Reduced from 270
-                    const cardHeight = 38; // Reduced from 42
-                    const cardX = modalX + 10; // Shift slightly right to center
+                    const cardWidth = 230;
+                    const cardX = modalX + 10;
 
                     // Card border (darker)
-                    const cardBorder = this.add.rectangle(cardX, missionY, cardWidth + 3, cardHeight + 3, 0x8B7355);
+                    const cardBorder = this.add.rectangle(cardX, baseY, cardWidth + 3, cardHeight + 3, 0x8B7355);
                     cardBorder.setDepth(5302);
+                    cardBorder.setMask(scrollMask);
                     this.cameras.main.ignore(cardBorder);
                     this.mailboxModalElements.push(cardBorder);
                     contentElements.push(cardBorder);
+                    (cardBorder as unknown as { originalY: number }).originalY = baseY;
 
                     // Card background (lighter)
-                    const cardBg = this.add.rectangle(cardX, missionY, cardWidth, cardHeight, 0xD4C4A8);
+                    const cardBg = this.add.rectangle(cardX, baseY, cardWidth, cardHeight, 0xD4C4A8);
                     cardBg.setDepth(5303);
                     cardBg.setInteractive({ useHandCursor: true });
+                    cardBg.setMask(scrollMask);
                     this.cameras.main.ignore(cardBg);
                     this.mailboxModalElements.push(cardBg);
                     contentElements.push(cardBg);
+                    (cardBg as unknown as { originalY: number }).originalY = baseY;
 
                     // Status icon with colored background circle
                     const iconX = cardX - cardWidth / 2 + 15;
-                    const iconBg = this.add.circle(iconX, missionY, 8, isDone ? 0x4ade80 : 0xfbbf24);
+                    const iconBg = this.add.circle(iconX, baseY, 8, isDone ? 0x4ade80 : 0xfbbf24);
                     iconBg.setDepth(5304);
+                    iconBg.setMask(scrollMask);
                     this.cameras.main.ignore(iconBg);
                     this.mailboxModalElements.push(iconBg);
                     contentElements.push(iconBg);
+                    (iconBg as unknown as { originalY: number }).originalY = baseY;
 
-                    const statusIcon = this.add.text(iconX, missionY, isDone ? '✓' : '!', {
+                    const statusIcon = this.add.text(iconX, baseY, isDone ? '✓' : '!', {
                         fontSize: '10px',
                         fontFamily: 'Arial',
                         color: '#FFFFFF',
@@ -2117,13 +2205,16 @@ export class FarmingGame extends Scene {
                     });
                     statusIcon.setOrigin(0.5);
                     statusIcon.setDepth(5305);
+                    statusIcon.setMask(scrollMask);
                     this.cameras.main.ignore(statusIcon);
                     this.mailboxModalElements.push(statusIcon);
                     contentElements.push(statusIcon);
+                    (statusIcon as unknown as { originalY: number }).originalY = baseY;
 
                     // Mission name
                     const nameX = cardX - cardWidth / 2 + 30;
-                    const missionName = this.add.text(nameX, missionY - 8, mission.name, {
+                    const nameY = baseY - 8;
+                    const missionName = this.add.text(nameX, nameY, mission.name, {
                         fontSize: '9px',
                         fontFamily: 'PixelFont',
                         color: isDone ? '#16a34a' : '#5D4037',
@@ -2131,43 +2222,51 @@ export class FarmingGame extends Scene {
                     });
                     missionName.setOrigin(0, 0.5);
                     missionName.setDepth(5304);
+                    missionName.setMask(scrollMask);
                     this.cameras.main.ignore(missionName);
                     this.mailboxModalElements.push(missionName);
                     contentElements.push(missionName);
+                    (missionName as unknown as { originalY: number }).originalY = nameY;
 
                     // Progress bar
-                    const barWidth = 120; // Reduced from 190
-                    const barHeight = 8; // Reduced from 10
+                    const barWidth = 120;
+                    const barHeight = 8;
                     const barX = cardX - cardWidth / 2 + 35;
-                    const barY = missionY + 8;
+                    const barY = baseY + 8;
 
                     // Progress bar border
                     const barBorder = this.add.rectangle(barX, barY, barWidth + 2, barHeight + 2, 0x8B7355);
                     barBorder.setOrigin(0, 0.5);
                     barBorder.setDepth(5304);
+                    barBorder.setMask(scrollMask);
                     this.cameras.main.ignore(barBorder);
                     this.mailboxModalElements.push(barBorder);
                     contentElements.push(barBorder);
+                    (barBorder as unknown as { originalY: number }).originalY = barY;
 
                     // Progress bar background (light)
                     const progressBarBg = this.add.rectangle(barX + 1, barY, barWidth, barHeight, 0xFFF8E1);
                     progressBarBg.setOrigin(0, 0.5);
                     progressBarBg.setDepth(5305);
+                    progressBarBg.setMask(scrollMask);
                     this.cameras.main.ignore(progressBarBg);
                     this.mailboxModalElements.push(progressBarBg);
                     contentElements.push(progressBarBg);
+                    (progressBarBg as unknown as { originalY: number }).originalY = barY;
 
                     // Progress bar fill (bright and visible)
                     const fillWidth = Math.max(2, (barWidth * progressPercent) / 100);
                     const progressBarFill = this.add.rectangle(barX + 1, barY, fillWidth, barHeight, isDone ? 0x22c55e : 0xf59e0b);
                     progressBarFill.setOrigin(0, 0.5);
                     progressBarFill.setDepth(5306);
+                    progressBarFill.setMask(scrollMask);
                     this.cameras.main.ignore(progressBarFill);
                     this.mailboxModalElements.push(progressBarFill);
                     contentElements.push(progressBarFill);
+                    (progressBarFill as unknown as { originalY: number }).originalY = barY;
 
                     // Progress text (right side)
-                    const progressText = this.add.text(cardX + cardWidth / 2 - 25, missionY, `${mission.progress}/${mission.target}`, {
+                    const progressText = this.add.text(cardX + cardWidth / 2 - 25, baseY, `${mission.progress}/${mission.target}`, {
                         fontSize: '9px',
                         fontFamily: 'PixelFont',
                         color: isDone ? '#16a34a' : '#5D4037',
@@ -2175,9 +2274,11 @@ export class FarmingGame extends Scene {
                     });
                     progressText.setOrigin(0.5);
                     progressText.setDepth(5304);
+                    progressText.setMask(scrollMask);
                     this.cameras.main.ignore(progressText);
                     this.mailboxModalElements.push(progressText);
                     contentElements.push(progressText);
+                    (progressText as unknown as { originalY: number }).originalY = baseY;
 
                     // Hover effects
                     cardBg.on('pointerover', () => {
@@ -2194,6 +2295,40 @@ export class FarmingGame extends Scene {
                         this.showMissionDetails(mission);
                     });
                 });
+
+                // Create scroll zone for mouse wheel and drag
+                const scrollZone = this.add.zone(modalX, scrollAreaTop + scrollAreaHeight / 2, modalWidth - 20, scrollAreaHeight);
+                scrollZone.setInteractive();
+                scrollZone.setDepth(5310);
+                this.cameras.main.ignore(scrollZone);
+                this.mailboxModalElements.push(scrollZone);
+                contentElements.push(scrollZone);
+
+                // Mouse wheel scroll
+                scrollZone.on('wheel', (_pointer: Phaser.Input.Pointer, _dx: number, _dy: number, dz: number) => {
+                    scrollOffset = Phaser.Math.Clamp(scrollOffset + dz * 0.5, 0, maxScrollOffset);
+                    updateScrollPositions();
+                });
+
+                // Drag scroll
+                scrollZone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+                    isDragging = true;
+                    lastPointerY = pointer.y;
+                });
+
+                this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+                    if (isDragging && this.mailboxModalOpen) {
+                        const deltaY = lastPointerY - pointer.y;
+                        scrollOffset = Phaser.Math.Clamp(scrollOffset + deltaY, 0, maxScrollOffset);
+                        lastPointerY = pointer.y;
+                        updateScrollPositions();
+                    }
+                });
+
+                this.input.on('pointerup', () => {
+                    isDragging = false;
+                });
+
             };
 
             // Function to show redeem tab content
@@ -2769,6 +2904,234 @@ export class FarmingGame extends Scene {
         // Destroy all modal elements
         this.mailboxModalElements.forEach(el => el.destroy());
         this.mailboxModalElements = [];
+    }
+
+    private showBuyPlotModal(tileX: number, tileY: number, plotIndex: number) {
+        if (this.buyPlotModalOpen) return;
+
+        // Can only buy the next plot in sequence
+        if (plotIndex !== this.ownedPlotsCount) {
+            console.log('Must buy plots in order! Next plot to buy:', this.ownedPlotsCount);
+            // Show message that must buy in order
+            this.showFloatingMessage(`Buy plot ${this.ownedPlotsCount + 1} first!`, tileX, tileY);
+            return;
+        }
+
+        this.buyPlotModalOpen = true;
+
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const modalWidth = 220;
+        const modalHeight = 160;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+
+        // Cost calculation: (plotIndex + 1) * 100 gems
+        const cost = (plotIndex + 1) * 100;
+
+        // Overlay
+        const overlay = this.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.6);
+        overlay.setDepth(5400);
+        overlay.setInteractive();
+        this.cameras.main.ignore(overlay);
+        this.buyPlotModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5401);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+            event.stopPropagation();
+        });
+        this.cameras.main.ignore(modalBg);
+        this.buyPlotModalElements.push(modalBg);
+
+        // Animate modal
+        modalBg.setScale(0);
+        this.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        this.time.delayedCall(100, () => {
+            // Title
+            const title = this.add.text(modalX, modalY - 50, 'Buy Plot', {
+                fontSize: '14px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            title.setOrigin(0.5);
+            title.setDepth(5402);
+            title.setStroke('#5D4037', 2);
+            this.cameras.main.ignore(title);
+            this.buyPlotModalElements.push(title);
+
+            // Plot number
+            const plotText = this.add.text(modalX, modalY - 25, `Plot #${plotIndex + 1}`, {
+                fontSize: '11px',
+                fontFamily: 'PixelFont',
+                color: '#FFD700',
+                resolution: 2
+            });
+            plotText.setOrigin(0.5);
+            plotText.setDepth(5402);
+            this.cameras.main.ignore(plotText);
+            this.buyPlotModalElements.push(plotText);
+
+            // Cost
+            const costText = this.add.text(modalX, modalY, `Price: ${cost} 💎`, {
+                fontSize: '12px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            costText.setOrigin(0.5);
+            costText.setDepth(5402);
+            this.cameras.main.ignore(costText);
+            this.buyPlotModalElements.push(costText);
+
+            // Current gems
+            const hasEnough = this.playerGems >= cost;
+            const gemsText = this.add.text(modalX, modalY + 20, `You have: ${this.playerGems} 💎`, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: hasEnough ? '#4ade80' : '#ef4444',
+                resolution: 2
+            });
+            gemsText.setOrigin(0.5);
+            gemsText.setDepth(5402);
+            this.cameras.main.ignore(gemsText);
+            this.buyPlotModalElements.push(gemsText);
+
+            // Buy button
+            const buyBtnBg = this.add.sprite(modalX - 40, modalY + 50, 'square-buttons', hasEnough ? 6 : 7);
+            buyBtnBg.setDisplaySize(70, 28);
+            buyBtnBg.setDepth(5402);
+            buyBtnBg.setInteractive({ useHandCursor: hasEnough });
+            this.cameras.main.ignore(buyBtnBg);
+            this.buyPlotModalElements.push(buyBtnBg);
+
+            const buyBtnText = this.add.text(modalX - 40, modalY + 50, 'Buy', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: hasEnough ? '#FFFFFF' : '#999999',
+                resolution: 2
+            });
+            buyBtnText.setOrigin(0.5);
+            buyBtnText.setDepth(5403);
+            this.cameras.main.ignore(buyBtnText);
+            this.buyPlotModalElements.push(buyBtnText);
+
+            if (hasEnough) {
+                buyBtnBg.on('pointerover', () => buyBtnBg.setTint(0xcccccc));
+                buyBtnBg.on('pointerout', () => buyBtnBg.clearTint());
+                buyBtnBg.on('pointerdown', () => {
+                    this.purchasePlot(tileX, tileY, plotIndex, cost);
+                });
+            }
+
+            // Cancel button
+            const cancelBtnBg = this.add.sprite(modalX + 40, modalY + 50, 'square-buttons', 7);
+            cancelBtnBg.setDisplaySize(70, 28);
+            cancelBtnBg.setDepth(5402);
+            cancelBtnBg.setInteractive({ useHandCursor: true });
+            this.cameras.main.ignore(cancelBtnBg);
+            this.buyPlotModalElements.push(cancelBtnBg);
+
+            const cancelBtnText = this.add.text(modalX + 40, modalY + 50, 'Cancel', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            cancelBtnText.setOrigin(0.5);
+            cancelBtnText.setDepth(5403);
+            this.cameras.main.ignore(cancelBtnText);
+            this.buyPlotModalElements.push(cancelBtnText);
+
+            cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
+            cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
+            cancelBtnBg.on('pointerdown', () => {
+                this.closeBuyPlotModal();
+            });
+
+            // Close on overlay click
+            overlay.on('pointerdown', () => {
+                this.closeBuyPlotModal();
+            });
+        });
+    }
+
+    private purchasePlot(tileX: number, tileY: number, plotIndex: number, cost: number) {
+        // Deduct gems
+        this.playerGems -= cost;
+        this.ownedPlotsCount++;
+
+        // Update state
+        const key = `${tileX},${tileY}`;
+        const state = this.farmLandStates.get(key);
+        if (state) {
+            state.locked = false;
+        }
+
+        // Remove lock overlay
+        const overlay = this.lockedPlotOverlays.get(key);
+        if (overlay) {
+            overlay.destroy();
+            this.lockedPlotOverlays.delete(key);
+        }
+
+        // Update UI (refresh profile to show updated gems)
+        this.createUserProfileUI();
+
+        // Close modal
+        this.closeBuyPlotModal();
+
+        // Show success message
+        this.showFloatingMessage('Plot purchased!', tileX, tileY);
+
+        console.log('Purchased plot', plotIndex + 1, '- Gems left:', this.playerGems);
+    }
+
+    private closeBuyPlotModal() {
+        this.buyPlotModalOpen = false;
+        this.buyPlotModalElements.forEach(el => el.destroy());
+        this.buyPlotModalElements = [];
+    }
+
+    private showFloatingMessage(message: string, tileX: number, tileY: number) {
+        const worldX = tileX * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const worldY = tileY * this.TILE_SIZE;
+
+        const text = this.add.text(worldX, worldY, message, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        text.setOrigin(0.5);
+        text.setDepth(1000);
+        text.setStroke('#000000', 2);
+
+        // Make UI camera ignore this (prevent double rendering)
+        this.uiCamera?.ignore(text);
+
+        // Animate floating up and fade out
+        this.tweens.add({
+            targets: text,
+            y: worldY - 30,
+            alpha: 0,
+            duration: 1500,
+            ease: 'Power2',
+            onComplete: () => {
+                text.destroy();
+            }
+        });
     }
 
     private missionDetailsModalElements: Phaser.GameObjects.GameObject[] = [];
@@ -3564,25 +3927,19 @@ export class FarmingGame extends Scene {
 
     private initializeInventory() {
         // Seeds are already initialized in toolbarItems with count: 3
-        // Initialize farm plot states for the 6 hardcoded plots
-        const centerX = 25;
-        const centerY = 25;
-        const plotPositions = [
-            { x: centerX - 1, y: centerY - 1 },
-            { x: centerX, y: centerY - 1 },
-            { x: centerX + 1, y: centerY - 1 },
-            { x: centerX - 1, y: centerY },
-            { x: centerX, y: centerY },
-            { x: centerX + 1, y: centerY },
-        ];
+        // Initialize farm plot states for all 16 plots (4x4 grid)
+        const plotPositions = this.getPlotPositions();
 
-        plotPositions.forEach(pos => {
+        plotPositions.forEach((pos, index) => {
             const key = `${pos.x},${pos.y}`;
+            const isOwned = index < this.ownedPlotsCount;
             this.farmLandStates.set(key, {
                 tilled: true,
                 planted: false,
                 plantStage: 0,
-                cropType: null
+                cropType: null,
+                locked: !isOwned,
+                plotIndex: index
             });
         });
     }
@@ -5488,6 +5845,15 @@ export class FarmingGame extends Scene {
             return;
         }
 
+        // Check if plot is locked
+        if (state.locked) {
+            console.log('This plot is locked! Purchase it first.');
+            if (state.plotIndex !== undefined) {
+                this.showBuyPlotModal(playerTileX, playerTileY, state.plotIndex);
+            }
+            return;
+        }
+
         const selectedItem = this.toolbarItems[this.selectedToolIndex];
 
         if (selectedItem.type === 'seed') {
@@ -5963,8 +6329,10 @@ export class FarmingGame extends Scene {
     }
 
     update() {
-        // Don't allow movement when modals are open
-        if (this.factoryModalOpen || this.chestOpen || this.seedSelectorOpen) {
+        // Don't allow movement when any modal is open
+        if (this.factoryModalOpen || this.chestOpen || this.seedSelectorOpen ||
+            this.mailboxModalOpen || this.shopModalOpen || this.checkinModalOpen ||
+            this.userProfileModalOpen || this.buyPlotModalOpen) {
             this.player.setVelocity(0, 0);
             return;
         }

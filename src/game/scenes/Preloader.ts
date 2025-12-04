@@ -164,6 +164,9 @@ export class Preloader extends Scene
         // Check-in icon
         this.load.image('icon-checkin', 'icons/checkin.png');
 
+        // Lock land overlay for locked farm plots
+        this.load.image('lock-land', 'objects/lock-land/lock-land.png');
+
         // Mission mailbox spritesheet (5 frames, 109x109 each)
         this.load.spritesheet('mailbox', 'objects/missionBox/MissionBox.png', {
             frameWidth: 109,
