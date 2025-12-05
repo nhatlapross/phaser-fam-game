@@ -88,4 +88,70 @@ export class SeedService {
                 return 'social'; // Default fallback
         }
     }
+
+    /**
+     * Maps game plant type to API seed type
+     */
+    static mapPlantTypeToApiSeedType(plantType: 'social' | 'technical' | 'branded' | 'mushroom'): string {
+        switch (plantType) {
+            case 'social':
+                return 'SEED_SOCIAL';
+            case 'technical':
+                return 'SEED_TECH';
+            case 'branded':
+                return 'SEED_BRANDED';
+            case 'mushroom':
+                return 'SEED_MUSHROOM';
+            default:
+                return 'SEED_SOCIAL';
+        }
+    }
+
+    /**
+     * Plants a seed on a land plot via API
+     * @param landId The land plot identifier
+     * @param plantType The type of seed to plant
+     * @returns A Promise that resolves to true if successful, false otherwise
+     */
+    static async plantSeed(landId: string, plantType: 'social' | 'technical' | 'branded' | 'mushroom'): Promise<boolean> {
+        const token = SeedService.getAccessToken();
+        if (!token) {
+            console.log('No access token available for planting seed');
+            return false;
+        }
+
+        const seedType = SeedService.mapPlantTypeToApiSeedType(plantType);
+
+        try {
+            const response = await fetch(
+                `${SeedService.API_BASE_URL}/plant/plant`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        landId,
+                        seedType
+                    })
+                }
+            );
+
+            if (response.ok) {
+                console.log(`Successfully planted ${plantType} seed on land ${landId}`);
+                return true;
+            } else {
+                console.error(
+                    "Error planting seed:",
+                    response.statusText,
+                    await response.text()
+                );
+                return false;
+            }
+        } catch (error) {
+            console.error("Network error planting seed:", error);
+            return false;
+        }
+    }
 }

@@ -6,6 +6,7 @@ import { MissionService, Mission } from '../MissionService';
 import { SeedService } from '../SeedService';
 import { FertilizerService } from '../FertilizerService';
 import { RedeemService } from '../RedeemService';
+import { GardenService } from '../GardenService';
 
 // Plant types based on proposal
 type PlantType = 'social' | 'technical' | 'branded' | 'mushroom';
@@ -44,6 +45,7 @@ interface TileState {
     healthBarFill?: Phaser.GameObjects.Rectangle; // Health bar fill (green->red)
     locked?: boolean; // Whether plot is locked (needs to be purchased)
     plotIndex?: number; // Index of plot (0-15 for 4x4 grid)
+    plantId?: string; // Plant ID from backend API (for watering, harvesting, etc.)
 }
 
 // New crop definitions using image keys instead of sprite frames
@@ -309,6 +311,12 @@ export class FarmingGame extends Scene {
         // Fetch seed and fertilizer inventory on scene start (if user is already logged in)
         this.fetchSeedInventory();
         this.fetchFertilizerInventory();
+        
+        // Load garden data (planted crops)
+        this.loadGardenData();
+        
+        // Fetch user profile (balances, etc.)
+        this.fetchUserProfile();
 
         // Handle screen resize
         this.scale.on('resize', this.onResize, this);
@@ -423,6 +431,103 @@ export class FarmingGame extends Scene {
             console.error('Error fetching fertilizer inventory:', error);
             // Update toolbar anyway to show 0 counts
             this.updateToolbar();
+        }
+    }
+
+    /**
+     * Loads garden data from API and restores planted crops
+     */
+    private async loadGardenData() {
+        try {
+            const gardenData = await GardenService.getGarden();
+            
+            if (!gardenData || gardenData.length === 0) {
+                console.log('No garden data available');
+                return;
+            }
+
+            console.log('Loading garden data:', gardenData);
+
+            // Restore each planted crop
+            gardenData.forEach(plot => {
+                if (!plot.plant) return; // Skip plots without plants
+
+                // Convert plot index to tile key
+                const tileKey = GardenService.plotIndexToTileKey(plot.plotIndex);
+                const [x, y] = tileKey.split(',').map(Number);
+
+                // Get or create tile state
+                let state = this.farmLandStates.get(tileKey);
+                if (!state) {
+                    state = {
+                        tilled: true,
+                        planted: false,
+                        plantStage: 0,
+                        cropType: null
+                    };
+                    this.farmLandStates.set(tileKey, state);
+                }
+
+                // Restore plant data
+                const plantType = GardenService.mapPlantTypeToGameType(plot.plant.type);
+                const plantStage = GardenService.mapStageToGameStage(plot.plant.stage);
+
+                state.planted = true;
+                state.cropType = plantType;
+                state.plantStage = plantStage;
+                state.isDead = false;
+                state.isWilted = false; // Can be enhanced based on progress.percentage
+                state.lastCareTime = new Date(plot.plant.plantedAt).getTime();
+                state.plantId = plot.plant.id; // Store plant ID for API calls
+
+                // Show plant sprite
+                this.showPlant(x, y, plantType, plantStage);
+
+                // Create health bar
+                this.createHealthBar(x, y, tileKey);
+
+                // Update health bar based on progress percentage
+                if (state.healthBarFill && plot.progress) {
+                    const progressPercent = plot.progress.percentage / 100;
+                    const maxWidth = 14;
+                    state.healthBarFill.width = maxWidth * progressPercent;
+
+                    // Color based on progress
+                    if (progressPercent > 0.6) {
+                        state.healthBarFill.setFillStyle(0x4ade80); // Green
+                    } else if (progressPercent > 0.3) {
+                        state.healthBarFill.setFillStyle(0xfbbf24); // Yellow
+                    } else {
+                        state.healthBarFill.setFillStyle(0xef4444); // Red
+                    }
+                }
+
+                console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (${plot.progress.percentage}%)`);
+            });
+
+            console.log('Garden data loaded successfully');
+        } catch (error) {
+            console.error('Error loading garden data:', error);
+        }
+    }
+
+    /**
+     * Fetches user profile from API and updates UI
+     */
+    private async fetchUserProfile() {
+        try {
+            const userData = await UserService.getUserProfile();
+            
+            if (userData) {
+                console.log('User profile updated:', userData);
+                
+                // Refresh UI to show updated balances
+                this.createUserProfileUI();
+            } else {
+                console.log('Failed to fetch user profile');
+            }
+        } catch (error) {
+            console.error('Error fetching user profile:', error);
         }
     }
 
@@ -4796,6 +4901,12 @@ export class FarmingGame extends Scene {
         // Fetch seed and fertilizer inventory from API
         this.fetchSeedInventory();
         this.fetchFertilizerInventory();
+        
+        // Load garden data (planted crops)
+        this.loadGardenData();
+        
+        // Fetch user profile (balances, etc.)
+        this.fetchUserProfile();
     }
 
     private createWalletDisplay() {
@@ -4935,12 +5046,13 @@ export class FarmingGame extends Scene {
         this.cameras.main.ignore(scoreText);
         this.userProfileElements.push(scoreText);
 
-        // Currency row (Gold and Gem) - below avatar
+        // Currency row (Gold and Ruby) - below avatar
         const currencyY = panelY + panelHeight / 2 - 22;
         const currencyStartX = panelX - panelWidth / 2 + 25;
 
-        // Gold
-        const goldText = this.add.text(currencyStartX, currencyY, `💰 ${this.playerGold}`, {
+        // Gold (from API)
+        const goldBalance = user.balanceGold ?? 0;
+        const goldText = this.add.text(currencyStartX, currencyY, `💰 ${goldBalance}`, {
             fontSize: '9px',
             fontFamily: 'PixelFont',
             color: '#FFD700',
@@ -4951,17 +5063,18 @@ export class FarmingGame extends Scene {
         this.cameras.main.ignore(goldText);
         this.userProfileElements.push(goldText);
 
-        // Gem
-        const gemText = this.add.text(currencyStartX + 60, currencyY, `💎 ${this.playerGems}`, {
+        // Ruby (from API)
+        const rubyBalance = user.balanceRuby ?? 0;
+        const rubyText = this.add.text(currencyStartX + 60, currencyY, `💎 ${rubyBalance}`, {
             fontSize: '9px',
             fontFamily: 'PixelFont',
-            color: '#4FC3F7',
+            color: '#FFD700',
             resolution: 2
         });
-        gemText.setDepth(5023);
-        gemText.setStroke('#1565C0', 2);
-        this.cameras.main.ignore(gemText);
-        this.userProfileElements.push(gemText);
+        rubyText.setDepth(5023);
+        rubyText.setStroke('#5D4037', 2);
+        this.cameras.main.ignore(rubyText);
+        this.userProfileElements.push(rubyText);
 
         // Click handler to open profile modal
         bg.on('pointerdown', () => {
@@ -6038,7 +6151,7 @@ export class FarmingGame extends Scene {
         }
     }
 
-    private plantSeed(tileKey: string, x: number, y: number) {
+    private async plantSeed(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
         const selectedPlantType = this.getSelectedPlantType();
 
@@ -6063,13 +6176,19 @@ export class FarmingGame extends Scene {
                 this.createHealthBar(x, y, tileKey);
 
                 console.log('Planted', selectedPlantType, 'at', tileKey, '- Seeds left:', this.seedCounts[selectedPlantType]);
+
+                // Call API to plant seed on backend (async, don't wait for response)
+                // Use tileKey as landId for tracking
+                SeedService.plantSeed(tileKey, selectedPlantType).catch(error => {
+                    console.error('Failed to plant seed in database:', error);
+                });
             } else {
                 console.log('No', selectedPlantType, 'seeds left!');
             }
         }
     }
 
-    private waterCrop(tileKey: string, x: number, y: number) {
+    private async waterCrop(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
         const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
 
@@ -6114,6 +6233,15 @@ export class FarmingGame extends Scene {
                 wateringCan.count--;
                 this.updateToolbar();
                 console.log('Plant is already fully grown at', tileKey, '- Care timer reset');
+            }
+
+            // Call API to water plant on backend (async, don't wait for response)
+            if (state.plantId) {
+                GardenService.waterPlant(state.plantId).catch(error => {
+                    console.error('Failed to water plant in database:', error);
+                });
+            } else {
+                console.warn('No plantId available for watering - plant may not be synced with backend');
             }
         }
     }
@@ -6172,7 +6300,7 @@ export class FarmingGame extends Scene {
         }
     }
 
-    private harvestCrop(tileKey: string, x: number, y: number) {
+    private async harvestCrop(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
 
         if (state && state.planted && state.cropType) {
@@ -6185,6 +6313,7 @@ export class FarmingGame extends Scene {
                 state.isDead = false;
                 state.isWilted = false;
                 state.lastCareTime = undefined;
+                state.plantId = undefined;
 
                 // Remove plant sprite
                 this.removePlant(x, y);
@@ -6203,6 +6332,7 @@ export class FarmingGame extends Scene {
                 // Harvest successful!
                 const wasWilted = state.isWilted;
                 const harvestedType = state.cropType;
+                const plantId = state.plantId;
 
                 // Add fruit to chest
                 this.addToChest(harvestedType);
@@ -6214,6 +6344,7 @@ export class FarmingGame extends Scene {
                 state.isDead = false;
                 state.isWilted = false;
                 state.lastCareTime = undefined;
+                state.plantId = undefined;
 
                 // Remove plant sprite
                 this.removePlant(x, y);
@@ -6225,6 +6356,15 @@ export class FarmingGame extends Scene {
                     console.log('Harvested WILTED', harvestedType, 'crop at', tileKey, '(reduced yield) - Added to chest');
                 } else {
                     console.log('Harvested healthy', harvestedType, 'crop at', tileKey, '- Added to chest');
+                }
+
+                // Call API to harvest plant on backend (async, don't wait for response)
+                if (plantId) {
+                    GardenService.harvestPlant(plantId).catch(error => {
+                        console.error('Failed to harvest plant in database:', error);
+                    });
+                } else {
+                    console.warn('No plantId available for harvesting - plant may not be synced with backend');
                 }
             } else {
                 console.log('Plant not ready to harvest at', tileKey, `(Stage ${state.plantStage}/${PLANT_STAGES.FRUIT})`);
@@ -6243,6 +6383,7 @@ export class FarmingGame extends Scene {
             state.isDead = false;
             state.isWilted = false;
             state.lastCareTime = undefined;
+            state.plantId = undefined;
 
             // Remove plant sprite and health bar
             this.removePlant(x, y);
