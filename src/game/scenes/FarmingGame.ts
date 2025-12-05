@@ -5,6 +5,7 @@ import { UserService } from '../UserService';
 import { MissionService, Mission } from '../MissionService';
 import { SeedService } from '../SeedService';
 import { FertilizerService } from '../FertilizerService';
+import { RedeemService } from '../RedeemService';
 
 // Plant types based on proposal
 type PlantType = 'social' | 'technical' | 'branded' | 'mushroom';
@@ -2564,7 +2565,27 @@ export class FarmingGame extends Scene {
             background: #000;
             border-radius: 12px;
             overflow: hidden;
+            position: relative;
         `;
+        
+        // Add style tag for video element to fill container
+        const styleTag = document.createElement('style');
+        styleTag.setAttribute('data-qr-scanner', 'true');
+        styleTag.textContent = `
+            #qr-reader video {
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: cover !important;
+            }
+            #qr-reader__dashboard_section {
+                display: none !important;
+            }
+            #qr-reader__scan_region {
+                width: 100% !important;
+                height: 100% !important;
+            }
+        `;
+        document.head.appendChild(styleTag);
 
         // Title
         const title = document.createElement('div');
@@ -2602,10 +2623,25 @@ export class FarmingGame extends Scene {
         const qrCodeSuccessCallback = (decodedText: string) => {
             // Stop scanner
             html5QrCode.stop().then(() => {
-                // Set the scanned code to input
-                inputElement.value = decodedText;
-                this.showToastMessage('QR Code scanned!', 0x4ade80);
                 this.closeQRScanner();
+                
+                // Try to parse as JSON (QR code with eventId and verificationCode)
+                try {
+                    const qrData = JSON.parse(decodedText);
+                    
+                    if (qrData.eventId && qrData.verificationCode) {
+                        // QR code contains full payload - redeem directly
+                        this.showToastMessage('QR Code scanned! Redeeming...', 0x4ade80);
+                        this.processRedeemCodeWithEventId(qrData.verificationCode, qrData.eventId);
+                    } else {
+                        // Invalid JSON format
+                        this.showToastMessage('Invalid QR code format', 0xef4444);
+                    }
+                } catch (e) {
+                    // Not JSON - treat as plain verification code
+                    inputElement.value = decodedText;
+                    this.showToastMessage('QR Code scanned!', 0x4ade80);
+                }
             }).catch((err: Error) => {
                 console.error('Error stopping scanner:', err);
             });
@@ -2640,47 +2676,148 @@ export class FarmingGame extends Scene {
             this.qrScannerContainer.parentNode.removeChild(this.qrScannerContainer);
         }
         this.qrScannerContainer = null;
+        
+        // Remove style tag if exists
+        const styleTag = document.querySelector('style[data-qr-scanner]');
+        if (styleTag) {
+            styleTag.remove();
+        }
     }
 
-    private processRedeemCode(code: string) {
-        // Sample redeem codes - in production, validate against backend
-        const validCodes: Record<string, { reward: string; water?: number; seed?: PlantType; fertilizer?: number; icon?: string }> = {
-            'WATER10': { reward: '+10 Water', water: 10, icon: 'icon-watercan' },
-            'MUSHROOM': { reward: '+1 Mushroom Seed', seed: 'mushroom', icon: 'mushroom-seed' },
-            'FERT5': { reward: '+5 Fertilizer', fertilizer: 5, icon: 'icon-fertilizer' },
-            '111111': { reward: '+1 Social Seed', seed: 'social', icon: 'social-seed' },
-        };
+    /**
+     * Process redeem code with specific eventId (from QR code)
+     */
+    private async processRedeemCodeWithEventId(verificationCode: string, eventId: string) {
+        // Show loading state
+        this.showRedeemResultModal(true, 'Validating code...', undefined, true);
 
-        const upperCode = code.toUpperCase();
-        // Also check original code for numeric codes like '111111'
-        const rewardData = validCodes[upperCode] || validCodes[code];
+        try {
+            // Call API to redeem code with specific eventId
+            const result = await RedeemService.redeemCode(verificationCode, eventId);
 
-        if (rewardData) {
-            // Apply rewards
-            if (rewardData.water) {
-                const wateringCanItem = this.toolbarItems.find(item => item.name === 'wateringCan');
-                if (wateringCanItem) {
-                    wateringCanItem.count = (wateringCanItem.count || 0) + rewardData.water;
+            if (result.success && result.reward) {
+                // Build reward message
+                let rewardMessage = '';
+                
+                // Add event info if available
+                if (result.event) {
+                    rewardMessage += `Event: ${result.event.name}\n`;
+                    rewardMessage += `Location: ${result.event.location}\n\n`;
                 }
-            }
-            if (rewardData.seed) {
-                this.seedCounts[rewardData.seed] += 1;
-            }
-            if (rewardData.fertilizer) {
-                // Add to common fertilizer by default
-                this.fertilizerCounts.common += rewardData.fertilizer;
-            }
 
-            this.updateToolbar();
-            this.showRedeemResultModal(true, rewardData.reward, rewardData.icon);
-        } else {
-            this.showRedeemResultModal(false, 'Invalid Code');
+                // Add reward message from API
+                if (result.reward.message) {
+                    rewardMessage += result.reward.message + '\n\n';
+                }
+
+                // Add reward details
+                rewardMessage += `Reward: ${result.reward.itemType}\n`;
+                rewardMessage += `Amount: ${result.reward.amount}`;
+
+                // Show success message and mark that we should close mailbox
+                this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
+
+                // Close mailbox and result modal after a short delay to let user see the reward
+                this.time.delayedCall(3000, () => {
+                    this.closeRedeemResultModal();
+                    this.closeMailboxModal();
+                });
+            } else {
+                // Show error message
+                this.showRedeemResultModal(false, result.message || 'Invalid or expired code');
+            }
+        } catch (error) {
+            console.error('Error processing redeem code:', error);
+            this.showRedeemResultModal(false, 'Error validating code. Please try again.');
+        }
+    }
+
+    private async processRedeemCode(code: string) {
+        // Show loading state
+        this.showRedeemResultModal(true, 'Validating code...', undefined, true);
+
+        try {
+            // Call API to redeem code
+            const result = await RedeemService.redeemCode(code);
+
+            if (result.success && result.reward) {
+                // Build reward message
+                let rewardMessage = '';
+                
+                // Add event info if available
+                if (result.event) {
+                    rewardMessage += `Event: ${result.event.name}\n`;
+                    rewardMessage += `Location: ${result.event.location}\n\n`;
+                }
+
+                // Add reward message from API
+                if (result.reward.message) {
+                    rewardMessage += result.reward.message + '\n\n';
+                }
+
+                // Add reward details
+                rewardMessage += `Reward: ${result.reward.itemType}\n`;
+                rewardMessage += `Amount: ${result.reward.amount}`;
+
+                // Show success message and mark that we should close mailbox
+                this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
+
+                // Close mailbox and result modal after a short delay to let user see the reward
+                this.time.delayedCall(3000, () => {
+                    this.closeRedeemResultModal();
+                    this.closeMailboxModal();
+                });
+            } else {
+                // Show error message
+                this.showRedeemResultModal(false, result.message || 'Invalid or expired code');
+            }
+        } catch (error) {
+            console.error('Error processing redeem code:', error);
+            this.showRedeemResultModal(false, 'Error validating code. Please try again.');
+        }
+    }
+
+    /**
+     * Helper method to map API seed types to game plant types
+     */
+    private mapApiSeedTypeToPlantType(apiType: string): PlantType {
+        switch (apiType.toUpperCase()) {
+            case 'SOCIAL':
+                return 'social';
+            case 'TECH':
+            case 'TECHNICAL':
+                return 'technical';
+            case 'BRANDED':
+                return 'branded';
+            case 'MUSHROOM':
+                return 'mushroom';
+            default:
+                return 'social';
+        }
+    }
+
+    /**
+     * Helper method to map API fertilizer types to game types
+     */
+    private mapApiFertilizerTypeToGameType(apiType: string): 'common' | 'rare' | 'epic' {
+        switch (apiType.toUpperCase()) {
+            case 'FERTILIZER_COMMON':
+                return 'common';
+            case 'FERTILIZER_RARE':
+                return 'rare';
+            case 'FERTILIZER_EPIC':
+                return 'epic';
+            default:
+                return 'common';
         }
     }
 
     private redeemResultModalElements: Phaser.GameObjects.GameObject[] = [];
 
-    private showRedeemResultModal(success: boolean, message: string, icon?: string) {
+    private showRedeemResultModal(success: boolean, message: string, icon?: string, isLoading: boolean = false, shouldCloseMailbox: boolean = false) {
+        // Store flag for whether to close mailbox
+        (this as any)._shouldCloseMailbox = shouldCloseMailbox;
+        
         // Clear any existing result modal first
         this.closeRedeemResultModal();
 
@@ -2730,8 +2867,8 @@ export class FarmingGame extends Scene {
 
         this.time.delayedCall(100, () => {
             // Title
-            const titleText = success ? 'Success!' : 'Failed';
-            const strokeColor = success ? '#2d7a3d' : '#8b1a1a';
+            const titleText = isLoading ? 'Loading...' : (success ? 'Success!' : 'Failed');
+            const strokeColor = isLoading ? '#4a90e2' : (success ? '#2d7a3d' : '#8b1a1a');
 
             const title = this.add.text(modalX, modalY - 45, titleText, {
                 fontSize: '14px',
@@ -2745,8 +2882,28 @@ export class FarmingGame extends Scene {
             this.cameras.main.ignore(title);
             this.redeemResultModalElements.push(title);
 
+            // Show loading spinner if loading
+            if (isLoading) {
+                const spinner = this.add.graphics();
+                spinner.lineStyle(2, 0x4a90e2, 1);
+                spinner.beginPath();
+                spinner.arc(modalX, modalY - 5, 15, Phaser.Math.DegToRad(0), Phaser.Math.DegToRad(270), false);
+                spinner.strokePath();
+                spinner.setDepth(5502);
+                this.cameras.main.ignore(spinner);
+                this.redeemResultModalElements.push(spinner);
+
+                // Animate the spinner
+                this.tweens.add({
+                    targets: spinner,
+                    angle: 360,
+                    duration: 1000,
+                    repeat: -1,
+                    ease: 'Linear'
+                });
+            }
             // Icon (if success and icon provided)
-            if (success && icon) {
+            else if (success && icon) {
                 const iconSprite = this.add.image(modalX, modalY - 5, icon);
                 iconSprite.setDisplaySize(40, 40);
                 iconSprite.setDepth(5502);
@@ -2847,19 +3004,26 @@ export class FarmingGame extends Scene {
         });
         this.redeemResultModalElements = [];
 
-        // Show mailbox modal elements again
-        this.mailboxModalElements.forEach(el => {
-            if (el && 'setVisible' in el) {
-                (el as Phaser.GameObjects.Sprite).setVisible(true);
-            }
-        });
+        // Only restore mailbox if we're not closing it
+        const shouldCloseMailbox = (this as any)._shouldCloseMailbox;
+        if (!shouldCloseMailbox) {
+            // Show mailbox modal elements again
+            this.mailboxModalElements.forEach(el => {
+                if (el && 'setVisible' in el) {
+                    (el as Phaser.GameObjects.Sprite).setVisible(true);
+                }
+            });
 
-        // Show the redeem input again
-        const redeemInput = (this as unknown as { _redeemInput?: HTMLInputElement })._redeemInput;
-        if (redeemInput) {
-            redeemInput.style.display = 'block';
-            redeemInput.value = ''; // Clear the input
+            // Show the redeem input again
+            const redeemInput = (this as unknown as { _redeemInput?: HTMLInputElement })._redeemInput;
+            if (redeemInput) {
+                redeemInput.style.display = 'block';
+                redeemInput.value = ''; // Clear the input
+            }
         }
+        
+        // Reset flag
+        (this as any)._shouldCloseMailbox = false;
     }
 
     // Simple toast message for QR scanner feedback
