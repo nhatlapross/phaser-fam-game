@@ -73,13 +73,8 @@ export class ShopManager extends BaseManager {
             this.open();
         });
 
-        this.shopSprite.on('pointerover', () => {
-            this.shopSprite.setTint(0xffff88);
-        });
-
-        this.shopSprite.on('pointerout', () => {
-            this.shopSprite.clearTint();
-        });
+        // Setup hover effect with tint + shadow
+        this.setupHoverEffect(this.shopSprite, 10);
     }
 
     /**
@@ -239,25 +234,40 @@ export class ShopManager extends BaseManager {
             duration: 150
         });
 
-        // Close button
-        const closeBtn = this.scene.add.text(modalX + modalWidth / 2 - 20, modalY - modalHeight / 2 + 20, '✕', {
-            fontSize: '14px',
-            fontFamily: 'Arial',
+        // Close button (same style as mailbox)
+        const closeBtnX = modalX + modalWidth / 2 - 35;
+        const closeBtnY = modalY - modalHeight / 2 + 48;
+
+        const closeBtnBg = this.scene.add.sprite(closeBtnX, closeBtnY, 'square-buttons', 7);
+        closeBtnBg.setDisplaySize(24, 24);
+        closeBtnBg.setDepth(5302);
+        closeBtnBg.setAlpha(0);
+        closeBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(closeBtnBg);
+        this.addElement(closeBtnBg);
+
+        const closeText = this.scene.add.text(closeBtnX, closeBtnY, 'X', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2
         });
-        closeBtn.setOrigin(0.5);
-        closeBtn.setDepth(5302);
-        closeBtn.setAlpha(0);
-        closeBtn.setInteractive({ useHandCursor: true });
-        this.scene.cameras.main.ignore(closeBtn);
-        this.addElement(closeBtn);
+        closeText.setOrigin(0.5);
+        closeText.setDepth(5303);
+        closeText.setStroke('#5D4037', 1);
+        closeText.setAlpha(0);
+        this.scene.cameras.main.ignore(closeText);
+        this.addElement(closeText);
 
-        closeBtn.on('pointerover', () => closeBtn.setColor('#ff6666'));
-        closeBtn.on('pointerout', () => closeBtn.setColor('#FFFFFF'));
-        closeBtn.on('pointerdown', () => this.close());
+        this.scene.tweens.add({
+            targets: [closeBtnBg, closeText],
+            alpha: 1,
+            duration: 150
+        });
 
-        this.scene.tweens.add({ targets: closeBtn, alpha: 1, duration: 150 });
+        closeBtnBg.on('pointerdown', () => this.close());
+        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
 
         // Content area
         const contentY = modalY + 40;

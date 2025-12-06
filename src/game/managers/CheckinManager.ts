@@ -39,13 +39,8 @@ export class CheckinManager extends BaseManager {
             this.open();
         });
 
-        this.checkinSign.on('pointerover', () => {
-            this.checkinSign.setTint(0xffff88);
-        });
-
-        this.checkinSign.on('pointerout', () => {
-            this.checkinSign.clearTint();
-        });
+        // Setup hover effect with tint + shadow
+        this.setupHoverEffect(this.checkinSign, 6);
     }
 
     /**
@@ -274,7 +269,7 @@ export class CheckinManager extends BaseManager {
         this.scene.tweens.add({ targets: bonusInfo, alpha: 1, duration: 150, delay: 300 });
 
         // Close button
-        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 20, modalY - modalHeight / 2 + 20, 'square-buttons', 7);
+        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 30, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
         closeBtnBg.setDisplaySize(24, 24);
         closeBtnBg.setDepth(5302);
         closeBtnBg.setAlpha(0);
@@ -282,7 +277,7 @@ export class CheckinManager extends BaseManager {
         this.scene.cameras.main.ignore(closeBtnBg);
         this.addElement(closeBtnBg);
 
-        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 20, modalY - modalHeight / 2 + 20, 'X', {
+        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 30, modalY - modalHeight / 2 + 35, 'X', {
             fontSize: '10px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',

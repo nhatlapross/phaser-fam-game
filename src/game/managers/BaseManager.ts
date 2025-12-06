@@ -176,6 +176,52 @@ export abstract class BaseManager {
     }
 
     /**
+     * Setup interactive hover effect with Tint + Shadow outline for game objects
+     * Creates a glowing outline effect around the sprite on hover
+     */
+    protected setupHoverEffect(
+        sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image,
+        shadowOffsetY: number = 4,
+        tintColor: number = 0xffff88
+    ): Phaser.GameObjects.Ellipse {
+        // Create shadow ellipse under the sprite
+        const shadow = this.scene.add.ellipse(
+            sprite.x,
+            sprite.y + sprite.displayHeight / 2 + shadowOffsetY,
+            sprite.displayWidth * 0.9,
+            sprite.displayHeight * 0.35,
+            0x000000,
+            0
+        );
+        shadow.setDepth(sprite.depth - 1);
+
+        // Setup hover events
+        sprite.on('pointerover', () => {
+            sprite.setTint(tintColor);
+            // Show shadow
+            this.scene.tweens.add({
+                targets: shadow,
+                alpha: 0.5,
+                duration: 150,
+                ease: 'Quad.easeOut'
+            });
+        });
+
+        sprite.on('pointerout', () => {
+            sprite.clearTint();
+            // Hide shadow
+            this.scene.tweens.add({
+                targets: shadow,
+                alpha: 0,
+                duration: 150,
+                ease: 'Quad.easeIn'
+            });
+        });
+
+        return shadow;
+    }
+
+    /**
      * Clean up when manager is destroyed
      */
     public destroy(): void {

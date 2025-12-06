@@ -173,10 +173,10 @@ export class Preloader extends Scene
             frameHeight: 109
         });
 
-        // Shop spritesheet (2 frames, 108x80 each for animation)
+        // Shop spritesheet (2 frames for animation)
         this.load.spritesheet('shop', 'objects/shop/shop.png', {
-            frameWidth: 108,
-            frameHeight: 80
+            frameWidth: 159,
+            frameHeight: 119
         });
     }
 

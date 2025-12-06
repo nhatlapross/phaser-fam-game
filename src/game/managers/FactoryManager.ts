@@ -59,6 +59,9 @@ export class FactoryManager extends BaseManager {
         this.factorySprite.on('pointerdown', () => {
             this.toggle();
         });
+
+        // Setup hover effect with tint + shadow
+        this.setupHoverEffect(this.factorySprite, 12);
     }
 
     /**
