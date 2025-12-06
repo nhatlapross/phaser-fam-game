@@ -3,16 +3,20 @@
 export interface RedeemResponse {
     success: boolean;
     event?: {
-        id: string;
+        id?: string;
         name: string;
-        location: string;
-        startTime: string;
-        endTime: string;
+        code?: string;
+        location?: string;
+        startTime?: string;
+        endTime?: string;
     };
     reward?: {
         itemType: string;
+        itemName?: string;
         amount: number;
-        message: string;
+        icon?: string;
+        probability?: number;
+        message?: string;
     };
     message?: string;
 }
@@ -80,6 +84,60 @@ export class RedeemService {
             }
         } catch (error) {
             console.error('Network error redeeming code:', error);
+            return {
+                success: false,
+                message: 'Network error. Please try again.'
+            };
+        }
+    }
+
+    /**
+     * Offline check-in with a simple code (for manual input, not QR scan)
+     * @param code The check-in code (e.g., "BANGKOK2025")
+     * @returns A Promise that resolves to the redeem response
+     */
+    static async offlineCheckIn(code: string): Promise<RedeemResponse> {
+        const token = RedeemService.getAccessToken();
+        if (!token) {
+            console.log('No access token available for offline check-in');
+            return {
+                success: false,
+                message: 'Not authenticated'
+            };
+        }
+
+        try {
+            const response = await fetch(
+                `${RedeemService.API_BASE_URL}/events/offline-check-in`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ code })
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Offline check-in successful:', data);
+                return {
+                    success: data.success !== false,
+                    event: data.event,
+                    reward: data.reward,
+                    message: data.reward?.message || data.message || 'Check-in successful!'
+                };
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Error offline check-in:', response.statusText, errorData);
+                return {
+                    success: false,
+                    message: errorData.message || 'Invalid or expired code'
+                };
+            }
+        } catch (error) {
+            console.error('Network error offline check-in:', error);
             return {
                 success: false,
                 message: 'Network error. Please try again.'
