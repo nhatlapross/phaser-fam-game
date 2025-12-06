@@ -1,0 +1,172 @@
+import Phaser from 'phaser';
+
+// Plant types based on proposal
+export type PlantType = 'social' | 'technical' | 'branded' | 'mushroom';
+
+// Fertilizer types
+export type FertilizerType = 'common' | 'rare' | 'epic';
+
+// Plant stages according to proposal:
+// 0: Seed (Hạt)
+// 1: Sprout (Mầm)
+// 2: Young Plant (Cây non)
+// 3: Mature (Trưởng thành)
+// 4: Flower (Hoa) - After this stage, plant cannot die
+// 5: Fruit (Quả) - Ready to harvest
+export const PLANT_STAGES = {
+    SEED: 0,
+    SPROUT: 1,
+    YOUNG: 2,
+    MATURE: 3,
+    FLOWER: 4,
+    FRUIT: 5
+} as const;
+
+// Death timer: 72 hours in real time = 72 * 60 * 60 * 1000 ms
+// Configurable via NEXT_PUBLIC_DEATH_TIMER_MS environment variable
+// Default: 5 minutes (300000ms) for demo, Production: 72 hours (259200000ms)
+export const DEATH_TIMER_MS = parseInt(process.env.NEXT_PUBLIC_DEATH_TIMER_MS || '300000', 10);
+
+// Tile state for farm plots
+export interface TileState {
+    tilled: boolean;
+    planted: boolean;
+    plantStage: number; // 0-5 based on PLANT_STAGES
+    cropType: PlantType | null;
+    plantSprite?: Phaser.GameObjects.Image;
+    isDead?: boolean;
+    isWilted?: boolean; // Plant is wilted (for stages >= FLOWER)
+    lastCareTime?: number; // Timestamp of last watering/fertilizing
+    healthBarBg?: Phaser.GameObjects.Rectangle; // Health bar background
+    healthBarFill?: Phaser.GameObjects.Rectangle; // Health bar fill (green->red)
+    locked?: boolean; // Whether plot is locked (needs to be purchased)
+    plotIndex?: number; // Index of plot (0-15 for 4x4 grid)
+    plantId?: string; // Plant ID from backend API (for watering, harvesting, etc.)
+}
+
+// Crop definition for plant assets
+export interface CropDefinition {
+    name: string;
+    seedImage: string;
+    growthImages: string[]; // 5 stages
+    fruitImage: string;
+    deathImage: string;
+}
+
+// Crop definitions for all plant types
+export const CROP_DEFINITIONS: Record<PlantType, CropDefinition> = {
+    social: {
+        name: 'Social Plant',
+        seedImage: 'social-seed',
+        growthImages: ['social-plant-1', 'social-plant-2', 'social-plant-3', 'social-plant-4', 'social-plant-5'],
+        fruitImage: 'social-fruit',
+        deathImage: 'social-plant-death'
+    },
+    technical: {
+        name: 'Technical Plant',
+        seedImage: 'technical-seed',
+        growthImages: ['technical-plant-1', 'technical-plant-2', 'technical-plant-3', 'technical-plant-4', 'technical-plant-5'],
+        fruitImage: 'technical-fruit',
+        deathImage: 'technical-plant-death'
+    },
+    branded: {
+        name: 'Branded Plant',
+        seedImage: 'branded-seed',
+        growthImages: ['branded-plant-1', 'branded-plant-2', 'branded-plant-3', 'branded-plant-4', 'branded-plant-5'],
+        fruitImage: 'branded-fruit',
+        deathImage: 'branded-plant-death'
+    },
+    mushroom: {
+        name: 'Mushroom',
+        seedImage: 'mushroom-seed',
+        growthImages: ['mushroom-plant-1', 'mushroom-plant-2', 'mushroom-plant-3', 'mushroom-plant-4', 'mushroom-plant-5'],
+        fruitImage: 'mushroom-fruit',
+        deathImage: 'mushroom-plant-death'
+    }
+};
+
+// Available plant types for seed selection
+export const PLANT_TYPES: PlantType[] = ['social', 'technical', 'branded', 'mushroom'];
+
+// Fertilizer types array
+export const FERTILIZER_TYPES: FertilizerType[] = ['common', 'rare', 'epic'];
+
+// Toolbar item definition
+export interface ToolbarItem {
+    type: 'tool' | 'seed';
+    name: string;
+    count?: number;
+}
+
+// Chest inventory slot
+export interface ChestSlot {
+    type: PlantType;
+    count: number;
+}
+
+// Check-in data structure
+export interface CheckinData {
+    checkedDays: number[];
+    lastCheckin: string;
+    streak: number;
+}
+
+// Shop item definition
+export interface ShopItem {
+    key: string;
+    name: string;
+    description: string;
+    price: number;
+    currency: 'gold' | 'gem' | 'cash';
+    icon: string;
+    limit?: string; // e.g., "1/week", "1/day"
+}
+
+// Shop purchase limits
+export interface ShopPurchaseLimits {
+    shovel: { count: number; lastReset: number };
+    growthWater: { count: number; lastReset: number };
+    mushroomExchange: { count: number; lastReset: number };
+}
+
+// Game constants
+export const GAME_CONSTANTS = {
+    TILE_SIZE: 16,
+    MAP_WIDTH: 50,
+    MAP_HEIGHT: 50,
+    TOTAL_FARM_PLOTS: 16,
+    INITIAL_OWNED_PLOTS: 2,
+    CHEST_SLOTS: 12,
+    MAX_PER_SLOT: 5,
+    FRUITS_PER_FERTILIZER: 3,
+    MISSIONS_CACHE_DURATION: 60000, // 1 minute
+    CHECKIN_STORAGE_KEY: 'fam_game_checkin_data'
+} as const;
+
+// Interface for scene reference (to be used by managers)
+export interface IFarmingScene extends Phaser.Scene {
+    // Currency
+    playerGold: number;
+    playerGems: number;
+
+    // Inventory
+    seedCounts: Record<PlantType, number>;
+    fertilizerCounts: Record<FertilizerType, number>;
+    chestInventory: ChestSlot[];
+    toolbarItems: ToolbarItem[];
+    selectedToolIndex: number;
+    selectedSeedIndex: number;
+    selectedFertilizerIndex: number;
+
+    // Farm state
+    farmLandStates: Map<string, TileState>;
+    ownedPlotsCount: number;
+
+    // UI state
+    uiCamera: Phaser.Cameras.Scene2D.Camera;
+
+    // Methods that managers may need to call
+    updateToolbar(): void;
+    showFloatingMessage(message: string, tileX: number, tileY: number): void;
+    showToastMessage(text: string, color: number): void;
+}
