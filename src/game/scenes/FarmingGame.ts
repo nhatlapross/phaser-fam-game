@@ -2842,30 +2842,45 @@ export class FarmingGame extends Scene {
         this.showRedeemResultModal(true, 'Validating code...', undefined, true);
 
         try {
-            // Call API to redeem code
-            const result = await RedeemService.redeemCode(code);
+            // Call offline check-in API for manual code input
+            const result = await RedeemService.offlineCheckIn(code);
 
-            if (result.success && result.reward) {
-                // Build reward message
+            if (result.success) {
+                // Use the main message from API if available (contains emoji and full text)
                 let rewardMessage = '';
-                
+
+                // Add main success message from API first (e.g., "🎉 Check-in successful! You got 🍄🍄 2x Bào Tử Nấm x2!")
+                if (result.message) {
+                    rewardMessage += result.message + '\n\n';
+                }
+
                 // Add event info if available
                 if (result.event) {
                     rewardMessage += `Event: ${result.event.name}\n`;
-                    rewardMessage += `Location: ${result.event.location}\n\n`;
+                    if (result.event.code) {
+                        rewardMessage += `Code: ${result.event.code}\n`;
+                    }
+                    if (result.event.location) {
+                        rewardMessage += `Location: ${result.event.location}\n`;
+                    }
+                    rewardMessage += '\n';
                 }
 
-                // Add reward message from API
-                if (result.reward.message) {
-                    rewardMessage += result.reward.message + '\n\n';
+                // Add reward details if available
+                if (result.reward) {
+                    const icon = result.reward.icon || '';
+                    const itemName = result.reward.itemName || result.reward.itemType;
+                    rewardMessage += `${icon} ${itemName}\n`;
+                    rewardMessage += `Amount: ${result.reward.amount}`;
                 }
-
-                // Add reward details
-                rewardMessage += `Reward: ${result.reward.itemType}\n`;
-                rewardMessage += `Amount: ${result.reward.amount}`;
 
                 // Show success message and mark that we should close mailbox
-                this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
+                this.showRedeemResultModal(true, rewardMessage || 'Check-in successful!', undefined, false, true);
+
+                // Refresh user profile and inventory to update after reward
+                this.fetchUserProfile();
+                this.fetchSeedInventory();
+                this.fetchFertilizerInventory();
 
                 // Close mailbox and result modal after a short delay to let user see the reward
                 this.time.delayedCall(3000, () => {
