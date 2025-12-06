@@ -10,6 +10,8 @@ interface UserData {
     landsCount: number;
     plantsCount: number;
     network: string;
+    balanceGold?: number;
+    balanceRuby?: number;
 }
 
 interface LoginResponse {
@@ -191,6 +193,64 @@ export class UserService {
     }
 
     /**
+     * Fetches the current user's full profile including balances
+     * @returns User profile data or null on failure
+     */
+    static async getUserProfile(): Promise<UserData | null> {
+        const token = UserService.getAccessToken();
+        if (!token) {
+            console.log("No access token available for fetching profile");
+            return null;
+        }
+
+        try {
+            const response = await fetch(
+                `${UserService.API_BASE_URL}/user/profile`,
+                {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+
+                // Map API response to UserData
+                const userData: UserData = {
+                    id: data.id,
+                    address: data.walletAddress,
+                    username: data.username,
+                    avatar: data.avatar,
+                    xp: data.xp,
+                    reputationScore: data.reputationScore,
+                    landsCount: data._count?.lands || 0,
+                    plantsCount: data.lands?.filter((land: any) => land.plant).length || 0,
+                    network: data.network,
+                    balanceGold: data.balanceGold || 0,
+                    balanceRuby: data.balanceRuby || 0,
+                };
+
+                // Update stored user data
+                localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userData));
+
+                return userData;
+            } else {
+                console.error(
+                    "Error fetching user profile:",
+                    response.statusText,
+                    await response.text()
+                );
+                return null;
+            }
+        } catch (error) {
+            console.error("Network error fetching user profile:", error);
+            return null;
+        }
+    }
+
+    /**
      * Updates user profile
      * @param updates Object containing fields to update
      * @returns Updated user data or null on failure
@@ -227,6 +287,8 @@ export class UserService {
                         avatar: data.avatar ?? currentUser.avatar,
                         xp: data.xp ?? currentUser.xp,
                         reputationScore: data.reputationScore ?? currentUser.reputationScore,
+                        balanceGold: data.balanceGold ?? currentUser.balanceGold,
+                        balanceRuby: data.balanceRuby ?? currentUser.balanceRuby,
                     };
                     localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
                     return updatedUser;

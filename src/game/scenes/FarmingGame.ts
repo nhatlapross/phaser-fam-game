@@ -5,6 +5,8 @@ import { UserService } from '../UserService';
 import { MissionService, Mission } from '../MissionService';
 import { SeedService } from '../SeedService';
 import { FertilizerService } from '../FertilizerService';
+import { RedeemService } from '../RedeemService';
+import { GardenService } from '../GardenService';
 
 // Plant types based on proposal
 type PlantType = 'social' | 'technical' | 'branded' | 'mushroom';
@@ -43,6 +45,7 @@ interface TileState {
     healthBarFill?: Phaser.GameObjects.Rectangle; // Health bar fill (green->red)
     locked?: boolean; // Whether plot is locked (needs to be purchased)
     plotIndex?: number; // Index of plot (0-15 for 4x4 grid)
+    plantId?: string; // Plant ID from backend API (for watering, harvesting, etc.)
 }
 
 // New crop definitions using image keys instead of sprite frames
@@ -308,6 +311,12 @@ export class FarmingGame extends Scene {
         // Fetch seed and fertilizer inventory on scene start (if user is already logged in)
         this.fetchSeedInventory();
         this.fetchFertilizerInventory();
+        
+        // Load garden data (planted crops)
+        this.loadGardenData();
+        
+        // Fetch user profile (balances, etc.)
+        this.fetchUserProfile();
 
         // Handle screen resize
         this.scale.on('resize', this.onResize, this);
@@ -422,6 +431,103 @@ export class FarmingGame extends Scene {
             console.error('Error fetching fertilizer inventory:', error);
             // Update toolbar anyway to show 0 counts
             this.updateToolbar();
+        }
+    }
+
+    /**
+     * Loads garden data from API and restores planted crops
+     */
+    private async loadGardenData() {
+        try {
+            const gardenData = await GardenService.getGarden();
+            
+            if (!gardenData || gardenData.length === 0) {
+                console.log('No garden data available');
+                return;
+            }
+
+            console.log('Loading garden data:', gardenData);
+
+            // Restore each planted crop
+            gardenData.forEach(plot => {
+                if (!plot.plant) return; // Skip plots without plants
+
+                // Convert plot index to tile key
+                const tileKey = GardenService.plotIndexToTileKey(plot.plotIndex);
+                const [x, y] = tileKey.split(',').map(Number);
+
+                // Get or create tile state
+                let state = this.farmLandStates.get(tileKey);
+                if (!state) {
+                    state = {
+                        tilled: true,
+                        planted: false,
+                        plantStage: 0,
+                        cropType: null
+                    };
+                    this.farmLandStates.set(tileKey, state);
+                }
+
+                // Restore plant data
+                const plantType = GardenService.mapPlantTypeToGameType(plot.plant.type);
+                const plantStage = GardenService.mapStageToGameStage(plot.plant.stage);
+
+                state.planted = true;
+                state.cropType = plantType;
+                state.plantStage = plantStage;
+                state.isDead = false;
+                state.isWilted = false; // Can be enhanced based on progress.percentage
+                state.lastCareTime = new Date(plot.plant.plantedAt).getTime();
+                state.plantId = plot.plant.id; // Store plant ID for API calls
+
+                // Show plant sprite
+                this.showPlant(x, y, plantType, plantStage);
+
+                // Create health bar
+                this.createHealthBar(x, y, tileKey);
+
+                // Update health bar based on progress percentage
+                if (state.healthBarFill && plot.progress) {
+                    const progressPercent = plot.progress.percentage / 100;
+                    const maxWidth = 14;
+                    state.healthBarFill.width = maxWidth * progressPercent;
+
+                    // Color based on progress
+                    if (progressPercent > 0.6) {
+                        state.healthBarFill.setFillStyle(0x4ade80); // Green
+                    } else if (progressPercent > 0.3) {
+                        state.healthBarFill.setFillStyle(0xfbbf24); // Yellow
+                    } else {
+                        state.healthBarFill.setFillStyle(0xef4444); // Red
+                    }
+                }
+
+                console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (${plot.progress.percentage}%)`);
+            });
+
+            console.log('Garden data loaded successfully');
+        } catch (error) {
+            console.error('Error loading garden data:', error);
+        }
+    }
+
+    /**
+     * Fetches user profile from API and updates UI
+     */
+    private async fetchUserProfile() {
+        try {
+            const userData = await UserService.getUserProfile();
+            
+            if (userData) {
+                console.log('User profile updated:', userData);
+                
+                // Refresh UI to show updated balances
+                this.createUserProfileUI();
+            } else {
+                console.log('Failed to fetch user profile');
+            }
+        } catch (error) {
+            console.error('Error fetching user profile:', error);
         }
     }
 
@@ -2564,7 +2670,27 @@ export class FarmingGame extends Scene {
             background: #000;
             border-radius: 12px;
             overflow: hidden;
+            position: relative;
         `;
+        
+        // Add style tag for video element to fill container
+        const styleTag = document.createElement('style');
+        styleTag.setAttribute('data-qr-scanner', 'true');
+        styleTag.textContent = `
+            #qr-reader video {
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: cover !important;
+            }
+            #qr-reader__dashboard_section {
+                display: none !important;
+            }
+            #qr-reader__scan_region {
+                width: 100% !important;
+                height: 100% !important;
+            }
+        `;
+        document.head.appendChild(styleTag);
 
         // Title
         const title = document.createElement('div');
@@ -2602,10 +2728,25 @@ export class FarmingGame extends Scene {
         const qrCodeSuccessCallback = (decodedText: string) => {
             // Stop scanner
             html5QrCode.stop().then(() => {
-                // Set the scanned code to input
-                inputElement.value = decodedText;
-                this.showToastMessage('QR Code scanned!', 0x4ade80);
                 this.closeQRScanner();
+                
+                // Try to parse as JSON (QR code with eventId and verificationCode)
+                try {
+                    const qrData = JSON.parse(decodedText);
+                    
+                    if (qrData.eventId && qrData.verificationCode) {
+                        // QR code contains full payload - redeem directly
+                        this.showToastMessage('QR Code scanned! Redeeming...', 0x4ade80);
+                        this.processRedeemCodeWithEventId(qrData.verificationCode, qrData.eventId);
+                    } else {
+                        // Invalid JSON format
+                        this.showToastMessage('Invalid QR code format', 0xef4444);
+                    }
+                } catch (e) {
+                    // Not JSON - treat as plain verification code
+                    inputElement.value = decodedText;
+                    this.showToastMessage('QR Code scanned!', 0x4ade80);
+                }
             }).catch((err: Error) => {
                 console.error('Error stopping scanner:', err);
             });
@@ -2640,47 +2781,148 @@ export class FarmingGame extends Scene {
             this.qrScannerContainer.parentNode.removeChild(this.qrScannerContainer);
         }
         this.qrScannerContainer = null;
+        
+        // Remove style tag if exists
+        const styleTag = document.querySelector('style[data-qr-scanner]');
+        if (styleTag) {
+            styleTag.remove();
+        }
     }
 
-    private processRedeemCode(code: string) {
-        // Sample redeem codes - in production, validate against backend
-        const validCodes: Record<string, { reward: string; water?: number; seed?: PlantType; fertilizer?: number; icon?: string }> = {
-            'WATER10': { reward: '+10 Water', water: 10, icon: 'icon-watercan' },
-            'MUSHROOM': { reward: '+1 Mushroom Seed', seed: 'mushroom', icon: 'mushroom-seed' },
-            'FERT5': { reward: '+5 Fertilizer', fertilizer: 5, icon: 'icon-fertilizer' },
-            '111111': { reward: '+1 Social Seed', seed: 'social', icon: 'social-seed' },
-        };
+    /**
+     * Process redeem code with specific eventId (from QR code)
+     */
+    private async processRedeemCodeWithEventId(verificationCode: string, eventId: string) {
+        // Show loading state
+        this.showRedeemResultModal(true, 'Validating code...', undefined, true);
 
-        const upperCode = code.toUpperCase();
-        // Also check original code for numeric codes like '111111'
-        const rewardData = validCodes[upperCode] || validCodes[code];
+        try {
+            // Call API to redeem code with specific eventId
+            const result = await RedeemService.redeemCode(verificationCode, eventId);
 
-        if (rewardData) {
-            // Apply rewards
-            if (rewardData.water) {
-                const wateringCanItem = this.toolbarItems.find(item => item.name === 'wateringCan');
-                if (wateringCanItem) {
-                    wateringCanItem.count = (wateringCanItem.count || 0) + rewardData.water;
+            if (result.success && result.reward) {
+                // Build reward message
+                let rewardMessage = '';
+                
+                // Add event info if available
+                if (result.event) {
+                    rewardMessage += `Event: ${result.event.name}\n`;
+                    rewardMessage += `Location: ${result.event.location}\n\n`;
                 }
-            }
-            if (rewardData.seed) {
-                this.seedCounts[rewardData.seed] += 1;
-            }
-            if (rewardData.fertilizer) {
-                // Add to common fertilizer by default
-                this.fertilizerCounts.common += rewardData.fertilizer;
-            }
 
-            this.updateToolbar();
-            this.showRedeemResultModal(true, rewardData.reward, rewardData.icon);
-        } else {
-            this.showRedeemResultModal(false, 'Invalid Code');
+                // Add reward message from API
+                if (result.reward.message) {
+                    rewardMessage += result.reward.message + '\n\n';
+                }
+
+                // Add reward details
+                rewardMessage += `Reward: ${result.reward.itemType}\n`;
+                rewardMessage += `Amount: ${result.reward.amount}`;
+
+                // Show success message and mark that we should close mailbox
+                this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
+
+                // Close mailbox and result modal after a short delay to let user see the reward
+                this.time.delayedCall(3000, () => {
+                    this.closeRedeemResultModal();
+                    this.closeMailboxModal();
+                });
+            } else {
+                // Show error message
+                this.showRedeemResultModal(false, result.message || 'Invalid or expired code');
+            }
+        } catch (error) {
+            console.error('Error processing redeem code:', error);
+            this.showRedeemResultModal(false, 'Error validating code. Please try again.');
+        }
+    }
+
+    private async processRedeemCode(code: string) {
+        // Show loading state
+        this.showRedeemResultModal(true, 'Validating code...', undefined, true);
+
+        try {
+            // Call API to redeem code
+            const result = await RedeemService.redeemCode(code);
+
+            if (result.success && result.reward) {
+                // Build reward message
+                let rewardMessage = '';
+                
+                // Add event info if available
+                if (result.event) {
+                    rewardMessage += `Event: ${result.event.name}\n`;
+                    rewardMessage += `Location: ${result.event.location}\n\n`;
+                }
+
+                // Add reward message from API
+                if (result.reward.message) {
+                    rewardMessage += result.reward.message + '\n\n';
+                }
+
+                // Add reward details
+                rewardMessage += `Reward: ${result.reward.itemType}\n`;
+                rewardMessage += `Amount: ${result.reward.amount}`;
+
+                // Show success message and mark that we should close mailbox
+                this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
+
+                // Close mailbox and result modal after a short delay to let user see the reward
+                this.time.delayedCall(3000, () => {
+                    this.closeRedeemResultModal();
+                    this.closeMailboxModal();
+                });
+            } else {
+                // Show error message
+                this.showRedeemResultModal(false, result.message || 'Invalid or expired code');
+            }
+        } catch (error) {
+            console.error('Error processing redeem code:', error);
+            this.showRedeemResultModal(false, 'Error validating code. Please try again.');
+        }
+    }
+
+    /**
+     * Helper method to map API seed types to game plant types
+     */
+    private mapApiSeedTypeToPlantType(apiType: string): PlantType {
+        switch (apiType.toUpperCase()) {
+            case 'SOCIAL':
+                return 'social';
+            case 'TECH':
+            case 'TECHNICAL':
+                return 'technical';
+            case 'BRANDED':
+                return 'branded';
+            case 'MUSHROOM':
+                return 'mushroom';
+            default:
+                return 'social';
+        }
+    }
+
+    /**
+     * Helper method to map API fertilizer types to game types
+     */
+    private mapApiFertilizerTypeToGameType(apiType: string): 'common' | 'rare' | 'epic' {
+        switch (apiType.toUpperCase()) {
+            case 'FERTILIZER_COMMON':
+                return 'common';
+            case 'FERTILIZER_RARE':
+                return 'rare';
+            case 'FERTILIZER_EPIC':
+                return 'epic';
+            default:
+                return 'common';
         }
     }
 
     private redeemResultModalElements: Phaser.GameObjects.GameObject[] = [];
 
-    private showRedeemResultModal(success: boolean, message: string, icon?: string) {
+    private showRedeemResultModal(success: boolean, message: string, icon?: string, isLoading: boolean = false, shouldCloseMailbox: boolean = false) {
+        // Store flag for whether to close mailbox
+        (this as any)._shouldCloseMailbox = shouldCloseMailbox;
+        
         // Clear any existing result modal first
         this.closeRedeemResultModal();
 
@@ -2730,8 +2972,8 @@ export class FarmingGame extends Scene {
 
         this.time.delayedCall(100, () => {
             // Title
-            const titleText = success ? 'Success!' : 'Failed';
-            const strokeColor = success ? '#2d7a3d' : '#8b1a1a';
+            const titleText = isLoading ? 'Loading...' : (success ? 'Success!' : 'Failed');
+            const strokeColor = isLoading ? '#4a90e2' : (success ? '#2d7a3d' : '#8b1a1a');
 
             const title = this.add.text(modalX, modalY - 45, titleText, {
                 fontSize: '14px',
@@ -2745,8 +2987,28 @@ export class FarmingGame extends Scene {
             this.cameras.main.ignore(title);
             this.redeemResultModalElements.push(title);
 
+            // Show loading spinner if loading
+            if (isLoading) {
+                const spinner = this.add.graphics();
+                spinner.lineStyle(2, 0x4a90e2, 1);
+                spinner.beginPath();
+                spinner.arc(modalX, modalY - 5, 15, Phaser.Math.DegToRad(0), Phaser.Math.DegToRad(270), false);
+                spinner.strokePath();
+                spinner.setDepth(5502);
+                this.cameras.main.ignore(spinner);
+                this.redeemResultModalElements.push(spinner);
+
+                // Animate the spinner
+                this.tweens.add({
+                    targets: spinner,
+                    angle: 360,
+                    duration: 1000,
+                    repeat: -1,
+                    ease: 'Linear'
+                });
+            }
             // Icon (if success and icon provided)
-            if (success && icon) {
+            else if (success && icon) {
                 const iconSprite = this.add.image(modalX, modalY - 5, icon);
                 iconSprite.setDisplaySize(40, 40);
                 iconSprite.setDepth(5502);
@@ -2847,19 +3109,26 @@ export class FarmingGame extends Scene {
         });
         this.redeemResultModalElements = [];
 
-        // Show mailbox modal elements again
-        this.mailboxModalElements.forEach(el => {
-            if (el && 'setVisible' in el) {
-                (el as Phaser.GameObjects.Sprite).setVisible(true);
-            }
-        });
+        // Only restore mailbox if we're not closing it
+        const shouldCloseMailbox = (this as any)._shouldCloseMailbox;
+        if (!shouldCloseMailbox) {
+            // Show mailbox modal elements again
+            this.mailboxModalElements.forEach(el => {
+                if (el && 'setVisible' in el) {
+                    (el as Phaser.GameObjects.Sprite).setVisible(true);
+                }
+            });
 
-        // Show the redeem input again
-        const redeemInput = (this as unknown as { _redeemInput?: HTMLInputElement })._redeemInput;
-        if (redeemInput) {
-            redeemInput.style.display = 'block';
-            redeemInput.value = ''; // Clear the input
+            // Show the redeem input again
+            const redeemInput = (this as unknown as { _redeemInput?: HTMLInputElement })._redeemInput;
+            if (redeemInput) {
+                redeemInput.style.display = 'block';
+                redeemInput.value = ''; // Clear the input
+            }
         }
+        
+        // Reset flag
+        (this as any)._shouldCloseMailbox = false;
     }
 
     // Simple toast message for QR scanner feedback
@@ -4632,6 +4901,12 @@ export class FarmingGame extends Scene {
         // Fetch seed and fertilizer inventory from API
         this.fetchSeedInventory();
         this.fetchFertilizerInventory();
+        
+        // Load garden data (planted crops)
+        this.loadGardenData();
+        
+        // Fetch user profile (balances, etc.)
+        this.fetchUserProfile();
     }
 
     private createWalletDisplay() {
@@ -4771,12 +5046,13 @@ export class FarmingGame extends Scene {
         this.cameras.main.ignore(scoreText);
         this.userProfileElements.push(scoreText);
 
-        // Currency row (Gold and Gem) - below avatar
+        // Currency row (Gold and Ruby) - below avatar
         const currencyY = panelY + panelHeight / 2 - 22;
         const currencyStartX = panelX - panelWidth / 2 + 25;
 
-        // Gold
-        const goldText = this.add.text(currencyStartX, currencyY, `💰 ${this.playerGold}`, {
+        // Gold (from API)
+        const goldBalance = user.balanceGold ?? 0;
+        const goldText = this.add.text(currencyStartX, currencyY, `💰 ${goldBalance}`, {
             fontSize: '9px',
             fontFamily: 'PixelFont',
             color: '#FFD700',
@@ -4787,17 +5063,18 @@ export class FarmingGame extends Scene {
         this.cameras.main.ignore(goldText);
         this.userProfileElements.push(goldText);
 
-        // Gem
-        const gemText = this.add.text(currencyStartX + 60, currencyY, `💎 ${this.playerGems}`, {
+        // Ruby (from API)
+        const rubyBalance = user.balanceRuby ?? 0;
+        const rubyText = this.add.text(currencyStartX + 60, currencyY, `💎 ${rubyBalance}`, {
             fontSize: '9px',
             fontFamily: 'PixelFont',
-            color: '#4FC3F7',
+            color: '#FFD700',
             resolution: 2
         });
-        gemText.setDepth(5023);
-        gemText.setStroke('#1565C0', 2);
-        this.cameras.main.ignore(gemText);
-        this.userProfileElements.push(gemText);
+        rubyText.setDepth(5023);
+        rubyText.setStroke('#5D4037', 2);
+        this.cameras.main.ignore(rubyText);
+        this.userProfileElements.push(rubyText);
 
         // Click handler to open profile modal
         bg.on('pointerdown', () => {
@@ -5874,7 +6151,7 @@ export class FarmingGame extends Scene {
         }
     }
 
-    private plantSeed(tileKey: string, x: number, y: number) {
+    private async plantSeed(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
         const selectedPlantType = this.getSelectedPlantType();
 
@@ -5899,13 +6176,19 @@ export class FarmingGame extends Scene {
                 this.createHealthBar(x, y, tileKey);
 
                 console.log('Planted', selectedPlantType, 'at', tileKey, '- Seeds left:', this.seedCounts[selectedPlantType]);
+
+                // Call API to plant seed on backend (async, don't wait for response)
+                // Use tileKey as landId for tracking
+                SeedService.plantSeed(tileKey, selectedPlantType).catch(error => {
+                    console.error('Failed to plant seed in database:', error);
+                });
             } else {
                 console.log('No', selectedPlantType, 'seeds left!');
             }
         }
     }
 
-    private waterCrop(tileKey: string, x: number, y: number) {
+    private async waterCrop(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
         const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
 
@@ -5950,6 +6233,15 @@ export class FarmingGame extends Scene {
                 wateringCan.count--;
                 this.updateToolbar();
                 console.log('Plant is already fully grown at', tileKey, '- Care timer reset');
+            }
+
+            // Call API to water plant on backend (async, don't wait for response)
+            if (state.plantId) {
+                GardenService.waterPlant(state.plantId).catch(error => {
+                    console.error('Failed to water plant in database:', error);
+                });
+            } else {
+                console.warn('No plantId available for watering - plant may not be synced with backend');
             }
         }
     }
@@ -6008,7 +6300,7 @@ export class FarmingGame extends Scene {
         }
     }
 
-    private harvestCrop(tileKey: string, x: number, y: number) {
+    private async harvestCrop(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
 
         if (state && state.planted && state.cropType) {
@@ -6021,6 +6313,7 @@ export class FarmingGame extends Scene {
                 state.isDead = false;
                 state.isWilted = false;
                 state.lastCareTime = undefined;
+                state.plantId = undefined;
 
                 // Remove plant sprite
                 this.removePlant(x, y);
@@ -6039,6 +6332,7 @@ export class FarmingGame extends Scene {
                 // Harvest successful!
                 const wasWilted = state.isWilted;
                 const harvestedType = state.cropType;
+                const plantId = state.plantId;
 
                 // Add fruit to chest
                 this.addToChest(harvestedType);
@@ -6050,6 +6344,7 @@ export class FarmingGame extends Scene {
                 state.isDead = false;
                 state.isWilted = false;
                 state.lastCareTime = undefined;
+                state.plantId = undefined;
 
                 // Remove plant sprite
                 this.removePlant(x, y);
@@ -6061,6 +6356,15 @@ export class FarmingGame extends Scene {
                     console.log('Harvested WILTED', harvestedType, 'crop at', tileKey, '(reduced yield) - Added to chest');
                 } else {
                     console.log('Harvested healthy', harvestedType, 'crop at', tileKey, '- Added to chest');
+                }
+
+                // Call API to harvest plant on backend (async, don't wait for response)
+                if (plantId) {
+                    GardenService.harvestPlant(plantId).catch(error => {
+                        console.error('Failed to harvest plant in database:', error);
+                    });
+                } else {
+                    console.warn('No plantId available for harvesting - plant may not be synced with backend');
                 }
             } else {
                 console.log('Plant not ready to harvest at', tileKey, `(Stage ${state.plantStage}/${PLANT_STAGES.FRUIT})`);
@@ -6079,6 +6383,7 @@ export class FarmingGame extends Scene {
             state.isDead = false;
             state.isWilted = false;
             state.lastCareTime = undefined;
+            state.plantId = undefined;
 
             // Remove plant sprite and health bar
             this.removePlant(x, y);
