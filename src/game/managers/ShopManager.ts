@@ -509,7 +509,7 @@ export class ShopManager extends BaseManager {
             }
             const chestInventory = this.callbacks.getChestInventory();
             const algaeCount = chestInventory.reduce((total, slot) =>
-                slot.type === 'social' ? total + slot.count : total, 0);
+                slot.type === 'algae' ? total + slot.count : total, 0);
             if (algaeCount < 5) {
                 this.showMessage('Need 5 mature Algae!', '#e74c3c');
                 return;
@@ -560,7 +560,7 @@ export class ShopManager extends BaseManager {
                 let chestInventory = this.callbacks.getChestInventory();
                 let toRemove = 5;
                 for (let i = 0; i < chestInventory.length && toRemove > 0; i++) {
-                    if (chestInventory[i].type === 'social') {
+                    if (chestInventory[i].type === 'algae') {
                         const remove = Math.min(chestInventory[i].count, toRemove);
                         chestInventory[i].count -= remove;
                         toRemove -= remove;
@@ -572,7 +572,7 @@ export class ShopManager extends BaseManager {
                 this.showMessage('Trade success! +1 Spore', '#4ade80');
                 break;
             case 'algaeSeed':
-                seedCounts.social++;
+                seedCounts.algae++;
                 this.showMessage('Purchased Algae Seed!', '#4ade80');
                 break;
             case 'mushroomSeed':
