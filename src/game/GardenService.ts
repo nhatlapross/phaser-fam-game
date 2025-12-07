@@ -2,7 +2,7 @@
 
 export interface Plant {
     id: string;
-    type: 'SOCIAL' | 'TECH' | 'BRANDED' | 'MUSHROOM';
+    type: 'ALGAE' | 'MUSHROOM' | 'TREE';
     name: string;
     stage: 'SEED' | 'SPROUT' | 'YOUNG' | 'MATURE' | 'FLOWER' | 'FRUIT';
     plantedAt: string;
@@ -96,19 +96,16 @@ export class GardenService {
     /**
      * Maps API plant type to game plant type
      */
-    static mapPlantTypeToGameType(apiType: string): 'social' | 'technical' | 'branded' | 'mushroom' {
+    static mapPlantTypeToGameType(apiType: string): 'algae' | 'mushroom' | 'tree' {
         switch (apiType.toUpperCase()) {
-            case 'SOCIAL':
-                return 'social';
-            case 'TECH':
-            case 'TECHNICAL':
-                return 'technical';
-            case 'BRANDED':
-                return 'branded';
+            case 'ALGAE':
+                return 'algae';
             case 'MUSHROOM':
                 return 'mushroom';
+            case 'TREE':
+                return 'tree';
             default:
-                return 'social';
+                return 'algae';
         }
     }
 

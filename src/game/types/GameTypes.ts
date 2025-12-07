@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 
-// Plant types based on proposal
-export type PlantType = 'social' | 'technical' | 'branded' | 'mushroom';
+// Plant types based on API (ALGAE, MUSHROOM, TREE)
+export type PlantType = 'algae' | 'mushroom' | 'tree';
 
 // Fertilizer types
 export type FertilizerType = 'common' | 'rare' | 'epic';
@@ -42,6 +42,7 @@ export interface TileState {
     locked?: boolean; // Whether plot is locked (needs to be purchased)
     plotIndex?: number; // Index of plot (0-15 for 4x4 grid)
     plantId?: string; // Plant ID from backend API (for watering, harvesting, etc.)
+    landId?: string; // Land ID from backend API (for planting)
 }
 
 // Crop definition for plant assets
@@ -55,26 +56,12 @@ export interface CropDefinition {
 
 // Crop definitions for all plant types
 export const CROP_DEFINITIONS: Record<PlantType, CropDefinition> = {
-    social: {
-        name: 'Social Plant',
-        seedImage: 'social-seed',
-        growthImages: ['social-plant-1', 'social-plant-2', 'social-plant-3', 'social-plant-4', 'social-plant-5'],
-        fruitImage: 'social-fruit',
-        deathImage: 'social-plant-death'
-    },
-    technical: {
-        name: 'Technical Plant',
-        seedImage: 'technical-seed',
-        growthImages: ['technical-plant-1', 'technical-plant-2', 'technical-plant-3', 'technical-plant-4', 'technical-plant-5'],
-        fruitImage: 'technical-fruit',
-        deathImage: 'technical-plant-death'
-    },
-    branded: {
-        name: 'Branded Plant',
-        seedImage: 'branded-seed',
-        growthImages: ['branded-plant-1', 'branded-plant-2', 'branded-plant-3', 'branded-plant-4', 'branded-plant-5'],
-        fruitImage: 'branded-fruit',
-        deathImage: 'branded-plant-death'
+    algae: {
+        name: 'Algae',
+        seedImage: 'algae-seed',
+        growthImages: ['algae-plant-1', 'algae-plant-2', 'algae-plant-3', 'algae-plant-4', 'algae-plant-5'],
+        fruitImage: 'algae-fruit',
+        deathImage: 'algae-plant-death'
     },
     mushroom: {
         name: 'Mushroom',
@@ -82,11 +69,18 @@ export const CROP_DEFINITIONS: Record<PlantType, CropDefinition> = {
         growthImages: ['mushroom-plant-1', 'mushroom-plant-2', 'mushroom-plant-3', 'mushroom-plant-4', 'mushroom-plant-5'],
         fruitImage: 'mushroom-fruit',
         deathImage: 'mushroom-plant-death'
+    },
+    tree: {
+        name: 'Tree',
+        seedImage: 'tree-seed', // Placeholder: use technical seed sprite
+        growthImages: ['tree-plant-1', 'tree-plant-2', 'tree-plant-3', 'tree-plant-4', 'tree-plant-5'],
+        fruitImage: 'tree-fruit',
+        deathImage: 'tree-plant-death'
     }
 };
 
 // Available plant types for seed selection
-export const PLANT_TYPES: PlantType[] = ['social', 'technical', 'branded', 'mushroom'];
+export const PLANT_TYPES: PlantType[] = ['algae', 'mushroom', 'tree'];
 
 // Fertilizer types array
 export const FERTILIZER_TYPES: FertilizerType[] = ['common', 'rare', 'epic'];
