@@ -112,25 +112,25 @@ export class Preloader extends Scene
         });
 
         // ========== New Plant Assets ==========
-        // Social Plant
-        this.load.image('social-seed', 'objects/plant/social_plant/Social_Seed.png');
-        this.load.image('social-plant-1', 'objects/plant/social_plant/Social_plant_1.png');
-        this.load.image('social-plant-2', 'objects/plant/social_plant/Social_plant_2.png');
-        this.load.image('social-plant-3', 'objects/plant/social_plant/Social_plant_3.png');
-        this.load.image('social-plant-4', 'objects/plant/social_plant/Social_plant_4.png');
-        this.load.image('social-plant-5', 'objects/plant/social_plant/Social_plant_5.png');
-        this.load.image('social-plant-death', 'objects/plant/social_plant/Social_plant_death.png');
-        this.load.image('social-fruit', 'objects/plant/social_plant/social-fruit.png');
+        // Tree Plant
+        this.load.image('tree-seed', 'objects/plant/social_plant/Social_Seed.png');
+        this.load.image('tree-plant-1', 'objects/plant/social_plant/Social_plant_1.png');
+        this.load.image('tree-plant-2', 'objects/plant/social_plant/Social_plant_2.png');
+        this.load.image('tree-plant-3', 'objects/plant/social_plant/Social_plant_3.png');
+        this.load.image('tree-plant-4', 'objects/plant/social_plant/Social_plant_4.png');
+        this.load.image('tree-plant-5', 'objects/plant/social_plant/Social_plant_5.png');
+        this.load.image('tree-plant-death', 'objects/plant/social_plant/Social_plant_death.png');
+        this.load.image('tree-fruit', 'objects/plant/social_plant/social-fruit.png');
 
-        // Technical Plant
-        this.load.image('technical-seed', 'objects/plant/technical_plant/Technical_Seed.png');
-        this.load.image('technical-plant-1', 'objects/plant/technical_plant/Technical_plant_1.png');
-        this.load.image('technical-plant-2', 'objects/plant/technical_plant/Technical_plant_2.png');
-        this.load.image('technical-plant-3', 'objects/plant/technical_plant/Technical_plant_3.png');
-        this.load.image('technical-plant-4', 'objects/plant/technical_plant/Technical_plant_4.png');
-        this.load.image('technical-plant-5', 'objects/plant/technical_plant/Technical_plant_5.png');
-        this.load.image('technical-plant-death', 'objects/plant/technical_plant/Technical_plant_death.png');
-        this.load.image('technical-fruit', 'objects/plant/technical_plant/technical-fruit.png');
+        // Algae Plant
+        this.load.image('algae-seed', 'objects/plant/technical_plant/Technical_Seed.png');
+        this.load.image('algae-plant-1', 'objects/plant/technical_plant/Technical_plant_1.png');
+        this.load.image('algae-plant-2', 'objects/plant/technical_plant/Technical_plant_2.png');
+        this.load.image('algae-plant-3', 'objects/plant/technical_plant/Technical_plant_3.png');
+        this.load.image('algae-plant-4', 'objects/plant/technical_plant/Technical_plant_4.png');
+        this.load.image('algae-plant-5', 'objects/plant/technical_plant/Technical_plant_5.png');
+        this.load.image('algae-plant-death', 'objects/plant/technical_plant/Technical_plant_death.png');
+        this.load.image('algae-fruit', 'objects/plant/technical_plant/technical-fruit.png');
 
         // Branded Plant
         this.load.image('branded-seed', 'objects/plant/branded_plant/Branded_Seed.png');

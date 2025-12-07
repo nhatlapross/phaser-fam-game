@@ -3,7 +3,7 @@
 export interface SeedInventoryItem {
     id: string;
     userId: string;
-    type: 'SOCIAL' | 'TECH' | 'BRANDED' | 'MUSHROOM';
+    type: 'ALGAE' | 'MUSHROOM' | 'TREE';
     rarity: 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
     quantity: number;
     createdAt: string;
@@ -73,37 +73,32 @@ export class SeedService {
     /**
      * Maps API seed type to game plant type
      */
-    static mapSeedTypeToPlantType(apiType: string): 'social' | 'technical' | 'branded' | 'mushroom' {
+    static mapSeedTypeToPlantType(apiType: string): 'algae' | 'mushroom' | 'tree' {
         switch (apiType.toUpperCase()) {
-            case 'SOCIAL':
-                return 'social';
-            case 'TECH':
-            case 'TECHNICAL':
-                return 'technical';
-            case 'BRANDED':
-                return 'branded';
+            case 'ALGAE':
+                return 'algae';
             case 'MUSHROOM':
                 return 'mushroom';
+            case 'TREE':
+                return 'tree';
             default:
-                return 'social'; // Default fallback
+                return 'algae'; // Default fallback
         }
     }
 
     /**
      * Maps game plant type to API seed type
      */
-    static mapPlantTypeToApiSeedType(plantType: 'social' | 'technical' | 'branded' | 'mushroom'): string {
+    static mapPlantTypeToApiSeedType(plantType: 'algae' | 'mushroom' | 'tree'): string {
         switch (plantType) {
-            case 'social':
-                return 'SEED_SOCIAL';
-            case 'technical':
-                return 'SEED_TECH';
-            case 'branded':
-                return 'SEED_BRANDED';
+            case 'algae':
+                return 'ALGAE';
             case 'mushroom':
-                return 'SEED_MUSHROOM';
+                return 'MUSHROOM';
+            case 'tree':
+                return 'TREE';
             default:
-                return 'SEED_SOCIAL';
+                return 'ALGAE';
         }
     }
 
@@ -113,7 +108,7 @@ export class SeedService {
      * @param plantType The type of seed to plant
      * @returns A Promise that resolves to true if successful, false otherwise
      */
-    static async plantSeed(landId: string, plantType: 'social' | 'technical' | 'branded' | 'mushroom'): Promise<boolean> {
+    static async plantSeed(landId: string, plantType: 'algae' | 'mushroom' | 'tree'): Promise<boolean> {
         const token = SeedService.getAccessToken();
         if (!token) {
             console.log('No access token available for planting seed');

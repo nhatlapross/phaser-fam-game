@@ -49,10 +49,9 @@ export class FarmingGame extends Scene {
 
     // Seed counts per type (loaded from API, defaults to 0)
     private seedCounts: Record<PlantType, number> = {
-        social: 0,
-        technical: 0,
-        branded: 0,
-        mushroom: 0
+        algae: 0,
+        mushroom: 0,
+        tree: 0
     };
 
     // Fertilizer counts per type (loaded from API, defaults to 0)
@@ -120,7 +119,8 @@ export class FarmingGame extends Scene {
     private playerGems: number = 50; // Starting gems
 
     // Farm plot ownership system
-    private readonly INITIAL_OWNED_PLOTS = 2; // Player starts with 2 plots
+    // All plots start locked - garden API determines which are unlocked
+    private readonly INITIAL_OWNED_PLOTS = 0; // Start with 0, API will unlock
     private ownedPlotsCount: number = this.INITIAL_OWNED_PLOTS;
     private lockedPlotOverlays: Map<string, Phaser.GameObjects.Container> = new Map();
     private buyPlotModalOpen: boolean = false;
@@ -350,10 +350,9 @@ export class FarmingGame extends Scene {
 
             // Reset all seed counts to 0 first
             this.seedCounts = {
-                social: 0,
-                technical: 0,
-                branded: 0,
-                mushroom: 0
+                algae: 0,
+                mushroom: 0,
+                tree: 0
             };
 
             // Validate that inventory is an array
@@ -423,26 +422,39 @@ export class FarmingGame extends Scene {
     }
 
     /**
-     * Loads garden data from API and restores planted crops
+     * Loads garden data from API and restores planted crops + unlocked plots
      */
     private async loadGardenData() {
         try {
+            console.log('Fetching garden data from API...');
             const gardenData = await GardenService.getGarden();
             
+            console.log('Garden API response:', gardenData);
+            console.log('Garden data length:', gardenData?.length || 0);
+            
             if (!gardenData || gardenData.length === 0) {
-                console.log('No garden data available');
+                console.log('No garden data available - all plots remain locked');
                 return;
             }
 
             console.log('Loading garden data:', gardenData);
 
-            // Restore each planted crop
-            gardenData.forEach(plot => {
-                if (!plot.plant) return; // Skip plots without plants
+            // Update owned plots count based on API response
+            // Each plot in the response is an unlocked plot
+            const unlockedPlotCount = gardenData.length;
+            if (unlockedPlotCount > this.ownedPlotsCount) {
+                this.ownedPlotsCount = unlockedPlotCount;
+                console.log(`Updated owned plots count to ${this.ownedPlotsCount}`);
+            }
 
+            // Process each plot from API
+            gardenData.forEach(plot => {
                 // Convert plot index to tile key
                 const tileKey = GardenService.plotIndexToTileKey(plot.plotIndex);
                 const [x, y] = tileKey.split(',').map(Number);
+
+                // Remove lock overlay if exists (plot is unlocked)
+                this.unlockPlot(tileKey);
 
                 // Get or create tile state
                 let state = this.farmLandStates.get(tileKey);
@@ -456,46 +468,66 @@ export class FarmingGame extends Scene {
                     this.farmLandStates.set(tileKey, state);
                 }
 
-                // Restore plant data
-                const plantType = GardenService.mapPlantTypeToGameType(plot.plant.type);
-                const plantStage = GardenService.mapStageToGameStage(plot.plant.stage);
+                // Mark plot as unlocked and store landId
+                state.locked = false;
+                state.plotIndex = plot.plotIndex;
+                state.landId = plot.landId; // Store landId for planting API
 
-                state.planted = true;
-                state.cropType = plantType;
-                state.plantStage = plantStage;
-                state.isDead = false;
-                state.isWilted = false; // Can be enhanced based on progress.percentage
-                state.lastCareTime = new Date(plot.plant.plantedAt).getTime();
-                state.plantId = plot.plant.id; // Store plant ID for API calls
+                // If plot has a plant, restore it
+                if (plot.plant) {
+                    const plantType = GardenService.mapPlantTypeToGameType(plot.plant.type);
+                    const plantStage = GardenService.mapStageToGameStage(plot.plant.stage);
 
-                // Show plant sprite
-                this.showPlant(x, y, plantType, plantStage);
+                    state.planted = true;
+                    state.cropType = plantType;
+                    state.plantStage = plantStage;
+                    state.isDead = false;
+                    state.isWilted = false;
+                    state.lastCareTime = new Date(plot.plant.plantedAt).getTime();
+                    state.plantId = plot.plant.id;
 
-                // Create health bar
-                this.createHealthBar(x, y, tileKey);
+                    // Show plant sprite
+                    this.showPlant(x, y, plantType, plantStage);
 
-                // Update health bar based on progress percentage
-                if (state.healthBarFill && plot.progress) {
-                    const progressPercent = plot.progress.percentage / 100;
-                    const maxWidth = 14;
-                    state.healthBarFill.width = maxWidth * progressPercent;
+                    // Create health bar
+                    this.createHealthBar(x, y, tileKey);
 
-                    // Color based on progress
-                    if (progressPercent > 0.6) {
-                        state.healthBarFill.setFillStyle(0x4ade80); // Green
-                    } else if (progressPercent > 0.3) {
-                        state.healthBarFill.setFillStyle(0xfbbf24); // Yellow
-                    } else {
-                        state.healthBarFill.setFillStyle(0xef4444); // Red
+                    // Update health bar based on progress percentage
+                    if (state.healthBarFill && plot.progress) {
+                        const progressPercent = plot.progress.percentage / 100;
+                        const maxWidth = 14;
+                        state.healthBarFill.width = maxWidth * progressPercent;
+
+                        if (progressPercent > 0.6) {
+                            state.healthBarFill.setFillStyle(0x4ade80);
+                        } else if (progressPercent > 0.3) {
+                            state.healthBarFill.setFillStyle(0xfbbf24);
+                        } else {
+                            state.healthBarFill.setFillStyle(0xef4444);
+                        }
                     }
-                }
 
-                console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (${plot.progress.percentage}%)`);
+                    console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (${plot.progress.percentage}%)`);
+                } else {
+                    console.log(`Unlocked empty plot at ${tileKey} (landId: ${plot.landId})`);
+                }
             });
 
             console.log('Garden data loaded successfully');
         } catch (error) {
             console.error('Error loading garden data:', error);
+        }
+    }
+
+    /**
+     * Removes lock overlay from a plot
+     */
+    private unlockPlot(tileKey: string) {
+        const overlay = this.lockedPlotOverlays.get(tileKey);
+        if (overlay) {
+            overlay.destroy();
+            this.lockedPlotOverlays.delete(tileKey);
+            console.log(`Unlocked plot at ${tileKey}`);
         }
     }
 
@@ -884,6 +916,8 @@ export class FarmingGame extends Scene {
         // Plots are numbered 0-15, left to right, top to bottom
         const plotPositions = this.getPlotPositions();
 
+        console.log(`Creating farm plots. Owned plots: ${this.ownedPlotsCount}`);
+
         // Place tilled-dirt tiles for each plot
         plotPositions.forEach((pos, index) => {
             const randomTileIndex = Phaser.Math.RND.pick(tilledDirtTiles);
@@ -892,6 +926,9 @@ export class FarmingGame extends Scene {
             // Create lock overlay for locked plots (index >= ownedPlotsCount)
             if (index >= this.ownedPlotsCount) {
                 this.createLockedPlotOverlay(pos.x, pos.y, index);
+                console.log(`Locked plot ${index} at ${pos.x},${pos.y}`);
+            } else {
+                console.log(`Unlocked plot ${index} at ${pos.x},${pos.y}`);
             }
         });
     }
@@ -1545,6 +1582,12 @@ export class FarmingGame extends Scene {
         const selectedPlantType = this.getSelectedPlantType();
 
         if (state && state.tilled && !state.planted) {
+            // Check if plot is locked
+            if (state.locked) {
+                console.log('Cannot plant on locked plot at', tileKey);
+                return;
+            }
+
             // Check if we have seeds of the selected type
             if (this.seedCounts[selectedPlantType] > 0) {
                 state.planted = true;
@@ -1567,8 +1610,9 @@ export class FarmingGame extends Scene {
                 console.log('Planted', selectedPlantType, 'at', tileKey, '- Seeds left:', this.seedCounts[selectedPlantType]);
 
                 // Call API to plant seed on backend (async, don't wait for response)
-                // Use tileKey as landId for tracking
-                SeedService.plantSeed(tileKey, selectedPlantType).catch(error => {
+                // Use landId from state if available, otherwise use tileKey
+                const landId = state.landId || tileKey;
+                SeedService.plantSeed(landId, selectedPlantType).catch(error => {
                     console.error('Failed to plant seed in database:', error);
                 });
             } else {
