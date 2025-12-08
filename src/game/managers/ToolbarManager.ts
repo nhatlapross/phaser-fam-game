@@ -497,7 +497,7 @@ export class ToolbarManager extends BaseManager {
 
         const selectedFertilizerIndex = this.callbacks.getSelectedFertilizerIndex();
         const fertilizerCounts = this.callbacks.getFertilizerCounts();
-        const fertilizerColors = { common: 0x888888, rare: 0x4488ff, epic: 0xaa44ff };
+        const fertilizerColors = { common: 0x888888, rare: 0x4488ff, epic: 0xaa44ff, legendary: 0xffaa00 };
 
         // Selector background
         const selectorBg = this.scene.add.rectangle(

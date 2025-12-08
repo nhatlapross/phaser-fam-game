@@ -4,7 +4,7 @@ import Phaser from 'phaser';
 export type PlantType = 'algae' | 'mushroom' | 'tree';
 
 // Fertilizer types
-export type FertilizerType = 'common' | 'rare' | 'epic';
+export type FertilizerType = 'common' | 'rare' | 'epic' | 'legendary';
 
 // Plant stages according to proposal:
 // 0: Seed (Hạt)
@@ -83,7 +83,7 @@ export const CROP_DEFINITIONS: Record<PlantType, CropDefinition> = {
 export const PLANT_TYPES: PlantType[] = ['algae', 'mushroom', 'tree'];
 
 // Fertilizer types array
-export const FERTILIZER_TYPES: FertilizerType[] = ['common', 'rare', 'epic'];
+export const FERTILIZER_TYPES: FertilizerType[] = ['common', 'rare', 'epic', 'legendary'];
 
 // Toolbar item definition
 export interface ToolbarItem {
