@@ -163,19 +163,19 @@ export class Login extends Scene {
         });
         connectedText.setOrigin(0.5);
 
-        // Transition to game after short delay
+        // Transition to GameLoader (which will load API data before entering FarmingGame)
         this.time.delayedCall(1000, () => {
             // Safety check - scene might have been destroyed
             if (!this.cameras || !this.cameras.main || !this.scene.isActive('Login')) {
                 // Just start the scene directly if we can't fade
                 if (this.scene) {
-                    this.scene.start('FarmingGame');
+                    this.scene.start('GameLoader');
                 }
                 return;
             }
             this.cameras.main.fadeOut(500, 0, 0, 0);
             this.cameras.main.once('camerafadeoutcomplete', () => {
-                this.scene.start('FarmingGame');
+                this.scene.start('GameLoader');
             });
         });
     }

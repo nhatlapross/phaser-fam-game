@@ -117,6 +117,18 @@ export class MailboxManager extends BaseManager {
     }
 
     /**
+     * Set missions from external cache (e.g., GameDataService)
+     * Use this to avoid duplicate API calls
+     */
+    public setMissionsFromCache(missions: Mission[] | null): void {
+        if (missions) {
+            this.cachedMissions = missions;
+            this.missionsCacheTime = Date.now();
+            console.log('MailboxManager: Missions set from external cache:', missions.length);
+        }
+    }
+
+    /**
      * Open the mailbox modal
      */
     public open(): void {

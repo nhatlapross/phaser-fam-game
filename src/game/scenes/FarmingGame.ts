@@ -6,6 +6,7 @@ import { SeedService } from '../SeedService';
 import { FertilizerService } from '../FertilizerService';
 import { GardenService } from '../GardenService';
 import { FruitService } from '../FruitService';
+import { GameDataService } from '../GameDataService';
 
 // Import managers
 import {
@@ -157,8 +158,7 @@ export class FarmingGame extends Scene {
 
         // Create mailbox using manager
         this.mailboxManager.createMailbox();
-        // Preload missions data to avoid lag when opening mailbox
-        this.mailboxManager.preloadMissions();
+        // Note: Missions are loaded from cache or API in loadGameDataFromCache()
 
         // Create shop using manager
         this.shopManager.createShop(this.TILE_SIZE);
@@ -209,16 +209,8 @@ export class FarmingGame extends Scene {
         // Check if already connected
         EventBus.emit('check-wallet-connection');
 
-        // Fetch seed, fertilizer, and fruit inventory on scene start (if user is already logged in)
-        this.fetchSeedInventory();
-        this.fetchFertilizerInventory();
-        this.fetchFruitInventory();
-
-        // Load garden data (planted crops)
-        this.loadGardenData();
-
-        // Fetch user profile (balances, etc.)
-        this.fetchUserProfile();
+        // Load data from cache (pre-loaded by GameLoader) or fetch if not available
+        this.loadGameDataFromCache();
 
         // Handle screen resize
         this.scale.on('resize', this.onResize, this);
@@ -341,6 +333,178 @@ export class FarmingGame extends Scene {
 
         // Recreate user profile UI
         this.createUserProfileUI();
+    }
+
+    /**
+     * Loads all game data from cache (pre-loaded by GameLoader)
+     * Falls back to fetching from API if cache is not available
+     */
+    private async loadGameDataFromCache() {
+        const cachedData = GameDataService.getCachedData();
+
+        if (cachedData && GameDataService.isCacheValid()) {
+            console.log('Loading game data from cache...');
+
+            // Load seeds from cache
+            this.seedCounts = { algae: 0, mushroom: 0, tree: 0 };
+            if (Array.isArray(cachedData.seeds)) {
+                cachedData.seeds.forEach(item => {
+                    if (item && item.type) {
+                        const plantType = SeedService.mapSeedTypeToPlantType(item.type);
+                        this.seedCounts[plantType] = item.quantity;
+                    }
+                });
+            }
+            console.log('Seeds loaded from cache:', this.seedCounts);
+
+            // Load fertilizers from cache
+            this.fertilizerCounts = { common: 0, rare: 0, epic: 0 };
+            if (Array.isArray(cachedData.fertilizers)) {
+                cachedData.fertilizers.forEach(item => {
+                    if (item && item.items && item.items.type) {
+                        const fertilizerType = FertilizerService.mapFertilizerType(item.items.type);
+                        this.fertilizerCounts[fertilizerType] = item.quantity;
+                    }
+                });
+            }
+            console.log('Fertilizers loaded from cache:', this.fertilizerCounts);
+
+            // Load fruits (chest inventory) from cache
+            this.chestInventory = [];
+            for (const item of cachedData.fruits) {
+                if (item.count > 0) {
+                    let remaining = item.count;
+                    while (remaining > 0 && this.chestInventory.length < this.CHEST_SLOTS) {
+                        const slotCount = Math.min(remaining, this.MAX_PER_SLOT);
+                        this.chestInventory.push({ type: item.type, count: slotCount });
+                        remaining -= slotCount;
+                    }
+                }
+            }
+            console.log('Fruits loaded from cache:', this.chestInventory);
+
+            // Load garden data from cache
+            this.loadGardenDataFromCache(cachedData.garden);
+
+            // Set missions to MailboxManager from cache
+            if (cachedData.missions) {
+                this.mailboxManager.setMissionsFromCache(cachedData.missions);
+            }
+
+            // Update UI
+            this.updateToolbar();
+            this.createUserProfileUI();
+
+            console.log('All game data loaded from cache');
+        } else {
+            console.log('Cache not available, fetching from API...');
+            // Fallback to fetching from API
+            this.fetchSeedInventory();
+            this.fetchFertilizerInventory();
+            this.fetchFruitInventory();
+            this.loadGardenData();
+            this.fetchUserProfile();
+            // Preload missions (will be cached by MailboxManager)
+            this.mailboxManager.preloadMissions();
+        }
+    }
+
+    /**
+     * Loads garden data from cached response
+     */
+    private loadGardenDataFromCache(gardenData: import('../GardenService').GardenResponse) {
+        if (!gardenData || gardenData.length === 0) {
+            console.log('No garden data in cache - all plots remain locked');
+            return;
+        }
+
+        console.log('Loading garden data from cache:', gardenData.length, 'plots');
+
+        // Update owned plots count
+        const unlockedPlotCount = gardenData.length;
+        if (unlockedPlotCount > this.ownedPlotsCount) {
+            this.ownedPlotsCount = unlockedPlotCount;
+        }
+
+        // Process each plot
+        gardenData.forEach(plot => {
+            const tileKey = GardenService.plotIndexToTileKey(plot.plotIndex);
+            const [x, y] = tileKey.split(',').map(Number);
+
+            // Remove lock overlay
+            this.unlockPlot(tileKey);
+
+            // Get or create tile state
+            let state = this.farmLandStates.get(tileKey);
+            if (!state) {
+                state = {
+                    tilled: true,
+                    planted: false,
+                    plantStage: 0,
+                    cropType: null
+                };
+                this.farmLandStates.set(tileKey, state);
+            }
+
+            state.locked = false;
+            state.plotIndex = plot.plotIndex;
+            state.landId = plot.landId;
+
+            if (plot.plant) {
+                const plantType = GardenService.mapPlantTypeToGameType(plot.plant.type);
+                const plantStage = GardenService.mapStageToGameStage(plot.plant.stage);
+
+                state.planted = true;
+                state.cropType = plantType;
+                state.plantStage = plantStage;
+                state.isDead = false;
+                state.isWilted = false;
+                state.lastCareTime = new Date(plot.plant.plantedAt).getTime();
+                state.plantId = plot.plant.id;
+
+                // Remove existing health bar
+                if (state.healthBarBg) {
+                    state.healthBarBg.destroy();
+                    state.healthBarBg = undefined;
+                }
+                if (state.healthBarFill) {
+                    state.healthBarFill.destroy();
+                    state.healthBarFill = undefined;
+                }
+
+                // Show plant sprite
+                this.showPlant(x, y, plantType, plantStage);
+
+                // Create health bar
+                this.createHealthBar(x, y, tileKey);
+
+                // Update health bar progress
+                const updatedState = this.farmLandStates.get(tileKey);
+                if (updatedState?.healthBarFill && plot.progress) {
+                    const progressPercent = plot.progress.percentage / 100;
+                    const maxWidth = 14;
+                    updatedState.healthBarFill.width = maxWidth * progressPercent;
+
+                    if (progressPercent > 0.6) {
+                        updatedState.healthBarFill.setFillStyle(0x4ade80);
+                    } else if (progressPercent > 0.3) {
+                        updatedState.healthBarFill.setFillStyle(0xfbbf24);
+                    } else {
+                        updatedState.healthBarFill.setFillStyle(0xef4444);
+                    }
+                }
+
+                console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage}`);
+            } else {
+                this.removePlant(x, y);
+                state.planted = false;
+                state.cropType = null;
+                state.plantStage = 0;
+                state.plantId = undefined;
+            }
+        });
+
+        console.log('Garden data loaded from cache successfully');
     }
 
     /**
@@ -558,7 +722,7 @@ export class FarmingGame extends Scene {
                         }
                     }
 
-                    console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (${plot.progress.percentage}%)`);
+                    console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (${plot.progress?.percentage ?? 0}%)`);
                 } else {
                     // Empty plot - remove any existing plant sprite and reset state
                     this.removePlant(x, y);
