@@ -123,6 +123,33 @@ export interface ShopPurchaseLimits {
     mushroomExchange: { count: number; lastReset: number };
 }
 
+// Phygital Exchange reward types
+export type ExchangeRewardType = 'tote' | 'lottery' | 'razer' | 'voucher' | 'gold' | 'iphone' | 'seed_nft';
+
+// Phygital Exchange reward definition
+export interface ExchangeReward {
+    id: ExchangeRewardType;
+    name: string;
+    nameVi: string;
+    treeCost: number;
+    mushroomCost: number;
+    sporeCost: number;
+    icon: string; // emoji or image key
+    color: string;
+}
+
+// Phygital Exchange rewards table
+// Cost format: treeCost / mushroomCost / sporeCost (user needs ALL to exchange)
+export const EXCHANGE_REWARDS: ExchangeReward[] = [
+    { id: 'tote', name: 'Tote Bag', nameVi: 'Túi Tote', treeCost: 1, mushroomCost: 7, sporeCost: 14, icon: '👜', color: '#8B4513' },
+    { id: 'lottery', name: 'Lottery Ticket', nameVi: 'Vé Lottery', treeCost: 5, mushroomCost: 50, sporeCost: 100, icon: '🎟️', color: '#FFD700' },
+    { id: 'razer', name: 'Razer Headset', nameVi: 'Tai nghe Razer', treeCost: 10, mushroomCost: 200, sporeCost: 400, icon: '🎧', color: '#00FF00' },
+    { id: 'voucher', name: 'Voucher $300', nameVi: 'Voucher $300', treeCost: 50, mushroomCost: 1000, sporeCost: 2000, icon: '💵', color: '#85bb65' },
+    { id: 'gold', name: '1 Gold Bar 9999', nameVi: '1 Chỉ Vàng 9999', treeCost: 100, mushroomCost: 2000, sporeCost: 4000, icon: '🥇', color: '#FFD700' },
+    { id: 'iphone', name: 'Latest iPhone', nameVi: 'iPhone Mới Nhất', treeCost: 150, mushroomCost: 3000, sporeCost: 6000, icon: '📱', color: '#A2AAAD' },
+    { id: 'seed_nft', name: '1 Seed NFT', nameVi: '1 Seed NFT', treeCost: 0, mushroomCost: 5000, sporeCost: 10000, icon: '🌱', color: '#4ade80' },
+];
+
 // Game constants
 export const GAME_CONSTANTS = {
     TILE_SIZE: 16,

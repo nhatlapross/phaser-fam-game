@@ -197,6 +197,23 @@ export class ProfileManager extends BaseManager {
         this.scene.load.start();
     }
 
+    private loadModalAvatar(url: string, x: number, y: number, size: number): void {
+        const key = 'modal-avatar-' + Date.now();
+        this.scene.load.image(key, url);
+        this.scene.load.once('complete', () => {
+            if (this.scene.textures.exists(key)) {
+                const avatar = this.scene.add.image(x, y, key);
+                avatar.setDisplaySize(size, size);
+                avatar.setDepth(5103);
+                avatar.setAlpha(0);
+                this.scene.cameras.main.ignore(avatar);
+                this.modalElements.push(avatar);
+                this.scene.tweens.add({ targets: avatar, alpha: 1, duration: 150 });
+            }
+        });
+        this.scene.load.start();
+    }
+
     /**
      * Open the profile modal
      */
@@ -209,8 +226,8 @@ export class ProfileManager extends BaseManager {
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
-        const modalWidth = 240;
-        const modalHeight = 260;
+        const modalWidth = 260;
+        const modalHeight = 300;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
 
@@ -261,7 +278,39 @@ export class ProfileManager extends BaseManager {
     }
 
     private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number, user: any): void {
-        const avatarY = modalY - 50;
+        // Close button
+        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 40, 'square-buttons', 7);
+        closeBtnBg.setDisplaySize(24, 24);
+        closeBtnBg.setDepth(5102);
+        closeBtnBg.setAlpha(0);
+        closeBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(closeBtnBg);
+        this.modalElements.push(closeBtnBg);
+
+        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 40, 'X', {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        closeText.setOrigin(0.5);
+        closeText.setDepth(5103);
+        closeText.setAlpha(0);
+        closeText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(closeText);
+        this.modalElements.push(closeText);
+
+        this.scene.tweens.add({
+            targets: [closeBtnBg, closeText],
+            alpha: 1,
+            duration: 150
+        });
+
+        closeBtnBg.on('pointerdown', () => this.close());
+        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+
+        const avatarY = modalY - 65;
         const avatarSize = 64;
 
         // Avatar frame
@@ -275,15 +324,18 @@ export class ProfileManager extends BaseManager {
 
         this.scene.tweens.add({ targets: avatarFrame, alpha: 1, duration: 150 });
 
-        // Avatar image
-        const modalAvatar = this.scene.add.image(modalX, avatarY, 'default-avatar');
-        modalAvatar.setDisplaySize(avatarSize, avatarSize);
-        modalAvatar.setDepth(5103);
-        modalAvatar.setAlpha(0);
-        this.scene.cameras.main.ignore(modalAvatar);
-        this.modalElements.push(modalAvatar);
-
-        this.scene.tweens.add({ targets: modalAvatar, alpha: 1, duration: 150 });
+        // Avatar image - load actual avatar if available
+        if (user.avatar) {
+            this.loadModalAvatar(user.avatar, modalX, avatarY, avatarSize);
+        } else {
+            const modalAvatar = this.scene.add.image(modalX, avatarY, 'default-avatar');
+            modalAvatar.setDisplaySize(avatarSize, avatarSize);
+            modalAvatar.setDepth(5103);
+            modalAvatar.setAlpha(0);
+            this.scene.cameras.main.ignore(modalAvatar);
+            this.modalElements.push(modalAvatar);
+            this.scene.tweens.add({ targets: modalAvatar, alpha: 1, duration: 150 });
+        }
 
         // Edit avatar button
         const editAvatarBtn = this.scene.add.text(modalX, avatarY + avatarSize / 2 + 12, 'Edit Avatar', {
@@ -311,19 +363,22 @@ export class ProfileManager extends BaseManager {
 
         // Profile fields
         const fieldStartY = avatarY + avatarSize / 2 + 35;
-        const fieldSpacing = 28;
-        const labelX = modalX - modalWidth / 2 + 35;
-        const valueX = modalX - modalWidth / 2 + 100;
-        const editX = modalX + modalWidth / 2 - 45;
+        const fieldSpacing = 26;
+        const labelX = modalX - modalWidth / 2 + 40;
+        const valueX = modalX - modalWidth / 2 + 95;
+        const editX = modalX + modalWidth / 2 - 35;
 
         // Username
         this.createProfileField('Name', user.username || 'Not set', labelX, valueX, editX, fieldStartY, 'username', user);
 
+        // Wallet Address with copy button
+        this.createWalletField(user.address, labelX, modalX, fieldStartY + fieldSpacing, modalWidth);
+
         // XP (read-only)
-        this.createReadOnlyField('XP:', user.xp.toString(), labelX, valueX, fieldStartY + fieldSpacing);
+        this.createReadOnlyField('XP:', user.xp.toString(), labelX, valueX, fieldStartY + fieldSpacing * 2);
 
         // Score (read-only)
-        this.createReadOnlyField('Score:', user.reputationScore.toString(), labelX, valueX, fieldStartY + fieldSpacing * 2);
+        this.createReadOnlyField('Score:', user.reputationScore.toString(), labelX, valueX, fieldStartY + fieldSpacing * 3);
 
         // Logout button
         const logoutY = modalY + modalHeight / 2 - 30;
@@ -389,7 +444,7 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(valueText);
         this.modalElements.push(valueText);
 
-        const editBtn = this.scene.add.text(editX, y, 'Edit', {
+        const editBtn = this.scene.add.text(editX - 10, y, 'Edit', {
             fontSize: '10px',
             fontFamily: 'PixelFont',
             color: '#4ade80',
@@ -443,6 +498,87 @@ export class ProfileManager extends BaseManager {
             alpha: 1,
             duration: 150,
             delay: 50
+        });
+    }
+
+    private createWalletField(address: string, labelX: number, centerX: number, y: number, modalWidth: number): void {
+        const labelText = this.scene.add.text(labelX, y, 'Wallet:', {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        labelText.setDepth(5102);
+        labelText.setAlpha(0);
+        labelText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(labelText);
+        this.modalElements.push(labelText);
+
+        // Show shortened address
+        const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
+        const addressText = this.scene.add.text(labelX + 60, y, shortAddress, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFF8E1',
+            resolution: 2
+        });
+        addressText.setDepth(5102);
+        addressText.setAlpha(0);
+        addressText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(addressText);
+        this.modalElements.push(addressText);
+
+        // Copy button
+        const copyBtnX = centerX + modalWidth / 2 - 45;
+        const copyBtn = this.scene.add.text(copyBtnX, y, 'Copy', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#4ade80',
+            resolution: 2
+        });
+        copyBtn.setDepth(5102);
+        copyBtn.setAlpha(0);
+        copyBtn.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(copyBtn);
+        this.modalElements.push(copyBtn);
+
+        this.scene.tweens.add({
+            targets: [labelText, addressText, copyBtn],
+            alpha: 1,
+            duration: 150,
+            delay: 50
+        });
+
+        copyBtn.on('pointerdown', async () => {
+            try {
+                await navigator.clipboard.writeText(address);
+                copyBtn.setText('Copied!');
+                copyBtn.setColor('#86efac');
+                this.scene.time.delayedCall(1500, () => {
+                    copyBtn.setText('Copy');
+                    copyBtn.setColor('#4ade80');
+                });
+            } catch {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = address;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                copyBtn.setText('Copied!');
+                copyBtn.setColor('#86efac');
+                this.scene.time.delayedCall(1500, () => {
+                    copyBtn.setText('Copy');
+                    copyBtn.setColor('#4ade80');
+                });
+            }
+        });
+        copyBtn.on('pointerover', () => copyBtn.setColor('#86efac'));
+        copyBtn.on('pointerout', () => {
+            if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
         });
     }
 

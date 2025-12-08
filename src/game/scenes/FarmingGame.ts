@@ -98,7 +98,6 @@ export class FarmingGame extends Scene {
     private joystickThumb!: Phaser.GameObjects.Arc;
     private joystickActive: boolean = false;
     private joystickPointer: Phaser.Input.Pointer | null = null;
-    private touchMoveTarget: { x: number, y: number } | null = null;
     private actionButton!: Phaser.GameObjects.Arc;
     private actionButtonText!: Phaser.GameObjects.Text;
 
@@ -264,14 +263,14 @@ export class FarmingGame extends Scene {
             refreshProfileUI: () => this.createUserProfileUI()
         });
 
-        // FactoryManager
+        // FactoryManager (Phygital Exchange)
         this.factoryManager = new FactoryManager(this, {
             getChestInventory: () => this.chestInventory,
-            getFertilizerCounts: () => this.fertilizerCounts,
             getPlayer: () => this.player,
             updateToolbar: () => this.updateToolbar(),
             closeSeedSelector: () => this.closeSeedSelector(),
-            closeChestPanel: () => this.closeChestPanel()
+            closeChestPanel: () => this.closeChestPanel(),
+            showToastMessage: (text, color) => this.showToastMessage(text, color)
         }, this.TILE_SIZE);
 
         // MailboxManager
@@ -486,29 +485,47 @@ export class FarmingGame extends Scene {
                     state.lastCareTime = new Date(plot.plant.plantedAt).getTime();
                     state.plantId = plot.plant.id;
 
-                    // Show plant sprite
+                    // Remove existing health bar before creating new one
+                    if (state.healthBarBg) {
+                        state.healthBarBg.destroy();
+                        state.healthBarBg = undefined;
+                    }
+                    if (state.healthBarFill) {
+                        state.healthBarFill.destroy();
+                        state.healthBarFill = undefined;
+                    }
+
+                    // Show plant sprite (will remove existing sprite if any)
                     this.showPlant(x, y, plantType, plantStage);
 
                     // Create health bar
                     this.createHealthBar(x, y, tileKey);
 
                     // Update health bar based on progress percentage
-                    if (state.healthBarFill && plot.progress) {
+                    // Re-fetch state as createHealthBar may have updated it
+                    const updatedState = this.farmLandStates.get(tileKey);
+                    if (updatedState?.healthBarFill && plot.progress) {
                         const progressPercent = plot.progress.percentage / 100;
                         const maxWidth = 14;
-                        state.healthBarFill.width = maxWidth * progressPercent;
+                        updatedState.healthBarFill.width = maxWidth * progressPercent;
 
                         if (progressPercent > 0.6) {
-                            state.healthBarFill.setFillStyle(0x4ade80);
+                            updatedState.healthBarFill.setFillStyle(0x4ade80);
                         } else if (progressPercent > 0.3) {
-                            state.healthBarFill.setFillStyle(0xfbbf24);
+                            updatedState.healthBarFill.setFillStyle(0xfbbf24);
                         } else {
-                            state.healthBarFill.setFillStyle(0xef4444);
+                            updatedState.healthBarFill.setFillStyle(0xef4444);
                         }
                     }
 
                     console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (${plot.progress.percentage}%)`);
                 } else {
+                    // Empty plot - remove any existing plant sprite and reset state
+                    this.removePlant(x, y);
+                    state.planted = false;
+                    state.cropType = null;
+                    state.plantStage = 0;
+                    state.plantId = undefined;
                     console.log(`Unlocked empty plot at ${tileKey} (landId: ${plot.landId})`);
                 }
             });
@@ -1479,7 +1496,7 @@ export class FarmingGame extends Scene {
     }
 
     private setupInteractions() {
-        // Click/touch on map to move (only if not on joystick or action button)
+        // Handle clicks for UI interactions (close selectors, etc.)
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (pointer.rightButtonDown()) {
                 return;
@@ -1508,7 +1525,7 @@ export class FarmingGame extends Scene {
                 return; // Touch is on inventory area
             }
 
-            // Check if seed option was just clicked (prevents movement)
+            // Check if seed option was just clicked
             if (this.seedOptionJustClicked) {
                 this.seedOptionJustClicked = false;
                 return;
@@ -1517,20 +1534,10 @@ export class FarmingGame extends Scene {
             // Check if seed selector is open - close it when clicking outside
             if (this.seedSelectorOpen) {
                 this.closeSeedSelector();
-                return; // Don't move when closing seed selector
+                return;
             }
 
-            // Set movement target (world coordinates)
-            const worldX = pointer.worldX;
-            const worldY = pointer.worldY;
-
-            // Check if target is on land
-            const targetTileX = Math.floor(worldX / this.TILE_SIZE);
-            const targetTileY = Math.floor(worldY / this.TILE_SIZE);
-
-            if (this.isLandTile(targetTileX, targetTileY)) {
-                this.touchMoveTarget = { x: worldX, y: worldY };
-            }
+            // Movement by click is disabled - use joystick or keyboard only
         });
     }
 
@@ -1828,6 +1835,12 @@ export class FarmingGame extends Scene {
     }
 
     private showPlant(x: number, y: number, cropType: PlantType, stage: number, isDead: boolean = false, isWilted: boolean = false) {
+        // IMPORTANT: Remove existing plant sprite first to prevent duplicates
+        const existingPlant = this.children.getByName(`plant-${x}-${y}`);
+        if (existingPlant) {
+            existingPlant.destroy();
+        }
+
         const cropDef = CROP_DEFINITIONS[cropType];
         let imageKey: string;
 
@@ -2094,23 +2107,6 @@ export class FarmingGame extends Scene {
                 const normalizedY = dy / distance;
                 velocityX = normalizedX * speed;
                 velocityY = normalizedY * speed;
-            }
-        }
-
-        // Touch move target (click to move)
-        if (this.touchMoveTarget && !this.joystickActive) {
-            const dx = this.touchMoveTarget.x - this.player.x;
-            const dy = this.touchMoveTarget.y - this.player.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance > 5) { // Threshold to stop
-                const normalizedX = dx / distance;
-                const normalizedY = dy / distance;
-                velocityX = normalizedX * speed;
-                velocityY = normalizedY * speed;
-            } else {
-                // Reached target
-                this.touchMoveTarget = null;
             }
         }
 

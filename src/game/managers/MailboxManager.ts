@@ -22,8 +22,10 @@ export class MailboxManager extends BaseManager {
     private cachedMissions: Mission[] | null = null;
     private missionsCacheTime: number = 0;
     private redeemResultElements: Phaser.GameObjects.GameObject[] = [];
+    private missionDetailElements: Phaser.GameObjects.GameObject[] = [];
     private qrScannerContainer: HTMLDivElement | null = null;
     private redeemInput: HTMLInputElement | null = null;
+    private socialLinkInput: HTMLInputElement | null = null;
     private shouldCloseMailbox: boolean = false;
     private tileSize: number;
 
@@ -170,6 +172,7 @@ export class MailboxManager extends BaseManager {
     public close(): void {
         this.isOpen = false;
         this.cleanupRedeemInput();
+        this.closeMissionDetails();
         this.destroyElements();
     }
 
@@ -492,27 +495,29 @@ export class MailboxManager extends BaseManager {
                     missionName.setColor(isDone ? '#16a34a' : '#5D4037');
                 });
 
-                cardBg.on('pointerdown', () => {
-                    this.showMissionDetails(mission);
+                // Track click start position to differentiate from drag
+                let clickStartY = 0;
+                cardBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+                    clickStartY = pointer.y;
+                    isDragging = true;
+                    lastPointerY = pointer.y;
+                });
+                cardBg.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+                    // Only trigger click if pointer didn't move much (not a drag)
+                    if (Math.abs(pointer.y - clickStartY) < 10) {
+                        this.showMissionDetails(mission);
+                    }
+                    isDragging = false;
                 });
             });
 
-            // Scroll zone
-            const scrollZone = this.scene.add.zone(modalX, scrollAreaTop + scrollAreaHeight / 2, modalWidth - 20, scrollAreaHeight);
-            scrollZone.setInteractive();
-            scrollZone.setDepth(5310);
-            this.scene.cameras.main.ignore(scrollZone);
-            this.addElement(scrollZone);
-            contentElements.push(scrollZone);
-
-            scrollZone.on('wheel', (_pointer: Phaser.Input.Pointer, _dx: number, _dy: number, dz: number) => {
-                scrollOffset = Phaser.Math.Clamp(scrollOffset + dz * 0.5, 0, maxScrollOffset);
-                updateScrollPositions();
-            });
-
-            scrollZone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-                isDragging = true;
-                lastPointerY = pointer.y;
+            // Scroll handling via scene input (don't use zone to avoid blocking card clicks)
+            // Handle wheel scroll on the modal area
+            this.scene.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: Phaser.GameObjects.GameObject[], _dx: number, _dy: number, dz: number) => {
+                if (this.isOpen && this.activeTab === 'missions') {
+                    scrollOffset = Phaser.Math.Clamp(scrollOffset + dz * 0.5, 0, maxScrollOffset);
+                    updateScrollPositions();
+                }
             });
 
             this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
@@ -708,9 +713,337 @@ export class MailboxManager extends BaseManager {
     }
 
     private showMissionDetails(mission: Mission): void {
-        // Simple details popup - can be expanded later
-        const message = `${mission.name}\n${mission.description}\nProgress: ${mission.progress}/${mission.target}`;
-        this.callbacks.showToastMessage(message, 0xffffff);
+        // Create mission detail modal
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+        const modalWidth = 280;
+        const modalHeight = mission.type === 'social' ? 240 : 200;
+
+        // Overlay
+        const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.7);
+        overlay.setDepth(5400);
+        overlay.setInteractive();
+        this.scene.cameras.main.ignore(overlay);
+        this.missionDetailElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.scene.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5401);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+            event.stopPropagation();
+        });
+        this.scene.cameras.main.ignore(modalBg);
+        this.missionDetailElements.push(modalBg);
+
+        modalBg.setScale(0);
+        this.scene.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        this.scene.time.delayedCall(100, () => {
+            // Close button
+            const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
+            closeBtnBg.setDisplaySize(24, 24);
+            closeBtnBg.setDepth(5402);
+            closeBtnBg.setInteractive({ useHandCursor: true });
+            this.scene.cameras.main.ignore(closeBtnBg);
+            this.missionDetailElements.push(closeBtnBg);
+
+            const closeText = this.scene.add.text(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'X', {
+                fontSize: '14px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            closeText.setOrigin(0.5);
+            closeText.setDepth(5403);
+            closeText.setStroke('#5D4037', 2);
+            this.scene.cameras.main.ignore(closeText);
+            this.missionDetailElements.push(closeText);
+
+            closeBtnBg.on('pointerdown', () => this.closeMissionDetails());
+            closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+            closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+
+            // Mission name
+            const title = this.scene.add.text(modalX, modalY - modalHeight / 2 + 35, mission.name, {
+                fontSize: '12px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2,
+                wordWrap: { width: modalWidth - 80 }
+            });
+            title.setOrigin(0.5);
+            title.setDepth(5402);
+            title.setStroke('#5D4037', 2);
+            this.scene.cameras.main.ignore(title);
+            this.missionDetailElements.push(title);
+
+            // Mission type badge
+            const typeColor = mission.type === 'social' ? 0x3b82f6 : 0x22c55e;
+            const typeLabel = mission.type.charAt(0).toUpperCase() + mission.type.slice(1);
+            const typeBadge = this.scene.add.rectangle(modalX, modalY - modalHeight / 2 + 58, 60, 16, typeColor);
+            typeBadge.setDepth(5402);
+            this.scene.cameras.main.ignore(typeBadge);
+            this.missionDetailElements.push(typeBadge);
+
+            const typeText = this.scene.add.text(modalX, modalY - modalHeight / 2 + 58, typeLabel, {
+                fontSize: '8px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            typeText.setOrigin(0.5);
+            typeText.setDepth(5403);
+            this.scene.cameras.main.ignore(typeText);
+            this.missionDetailElements.push(typeText);
+
+            // Description
+            const description = this.scene.add.text(modalX, modalY - 25, mission.description, {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#FFF8E1',
+                resolution: 2,
+                wordWrap: { width: modalWidth - 40 },
+                align: 'center'
+            });
+            description.setOrigin(0.5);
+            description.setDepth(5402);
+            description.setStroke('#5D4037', 1);
+            this.scene.cameras.main.ignore(description);
+            this.missionDetailElements.push(description);
+
+            // Progress bar
+            const barWidth = 180;
+            const barHeight = 12;
+            const barY = modalY + 10;
+            const progressPercent = Math.min((mission.progress / mission.target) * 100, 100);
+
+            const barBg = this.scene.add.rectangle(modalX, barY, barWidth, barHeight, 0x5D4037);
+            barBg.setDepth(5402);
+            this.scene.cameras.main.ignore(barBg);
+            this.missionDetailElements.push(barBg);
+
+            const barFillWidth = Math.max(2, (barWidth - 4) * progressPercent / 100);
+            const barFill = this.scene.add.rectangle(modalX - (barWidth - 4) / 2 + barFillWidth / 2, barY, barFillWidth, barHeight - 4,
+                mission.status === 'completed' || mission.status === 'claimed' ? 0x22c55e : 0xf59e0b);
+            barFill.setDepth(5403);
+            this.scene.cameras.main.ignore(barFill);
+            this.missionDetailElements.push(barFill);
+
+            const progressText = this.scene.add.text(modalX, barY, `${mission.progress}/${mission.target}`, {
+                fontSize: '8px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            progressText.setOrigin(0.5);
+            progressText.setDepth(5404);
+            progressText.setStroke('#000000', 2);
+            this.scene.cameras.main.ignore(progressText);
+            this.missionDetailElements.push(progressText);
+
+            // Reward info
+            let rewardText = 'Rewards: ';
+            if (mission.reward) {
+                if (mission.reward.xp) rewardText += `${mission.reward.xp} XP `;
+                if (mission.reward.reputation) rewardText += `${mission.reward.reputation} Rep `;
+                if (mission.reward.items) {
+                    mission.reward.items.forEach(item => {
+                        rewardText += `${item.amount} ${item.type} `;
+                    });
+                }
+            }
+            if (rewardText === 'Rewards: ') rewardText = 'Complete to earn rewards!';
+
+            const rewardLabel = this.scene.add.text(modalX, barY + 25, rewardText.trim(), {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#fbbf24',
+                resolution: 2
+            });
+            rewardLabel.setOrigin(0.5);
+            rewardLabel.setDepth(5402);
+            rewardLabel.setStroke('#5D4037', 1);
+            this.scene.cameras.main.ignore(rewardLabel);
+            this.missionDetailElements.push(rewardLabel);
+
+            // For social missions, add input for link submission
+            if (mission.type === 'social' && mission.status === 'active') {
+                const inputLabel = this.scene.add.text(modalX, barY + 48, 'Submit your social link:', {
+                    fontSize: '9px',
+                    fontFamily: 'PixelFont',
+                    color: '#FFFFFF',
+                    resolution: 2
+                });
+                inputLabel.setOrigin(0.5);
+                inputLabel.setDepth(5402);
+                inputLabel.setStroke('#5D4037', 1);
+                this.scene.cameras.main.ignore(inputLabel);
+                this.missionDetailElements.push(inputLabel);
+
+                // Create HTML input for social link
+                this.socialLinkInput = document.createElement('input');
+                this.socialLinkInput.type = 'text';
+                this.socialLinkInput.placeholder = 'Paste your link here...';
+                this.socialLinkInput.style.cssText = `
+                    position: fixed;
+                    left: 50%;
+                    top: 50%;
+                    transform: translate(-50%, 35px);
+                    width: 200px;
+                    padding: 8px 12px;
+                    font-size: 11px;
+                    font-family: 'PixelFont', monospace;
+                    border: 3px solid #5D4037;
+                    border-radius: 8px;
+                    background-color: #FFF8E1;
+                    color: #5D4037;
+                    outline: none;
+                    text-align: center;
+                    z-index: 10001;
+                `;
+                document.body.appendChild(this.socialLinkInput);
+                this.socialLinkInput.focus();
+
+                // Submit button
+                const submitBtnBg = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 30, 'square-buttons', 6);
+                submitBtnBg.setDisplaySize(100, 28);
+                submitBtnBg.setDepth(5402);
+                submitBtnBg.setInteractive({ useHandCursor: true });
+                this.scene.cameras.main.ignore(submitBtnBg);
+                this.missionDetailElements.push(submitBtnBg);
+
+                const submitText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, 'Submit', {
+                    fontSize: '11px',
+                    fontFamily: 'PixelFont',
+                    color: '#FFFFFF',
+                    resolution: 2
+                });
+                submitText.setOrigin(0.5);
+                submitText.setDepth(5403);
+                submitText.setStroke('#5D4037', 2);
+                this.scene.cameras.main.ignore(submitText);
+                this.missionDetailElements.push(submitText);
+
+                submitBtnBg.on('pointerdown', () => {
+                    const link = this.socialLinkInput?.value.trim();
+                    if (link) {
+                        this.submitSocialLink(mission.id, link);
+                    } else {
+                        this.callbacks.showToastMessage('Please enter a valid link', 0xef4444);
+                    }
+                });
+                submitBtnBg.on('pointerover', () => submitBtnBg.setTint(0xcccccc));
+                submitBtnBg.on('pointerout', () => submitBtnBg.clearTint());
+            } else if (mission.status === 'completed') {
+                // Claim button for completed missions
+                const claimBtnBg = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 30, 'square-buttons', 6);
+                claimBtnBg.setDisplaySize(100, 28);
+                claimBtnBg.setDepth(5402);
+                claimBtnBg.setInteractive({ useHandCursor: true });
+                this.scene.cameras.main.ignore(claimBtnBg);
+                this.missionDetailElements.push(claimBtnBg);
+
+                const claimText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, 'Claim Reward', {
+                    fontSize: '10px',
+                    fontFamily: 'PixelFont',
+                    color: '#FFFFFF',
+                    resolution: 2
+                });
+                claimText.setOrigin(0.5);
+                claimText.setDepth(5403);
+                claimText.setStroke('#5D4037', 2);
+                this.scene.cameras.main.ignore(claimText);
+                this.missionDetailElements.push(claimText);
+
+                claimBtnBg.on('pointerdown', () => this.claimMissionReward(mission.id));
+                claimBtnBg.on('pointerover', () => claimBtnBg.setTint(0xcccccc));
+                claimBtnBg.on('pointerout', () => claimBtnBg.clearTint());
+            } else if (mission.status === 'claimed') {
+                // Already claimed label
+                const claimedLabel = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, '✓ Claimed', {
+                    fontSize: '11px',
+                    fontFamily: 'PixelFont',
+                    color: '#22c55e',
+                    resolution: 2
+                });
+                claimedLabel.setOrigin(0.5);
+                claimedLabel.setDepth(5402);
+                claimedLabel.setStroke('#5D4037', 2);
+                this.scene.cameras.main.ignore(claimedLabel);
+                this.missionDetailElements.push(claimedLabel);
+            }
+        });
+
+        overlay.on('pointerdown', () => this.closeMissionDetails());
+    }
+
+    private closeMissionDetails(): void {
+        // Cleanup social link input
+        if (this.socialLinkInput && this.socialLinkInput.parentNode) {
+            this.socialLinkInput.parentNode.removeChild(this.socialLinkInput);
+        }
+        this.socialLinkInput = null;
+
+        // Destroy all mission detail elements
+        this.missionDetailElements.forEach(el => {
+            if (el && el.destroy) el.destroy();
+        });
+        this.missionDetailElements = [];
+    }
+
+    private async submitSocialLink(missionId: string, link: string): Promise<void> {
+        this.callbacks.showToastMessage('Submitting...', 0x4a90e2);
+
+        try {
+            // TODO: Call API to submit social link
+            // For now, just update progress
+            const result = await MissionService.updateMissionProgress(missionId, 1);
+
+            if (result) {
+                this.callbacks.showToastMessage('Link submitted successfully!', 0x22c55e);
+                this.closeMissionDetails();
+                this.refreshCache();
+                // Refresh missions list
+                this.close();
+                this.open();
+            } else {
+                this.callbacks.showToastMessage('Failed to submit link', 0xef4444);
+            }
+        } catch {
+            this.callbacks.showToastMessage('Error submitting link', 0xef4444);
+        }
+    }
+
+    private async claimMissionReward(missionId: string): Promise<void> {
+        this.callbacks.showToastMessage('Claiming reward...', 0x4a90e2);
+
+        try {
+            const result = await MissionService.claimMissionReward(missionId);
+
+            if (result) {
+                this.callbacks.showToastMessage('Reward claimed!', 0x22c55e);
+                this.closeMissionDetails();
+                this.refreshCache();
+                this.callbacks.updateToolbar();
+                // Refresh missions list
+                this.close();
+                this.open();
+            } else {
+                this.callbacks.showToastMessage('Failed to claim reward', 0xef4444);
+            }
+        } catch {
+            this.callbacks.showToastMessage('Error claiming reward', 0xef4444);
+        }
     }
 
     private async openQRScanner(): Promise<void> {
@@ -998,6 +1331,7 @@ export class MailboxManager extends BaseManager {
 
     public destroy(): void {
         this.cleanupRedeemInput();
+        this.closeMissionDetails();
         this.closeQRScanner();
         this.redeemResultElements.forEach(el => { if (el && el.destroy) el.destroy(); });
         super.destroy();

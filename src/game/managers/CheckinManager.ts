@@ -59,8 +59,8 @@ export class CheckinManager extends BaseManager {
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
-        const modalWidth = 320;
-        const modalHeight = 220;
+        const modalWidth = 360;
+        const modalHeight = 180;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
 
@@ -110,8 +110,40 @@ export class CheckinManager extends BaseManager {
     }
 
     private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
+        // Close button
+        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 30, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
+        closeBtnBg.setDisplaySize(24, 24);
+        closeBtnBg.setDepth(5302);
+        closeBtnBg.setAlpha(0);
+        closeBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(closeBtnBg);
+        this.addElement(closeBtnBg);
+
+        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 30, modalY - modalHeight / 2 + 35, 'X', {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        closeText.setOrigin(0.5);
+        closeText.setDepth(5303);
+        closeText.setStroke('#5D4037', 2);
+        closeText.setAlpha(0);
+        this.scene.cameras.main.ignore(closeText);
+        this.addElement(closeText);
+
+        this.scene.tweens.add({
+            targets: [closeBtnBg, closeText],
+            alpha: 1,
+            duration: 150
+        });
+
+        closeBtnBg.on('pointerdown', () => this.close());
+        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+
         // Title
-        const title = this.scene.add.text(modalX, modalY - modalHeight / 2 + 35, 'Daily Check-in', {
+        const title = this.scene.add.text(modalX, modalY - modalHeight / 2 + 35, 'Daily Streak', {
             fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -126,40 +158,58 @@ export class CheckinManager extends BaseManager {
 
         this.scene.tweens.add({ targets: title, alpha: 1, duration: 150 });
 
+        // Subtitle
+        const subtitle = this.scene.add.text(modalX, modalY - modalHeight / 2 + 52, '7-day cycle. Resets if missed.', {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#8D6E63',
+            resolution: 2
+        });
+        subtitle.setOrigin(0.5);
+        subtitle.setDepth(5302);
+        subtitle.setAlpha(0);
+        this.scene.cameras.main.ignore(subtitle);
+        this.addElement(subtitle);
+
+        this.scene.tweens.add({ targets: subtitle, alpha: 1, duration: 150, delay: 50 });
+
         // Get checkin data
         const checkinData = this.getCheckinData();
         const todayDayOfWeek = this.getDayOfWeek();
         const canCheckin = this.canCheckinToday();
 
-        // Day boxes
-        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const dayBoxSize = 38;
-        const daySpacing = 8;
-        const rowSpacing = 45;
-        const row1Y = modalY - 35;
-        const row2Y = row1Y + rowSpacing;
+        // Rewards configuration based on the image
+        // Day 1 (Mon): 100 Gold, Day 2 (Tue): 1 Glove, Day 3 (Wed): 20 Gem
+        // Day 4 (Thu): 2 Algae Seed, Day 5 (Fri): 1 Pesticide, Day 6 (Sat): 200 Gold, Day 7 (Sun): 1 Mushroom Seed
+        const rewards = [
+            { day: 'Day 1', icon: '💰', label: 'x100', color: '#FFD700' },      // Mon - 100 Gold
+            { day: 'Day 2', icon: '🧤', label: 'x1', color: '#98D8C8' },        // Tue - 1 Glove
+            { day: 'Day 3', icon: '💎', label: 'x20', color: '#E066FF' },       // Wed - 20 Gem
+            { day: 'Day 4', icon: null, image: 'algae-seed', label: 'x2', color: '#4ade80' }, // Thu - 2 Algae Seed
+            { day: 'Day 5', icon: '🧪', label: 'x1', color: '#FF6B6B' },        // Fri - 1 Pesticide
+            { day: 'Day 6', icon: '💰', label: 'x200', color: '#FFD700' },      // Sat - 200 Gold
+            { day: 'Day 7', icon: null, image: 'mushroom-seed', label: 'x1', color: '#fbbf24' }, // Sun - 1 Mushroom Seed
+        ];
 
-        dayNames.forEach((dayName, index) => {
-            let dayX: number;
-            let dayY: number;
+        // Day boxes - 7 days in a row
+        const dayBoxSize = 36;
+        const daySpacing = 6;
+        const totalWidth = 7 * dayBoxSize + 6 * daySpacing;
+        const startX = modalX - totalWidth / 2 + dayBoxSize / 2;
+        const dayY = modalY - 5;
 
-            if (index < 4) {
-                const row1StartX = modalX - (4 * (dayBoxSize + daySpacing) - daySpacing) / 2 + dayBoxSize / 2;
-                dayX = row1StartX + index * (dayBoxSize + daySpacing);
-                dayY = row1Y;
-            } else {
-                const row2StartX = modalX - (3 * (dayBoxSize + daySpacing) - daySpacing) / 2 + dayBoxSize / 2;
-                dayX = row2StartX + (index - 4) * (dayBoxSize + daySpacing);
-                dayY = row2Y;
-            }
+        rewards.forEach((reward, index) => {
+            const dayX = startX + index * (dayBoxSize + daySpacing) + 10;
 
-            const isToday = index === todayDayOfWeek;
-            const isChecked = checkinData.checkedDays.includes(index);
+            // Map index to day of week (0=Mon -> dayOfWeek 1, etc.)
+            const dayOfWeekIndex = (index + 1) % 7; // Mon=1, Tue=2, ..., Sun=0
+            const isToday = dayOfWeekIndex === todayDayOfWeek;
+            const isChecked = checkinData.checkedDays.includes(dayOfWeekIndex);
 
-            // Day box
+            // Day box background
             const boxFrame = isChecked ? 6 : (isToday ? 6 : 7);
             const dayBox = this.scene.add.sprite(dayX, dayY, 'square-buttons', boxFrame);
-            dayBox.setDisplaySize(dayBoxSize, dayBoxSize);
+            dayBox.setDisplaySize(dayBoxSize, dayBoxSize + 8);
             dayBox.setDepth(5302);
             dayBox.setAlpha(0);
             this.scene.cameras.main.ignore(dayBox);
@@ -171,38 +221,96 @@ export class CheckinManager extends BaseManager {
                 dayBox.setTint(0x888888);
             }
 
-            // Day name text
-            const dayText = this.scene.add.text(dayX, dayY - 10, dayName, {
+            // Day label (Day 1, Day 2, etc.)
+            const dayLabel = this.scene.add.text(dayX, dayY - 18, reward.day, {
+                fontSize: '7px',
+                fontFamily: 'PixelFont',
+                color: isToday ? '#FFFFFF' : '#CCCCCC',
+                resolution: 2
+            });
+            dayLabel.setOrigin(0.5);
+            dayLabel.setDepth(5303);
+            dayLabel.setStroke('#5D4037', 1);
+            dayLabel.setAlpha(0);
+            this.scene.cameras.main.ignore(dayLabel);
+            this.addElement(dayLabel);
+
+            // Icon or image
+            if (reward.image) {
+                const rewardIcon = this.scene.add.image(dayX, dayY - 2, reward.image);
+                rewardIcon.setDisplaySize(20, 20);
+                rewardIcon.setDepth(5303);
+                rewardIcon.setAlpha(0);
+                if (isChecked) rewardIcon.setTint(0xffffff);
+                else if (!isToday) rewardIcon.setTint(0x888888);
+                this.scene.cameras.main.ignore(rewardIcon);
+                this.addElement(rewardIcon);
+
+                this.scene.tweens.add({
+                    targets: rewardIcon,
+                    alpha: 1,
+                    duration: 150,
+                    delay: index * 30
+                });
+            } else if (reward.icon) {
+                const iconText = this.scene.add.text(dayX, dayY - 2, reward.icon, {
+                    fontSize: '14px',
+                    resolution: 2
+                });
+                iconText.setOrigin(0.5);
+                iconText.setDepth(5303);
+                iconText.setAlpha(0);
+                this.scene.cameras.main.ignore(iconText);
+                this.addElement(iconText);
+
+                this.scene.tweens.add({
+                    targets: iconText,
+                    alpha: 1,
+                    duration: 150,
+                    delay: index * 30
+                });
+            }
+
+            // Quantity label
+            const quantityText = this.scene.add.text(dayX, dayY + 14, reward.label, {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
-                color: '#FFFFFF',
+                color: isChecked ? '#FFFFFF' : reward.color,
                 resolution: 2
             });
-            dayText.setOrigin(0.5);
-            dayText.setDepth(5303);
-            dayText.setStroke('#5D4037', 1);
-            dayText.setAlpha(0);
-            this.scene.cameras.main.ignore(dayText);
-            this.addElement(dayText);
+            quantityText.setOrigin(0.5);
+            quantityText.setDepth(5303);
+            quantityText.setStroke('#5D4037', 1);
+            quantityText.setAlpha(0);
+            this.scene.cameras.main.ignore(quantityText);
+            this.addElement(quantityText);
 
-            // Checkmark or day number
-            const checkSymbol = isChecked ? '✓' : (index + 1).toString();
-            const checkText = this.scene.add.text(dayX, dayY + 6, checkSymbol, {
-                fontSize: isChecked ? '12px' : '10px',
-                fontFamily: 'PixelFont',
-                color: isChecked ? '#FFFFFF' : '#FFF8E1',
-                resolution: 2
-            });
-            checkText.setOrigin(0.5);
-            checkText.setDepth(5303);
-            checkText.setStroke('#5D4037', 1);
-            checkText.setAlpha(0);
-            this.scene.cameras.main.ignore(checkText);
-            this.addElement(checkText);
+            // Checkmark overlay for checked days
+            if (isChecked) {
+                const checkmark = this.scene.add.text(dayX, dayY, '✓', {
+                    fontSize: '20px',
+                    fontFamily: 'PixelFont',
+                    color: '#FFFFFF',
+                    resolution: 2
+                });
+                checkmark.setOrigin(0.5);
+                checkmark.setDepth(5304);
+                checkmark.setStroke('#2d5a2d', 3);
+                checkmark.setAlpha(0);
+                this.scene.cameras.main.ignore(checkmark);
+                this.addElement(checkmark);
+
+                this.scene.tweens.add({
+                    targets: checkmark,
+                    alpha: 1,
+                    duration: 150,
+                    delay: index * 30
+                });
+            }
 
             // Fade in
             this.scene.tweens.add({
-                targets: [dayBox, dayText, checkText],
+                targets: [dayBox, dayLabel, quantityText],
                 alpha: 1,
                 duration: 150,
                 delay: index * 30
@@ -214,13 +322,13 @@ export class CheckinManager extends BaseManager {
                 dayBox.on('pointerover', () => dayBox.setTint(0xffff88));
                 dayBox.on('pointerout', () => dayBox.clearTint());
                 dayBox.on('pointerdown', () => {
-                    this.performCheckin(index, dayBox, checkText, checkinData);
+                    this.performCheckin(dayOfWeekIndex, dayBox, quantityText, checkinData, index);
                 });
             }
         });
 
         // Streak info
-        const infoY = row2Y + 35;
+        const infoY = dayY + 45;
         const streakText = this.scene.add.text(modalX, infoY, `Current Streak: ${checkinData.streak} day${checkinData.streak !== 1 ? 's' : ''}`, {
             fontSize: '10px',
             fontFamily: 'PixelFont',
@@ -235,77 +343,14 @@ export class CheckinManager extends BaseManager {
         this.addElement(streakText);
 
         this.scene.tweens.add({ targets: streakText, alpha: 1, duration: 150, delay: 200 });
-
-        // Reward info
-        const rewardInfo = this.scene.add.text(modalX, infoY + 16, 'Check in to get 1 Water!', {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#4ade80',
-            resolution: 2
-        });
-        rewardInfo.setOrigin(0.5);
-        rewardInfo.setDepth(5302);
-        rewardInfo.setStroke('#2d5a2d', 1);
-        rewardInfo.setAlpha(0);
-        this.scene.cameras.main.ignore(rewardInfo);
-        this.addElement(rewardInfo);
-
-        this.scene.tweens.add({ targets: rewardInfo, alpha: 1, duration: 150, delay: 250 });
-
-        // 7-day streak bonus
-        const bonusInfo = this.scene.add.text(modalX, infoY + 30, '7-day streak = Mushroom Seed!', {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#fbbf24',
-            resolution: 2
-        });
-        bonusInfo.setOrigin(0.5);
-        bonusInfo.setDepth(5302);
-        bonusInfo.setStroke('#5D4037', 1);
-        bonusInfo.setAlpha(0);
-        this.scene.cameras.main.ignore(bonusInfo);
-        this.addElement(bonusInfo);
-
-        this.scene.tweens.add({ targets: bonusInfo, alpha: 1, duration: 150, delay: 300 });
-
-        // Close button
-        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 30, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
-        closeBtnBg.setDisplaySize(24, 24);
-        closeBtnBg.setDepth(5302);
-        closeBtnBg.setAlpha(0);
-        closeBtnBg.setInteractive({ useHandCursor: true });
-        this.scene.cameras.main.ignore(closeBtnBg);
-        this.addElement(closeBtnBg);
-
-        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 30, modalY - modalHeight / 2 + 35, 'X', {
-            fontSize: '10px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
-        });
-        closeText.setOrigin(0.5);
-        closeText.setDepth(5303);
-        closeText.setStroke('#5D4037', 1);
-        closeText.setAlpha(0);
-        this.scene.cameras.main.ignore(closeText);
-        this.addElement(closeText);
-
-        this.scene.tweens.add({
-            targets: [closeBtnBg, closeText],
-            alpha: 1,
-            duration: 150
-        });
-
-        closeBtnBg.on('pointerdown', () => this.close());
-        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
-        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
     }
 
     private performCheckin(
         dayIndex: number,
         dayBox: Phaser.GameObjects.Sprite,
-        checkText: Phaser.GameObjects.Text,
-        checkinData: CheckinData
+        quantityText: Phaser.GameObjects.Text,
+        checkinData: CheckinData,
+        rewardIndex: number
     ): void {
         const today = this.getTodayString();
 
@@ -333,9 +378,21 @@ export class CheckinManager extends BaseManager {
 
         // Update UI
         dayBox.setTint(0x4ade80);
-        checkText.setText('✓');
-        checkText.setFontSize(12);
+        quantityText.setColor('#FFFFFF');
         dayBox.disableInteractive();
+
+        // Add checkmark
+        const checkmark = this.scene.add.text(dayBox.x, dayBox.y, '✓', {
+            fontSize: '20px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        checkmark.setOrigin(0.5);
+        checkmark.setDepth(5304);
+        checkmark.setStroke('#2d5a2d', 3);
+        this.scene.cameras.main.ignore(checkmark);
+        this.addElement(checkmark);
 
         // Animate check
         this.scene.tweens.add({
@@ -346,16 +403,34 @@ export class CheckinManager extends BaseManager {
             yoyo: true
         });
 
-        // Give reward: +1 water
-        this.callbacks.onRewardWater();
-        this.showCheckinReward('+1 Water!', 0x4ade80);
+        // Rewards based on day index
+        const rewardMessages = [
+            '+100 Gold!',
+            '+1 Glove!',
+            '+20 Gems!',
+            '+2 Algae Seeds!',
+            '+1 Pesticide!',
+            '+200 Gold!',
+            '+1 Mushroom Seed!'
+        ];
 
-        // Check for 7-day streak bonus
-        if (newStreak >= 7 && newStreak % 7 === 0) {
+        const rewardColors = [
+            0xFFD700,
+            0x98D8C8,
+            0xE066FF,
+            0x4ade80,
+            0xFF6B6B,
+            0xFFD700,
+            0xfbbf24
+        ];
+
+        // Give reward based on day
+        this.callbacks.onRewardWater(); // Base reward (keeping for compatibility)
+        this.showCheckinReward(rewardMessages[rewardIndex], rewardColors[rewardIndex]);
+
+        // Check for 7-day streak bonus (Day 7 = Mushroom Seed)
+        if (rewardIndex === 6) {
             this.callbacks.onRewardMushroomSeed();
-            this.scene.time.delayedCall(1000, () => {
-                this.showCheckinReward('+1 Mushroom Seed!', 0xfbbf24);
-            });
         }
 
         // Update toolbar
