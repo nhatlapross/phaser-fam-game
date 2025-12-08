@@ -5,6 +5,7 @@ import { UserService } from '../UserService';
 import { SeedService } from '../SeedService';
 import { FertilizerService } from '../FertilizerService';
 import { GardenService } from '../GardenService';
+import { FruitService } from '../FruitService';
 
 // Import managers
 import {
@@ -74,7 +75,7 @@ export class FarmingGame extends Scene {
 
     // Chest inventory system
     private readonly CHEST_SLOTS = 12; // 3 columns x 4 rows
-    private readonly MAX_PER_SLOT = 5; // Max 5 fruits per slot
+    private readonly MAX_PER_SLOT = 50; // Max 50 fruits per slot
     private chestInventory: { type: PlantType; count: number }[] = []; // Each slot: {type, count}
     private chestOpen: boolean = false;
 
@@ -207,13 +208,14 @@ export class FarmingGame extends Scene {
         // Check if already connected
         EventBus.emit('check-wallet-connection');
 
-        // Fetch seed and fertilizer inventory on scene start (if user is already logged in)
+        // Fetch seed, fertilizer, and fruit inventory on scene start (if user is already logged in)
         this.fetchSeedInventory();
         this.fetchFertilizerInventory();
-        
+        this.fetchFruitInventory();
+
         // Load garden data (planted crops)
         this.loadGardenData();
-        
+
         // Fetch user profile (balances, etc.)
         this.fetchUserProfile();
 
@@ -416,6 +418,42 @@ export class FarmingGame extends Scene {
         } catch (error) {
             console.error('Error fetching fertilizer inventory:', error);
             // Update toolbar anyway to show 0 counts
+            this.updateToolbar();
+        }
+    }
+
+    /**
+     * Fetches fruit inventory from API and updates chest inventory
+     */
+    private async fetchFruitInventory() {
+        try {
+            const fruitInventory = await FruitService.getFruitInventory();
+
+            // Reset chest inventory
+            this.chestInventory = [];
+
+            // Populate chest inventory from API response
+            for (const item of fruitInventory) {
+                if (item.count > 0) {
+                    // Split into slots of MAX_PER_SLOT each
+                    let remaining = item.count;
+                    while (remaining > 0 && this.chestInventory.length < this.CHEST_SLOTS) {
+                        const slotCount = Math.min(remaining, this.MAX_PER_SLOT);
+                        this.chestInventory.push({
+                            type: item.type,
+                            count: slotCount
+                        });
+                        remaining -= slotCount;
+                    }
+                }
+            }
+
+            console.log('Fruit inventory updated:', this.chestInventory);
+
+            // Update toolbar to reflect new counts
+            this.updateToolbar();
+        } catch (error) {
+            console.error('Error fetching fruit inventory:', error);
             this.updateToolbar();
         }
     }
@@ -1274,14 +1312,15 @@ export class FarmingGame extends Scene {
     private onWalletConnected(address: string) {
         console.log('FarmingGame: wallet connected', address);
         this.createWalletDisplay();
-        
-        // Fetch seed and fertilizer inventory from API
+
+        // Fetch seed, fertilizer, and fruit inventory from API
         this.fetchSeedInventory();
         this.fetchFertilizerInventory();
-        
+        this.fetchFruitInventory();
+
         // Load garden data (planted crops)
         this.loadGardenData();
-        
+
         // Fetch user profile (balances, etc.)
         this.fetchUserProfile();
     }

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
-import { PlantType, ChestSlot, EXCHANGE_REWARDS, ExchangeReward } from '../types/GameTypes';
+import { PlantType, ChestSlot, EXCHANGE_REWARDS, ExchangeReward, CROP_DEFINITIONS } from '../types/GameTypes';
 
 interface FactoryCallbacks {
     getChestInventory: () => ChestSlot[];
@@ -119,7 +119,7 @@ export class FactoryManager extends BaseManager {
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
 
-        const panelWidth = 300;
+        const panelWidth = 340;
         const panelHeight = 300;
         const panelX = screenWidth / 2;
         const panelY = screenHeight / 2;
@@ -206,103 +206,110 @@ export class FactoryManager extends BaseManager {
             delay: 100
         });
 
-        // Current inventory display
+        // Current inventory display - centered
         const treeCount = this.getFruitCountInChest('tree');
         const mushroomCount = this.getFruitCountInChest('mushroom');
         const algaeCount = this.getFruitCountInChest('algae');
 
         const inventoryY = panelY - panelHeight / 2 + 58;
-        const invStartX = panelX - 80;
+        const invSpacing = 55; // Space between each fruit group
+        const invStartX = panelX - invSpacing; // Center the 3 groups
 
-        // Tree fruit count
-        const treeIcon = this.scene.add.text(invStartX, inventoryY, '🌳', { fontSize: '12px', resolution: 2 });
-        treeIcon.setOrigin(0.5);
+        // Tree fruit count - use image sprite like chest
+        const treeIcon = this.scene.add.image(invStartX - invSpacing, inventoryY, CROP_DEFINITIONS.tree.fruitImage);
+        treeIcon.setDisplaySize(18, 18);
         treeIcon.setDepth(5302);
         this.scene.cameras.main.ignore(treeIcon);
         this.addElement(treeIcon);
 
-        const treeText = this.scene.add.text(invStartX + 15, inventoryY, `${treeCount}`, {
-            fontSize: '9px',
+        const treeText = this.scene.add.text(invStartX - invSpacing + 12, inventoryY, `${treeCount}`, {
+            fontSize: '10px',
             fontFamily: 'PixelFont',
-            color: '#4ade80',
+            color: '#2d5016',
             resolution: 2
         });
         treeText.setOrigin(0, 0.5);
         treeText.setDepth(5302);
+        treeText.setStroke('#000000', 1);
         this.scene.cameras.main.ignore(treeText);
         this.addElement(treeText);
 
-        // Mushroom count
-        const mushIcon = this.scene.add.text(invStartX + 50, inventoryY, '🍄', { fontSize: '12px', resolution: 2 });
-        mushIcon.setOrigin(0.5);
+        // Mushroom count - use image sprite like chest
+        const mushIcon = this.scene.add.image(invStartX, inventoryY, CROP_DEFINITIONS.mushroom.fruitImage);
+        mushIcon.setDisplaySize(18, 18);
         mushIcon.setDepth(5302);
         this.scene.cameras.main.ignore(mushIcon);
         this.addElement(mushIcon);
 
-        const mushText = this.scene.add.text(invStartX + 65, inventoryY, `${mushroomCount}`, {
-            fontSize: '9px',
+        const mushText = this.scene.add.text(invStartX + 12, inventoryY, `${mushroomCount}`, {
+            fontSize: '10px',
             fontFamily: 'PixelFont',
-            color: '#f59e0b',
+            color: '#92400e',
             resolution: 2
         });
         mushText.setOrigin(0, 0.5);
         mushText.setDepth(5302);
+        mushText.setStroke('#000000', 1);
         this.scene.cameras.main.ignore(mushText);
         this.addElement(mushText);
 
-        // Algae/Spore count
-        const sporeIcon = this.scene.add.text(invStartX + 110, inventoryY, '🧬', { fontSize: '12px', resolution: 2 });
-        sporeIcon.setOrigin(0.5);
+        // Algae/Spore count - use image sprite like chest
+        const sporeIcon = this.scene.add.image(invStartX + invSpacing, inventoryY, CROP_DEFINITIONS.algae.fruitImage);
+        sporeIcon.setDisplaySize(18, 18);
         sporeIcon.setDepth(5302);
         this.scene.cameras.main.ignore(sporeIcon);
         this.addElement(sporeIcon);
 
-        const sporeText = this.scene.add.text(invStartX + 125, inventoryY, `${algaeCount}`, {
-            fontSize: '9px',
+        const sporeText = this.scene.add.text(invStartX + invSpacing + 12, inventoryY, `${algaeCount}`, {
+            fontSize: '10px',
             fontFamily: 'PixelFont',
-            color: '#3b82f6',
+            color: '#1e40af',
             resolution: 2
         });
         sporeText.setOrigin(0, 0.5);
         sporeText.setDepth(5302);
+        sporeText.setStroke('#000000', 1);
         this.scene.cameras.main.ignore(sporeText);
         this.addElement(sporeText);
 
-        // Table header - positioned relative to panel center
-        const tableOffsetX = 15; // Shift table to the right
-        const headerY = panelY - 75;
-        const col1X = panelX - 100 + tableOffsetX; // Reward name - more to the left
-        const col2X = panelX + 20 + tableOffsetX;   // Cost
-        const col3X = panelX + 80 + tableOffsetX;  // Action button - moved to right edge
+        // Table header - positioned relative to panel edges
+        const tableWidth = panelWidth - 75; // Table width with padding
+        const tableOffsetX = 10; // Shift table to the right
+        const headerY = panelY - 60; // Increased gap from inventory display
+        const tableLeftEdge = panelX - tableWidth / 2 + tableOffsetX;
+        const tableRightEdge = panelX + tableWidth / 2 + tableOffsetX;
+        const col1X = tableLeftEdge + 5;   // Formula column (left edge + padding)
+        const col2X = panelX + tableOffsetX + 5; // Result column (center + offset)
+        const col3X = tableRightEdge - 30; // Action button (right edge - padding)
 
-        const headerBg = this.scene.add.rectangle(panelX + tableOffsetX, headerY, panelWidth - 70, 16, 0x5D4037);
+        const headerBg = this.scene.add.rectangle(panelX + tableOffsetX, headerY, tableWidth, 16, 0x5D4037);
         headerBg.setDepth(5301);
         this.scene.cameras.main.ignore(headerBg);
         this.addElement(headerBg);
 
-        const headerReward = this.scene.add.text(col1X, headerY, 'Reward', {
+        const headerFormula = this.scene.add.text(col1X, headerY, 'Formula', {
             fontSize: '8px',
             fontFamily: 'PixelFont',
             color: '#FFF8E1',
             resolution: 2
         });
-        headerReward.setOrigin(0, 0.5);
-        headerReward.setDepth(5302);
-        this.scene.cameras.main.ignore(headerReward);
-        this.addElement(headerReward);
+        headerFormula.setOrigin(0, 0.5);
+        headerFormula.setDepth(5302);
+        this.scene.cameras.main.ignore(headerFormula);
+        this.addElement(headerFormula);
 
-        const headerCost = this.scene.add.text(col2X, headerY, 'Cost', {
+        const headerResult = this.scene.add.text(col2X, headerY, 'Result', {
             fontSize: '8px',
             fontFamily: 'PixelFont',
             color: '#FFF8E1',
             resolution: 2
         });
-        headerCost.setOrigin(0.5, 0.5);
-        headerCost.setDepth(5302);
-        this.scene.cameras.main.ignore(headerCost);
-        this.addElement(headerCost);
+        headerResult.setOrigin(0, 0.5);
+        headerResult.setDepth(5302);
+        this.scene.cameras.main.ignore(headerResult);
+        this.addElement(headerResult);
 
-        const headerAction = this.scene.add.text(col3X, headerY, 'Action', {
+        const headerAction = this.scene.add.text(col3X, headerY, '', {
             fontSize: '8px',
             fontFamily: 'PixelFont',
             color: '#FFF8E1',
@@ -320,7 +327,7 @@ export class FactoryManager extends BaseManager {
         // Create mask for scroll area - use screen coordinates
         const maskGraphics = this.scene.make.graphics({ x: 0, y: 0 });
         maskGraphics.fillStyle(0xffffff);
-        maskGraphics.fillRect(panelX - panelWidth / 2 + 30 + tableOffsetX, scrollAreaTop, panelWidth - 70, scrollAreaHeight);
+        maskGraphics.fillRect(panelX - tableWidth / 2 + tableOffsetX, scrollAreaTop, tableWidth, scrollAreaHeight);
         const scrollMask = maskGraphics.createGeometryMask();
         this.addElement(maskGraphics);
 
@@ -355,7 +362,7 @@ export class FactoryManager extends BaseManager {
                 const canAfford = hasEnoughTree && hasEnoughMushroom && hasEnoughSpore;
 
                 // Row background
-                const rowBg = this.scene.add.rectangle(panelX + tableOffsetX, baseY, panelWidth - 70, rowHeight - 2, index % 2 === 0 ? 0xD4C4A8 : 0xC4B498);
+                const rowBg = this.scene.add.rectangle(panelX + tableOffsetX, baseY, tableWidth, rowHeight - 2, index % 2 === 0 ? 0xD4C4A8 : 0xC4B498);
                 rowBg.setDepth(5302);
                 rowBg.setMask(scrollMask);
                 rowBg.setInteractive();
@@ -370,44 +377,134 @@ export class FactoryManager extends BaseManager {
                     lastPointerY = pointer.y;
                 });
 
-                // Reward name with icon
-                const nameText = this.scene.add.text(col1X, baseY, `${reward.icon} ${reward.name}`, {
+                // Column 1: Formula with image icons (e.g., "5 x tree + 7 x mushroom + 14 x algae")
+                const iconSize = 12;
+                let formulaX = col1X;
+
+                // Tree cost (if > 0)
+                if (reward.treeCost > 0) {
+                    const treeNumText = this.scene.add.text(formulaX, baseY, `${reward.treeCost}`, {
+                        fontSize: '8px',
+                        fontFamily: 'PixelFont',
+                        color: canAfford ? '#3d2817' : '#888888',
+                        resolution: 2
+                    });
+                    treeNumText.setOrigin(0, 0.5);
+                    treeNumText.setDepth(5303);
+                    treeNumText.setMask(scrollMask);
+                    this.scene.cameras.main.ignore(treeNumText);
+                    this.addElement(treeNumText);
+                    this.contentElements.push(treeNumText);
+                    (treeNumText as any).originalY = baseY;
+                    formulaX += treeNumText.width + 2;
+
+                    const treeIconFormula = this.scene.add.image(formulaX + iconSize / 2, baseY, CROP_DEFINITIONS.tree.fruitImage);
+                    treeIconFormula.setDisplaySize(iconSize, iconSize);
+                    treeIconFormula.setDepth(5303);
+                    treeIconFormula.setMask(scrollMask);
+                    this.scene.cameras.main.ignore(treeIconFormula);
+                    this.addElement(treeIconFormula);
+                    this.contentElements.push(treeIconFormula);
+                    (treeIconFormula as any).originalY = baseY;
+                    formulaX += iconSize + 2;
+
+                    const plusText1 = this.scene.add.text(formulaX, baseY, '+', {
+                        fontSize: '8px',
+                        fontFamily: 'PixelFont',
+                        color: canAfford ? '#3d2817' : '#888888',
+                        resolution: 2
+                    });
+                    plusText1.setOrigin(0, 0.5);
+                    plusText1.setDepth(5303);
+                    plusText1.setMask(scrollMask);
+                    this.scene.cameras.main.ignore(plusText1);
+                    this.addElement(plusText1);
+                    this.contentElements.push(plusText1);
+                    (plusText1 as any).originalY = baseY;
+                    formulaX += plusText1.width + 2;
+                }
+
+                // Mushroom cost
+                const mushNumText = this.scene.add.text(formulaX, baseY, `${reward.mushroomCost}`, {
                     fontSize: '8px',
                     fontFamily: 'PixelFont',
                     color: canAfford ? '#3d2817' : '#888888',
                     resolution: 2
                 });
-                nameText.setOrigin(0, 0.5);
-                nameText.setStroke('#00000033', 1);
-                nameText.setDepth(5303);
-                nameText.setMask(scrollMask);
-                this.scene.cameras.main.ignore(nameText);
-                this.addElement(nameText);
-                this.contentElements.push(nameText);
-                (nameText as any).originalY = baseY;
+                mushNumText.setOrigin(0, 0.5);
+                mushNumText.setDepth(5303);
+                mushNumText.setMask(scrollMask);
+                this.scene.cameras.main.ignore(mushNumText);
+                this.addElement(mushNumText);
+                this.contentElements.push(mushNumText);
+                (mushNumText as any).originalY = baseY;
+                formulaX += mushNumText.width + 2;
 
-                // Cost display - show all 3 costs: Tree / Mushroom / Spore
-                let costParts: string[] = [];
-                if (reward.treeCost > 0) {
-                    costParts.push(`🌳${reward.treeCost}`);
-                }
-                costParts.push(`🍄${reward.mushroomCost}`);
-                costParts.push(`🧬${reward.sporeCost}`);
-                const costDisplay = costParts.join('/');
+                const mushIconFormula = this.scene.add.image(formulaX + iconSize / 2, baseY, CROP_DEFINITIONS.mushroom.fruitImage);
+                mushIconFormula.setDisplaySize(iconSize, iconSize);
+                mushIconFormula.setDepth(5303);
+                mushIconFormula.setMask(scrollMask);
+                this.scene.cameras.main.ignore(mushIconFormula);
+                this.addElement(mushIconFormula);
+                this.contentElements.push(mushIconFormula);
+                (mushIconFormula as any).originalY = baseY;
+                formulaX += iconSize + 2;
 
-                const costText = this.scene.add.text(col2X, baseY, costDisplay, {
-                    fontSize: '7px',
+                const plusText2 = this.scene.add.text(formulaX, baseY, '+', {
+                    fontSize: '8px',
                     fontFamily: 'PixelFont',
-                    color: canAfford ? '#16a34a' : '#ef4444',
+                    color: canAfford ? '#3d2817' : '#888888',
                     resolution: 2
                 });
-                costText.setOrigin(0.5);
-                costText.setDepth(5303);
-                costText.setMask(scrollMask);
-                this.scene.cameras.main.ignore(costText);
-                this.addElement(costText);
-                this.contentElements.push(costText);
-                (costText as any).originalY = baseY;
+                plusText2.setOrigin(0, 0.5);
+                plusText2.setDepth(5303);
+                plusText2.setMask(scrollMask);
+                this.scene.cameras.main.ignore(plusText2);
+                this.addElement(plusText2);
+                this.contentElements.push(plusText2);
+                (plusText2 as any).originalY = baseY;
+                formulaX += plusText2.width + 2;
+
+                // Algae/Spore cost
+                const algaeNumText = this.scene.add.text(formulaX, baseY, `${reward.sporeCost}`, {
+                    fontSize: '8px',
+                    fontFamily: 'PixelFont',
+                    color: canAfford ? '#3d2817' : '#888888',
+                    resolution: 2
+                });
+                algaeNumText.setOrigin(0, 0.5);
+                algaeNumText.setDepth(5303);
+                algaeNumText.setMask(scrollMask);
+                this.scene.cameras.main.ignore(algaeNumText);
+                this.addElement(algaeNumText);
+                this.contentElements.push(algaeNumText);
+                (algaeNumText as any).originalY = baseY;
+                formulaX += algaeNumText.width + 2;
+
+                const algaeIconFormula = this.scene.add.image(formulaX + iconSize / 2, baseY, CROP_DEFINITIONS.algae.fruitImage);
+                algaeIconFormula.setDisplaySize(iconSize, iconSize);
+                algaeIconFormula.setDepth(5303);
+                algaeIconFormula.setMask(scrollMask);
+                this.scene.cameras.main.ignore(algaeIconFormula);
+                this.addElement(algaeIconFormula);
+                this.contentElements.push(algaeIconFormula);
+                (algaeIconFormula as any).originalY = baseY;
+
+                // Column 2: Result (icon + name)
+                const resultText = this.scene.add.text(col2X, baseY, `${reward.icon} ${reward.name}`, {
+                    fontSize: '8px',
+                    fontFamily: 'PixelFont',
+                    color: canAfford ? '#3d2817' : '#888888',
+                    resolution: 2
+                });
+                resultText.setOrigin(0, 0.5);
+                resultText.setStroke('#00000033', 1);
+                resultText.setDepth(5303);
+                resultText.setMask(scrollMask);
+                this.scene.cameras.main.ignore(resultText);
+                this.addElement(resultText);
+                this.contentElements.push(resultText);
+                (resultText as any).originalY = baseY;
 
                 // Change button
                 const btnBg = this.scene.add.sprite(col3X, baseY, 'square-buttons', canAfford ? 6 : 7);
@@ -546,25 +643,95 @@ export class FactoryManager extends BaseManager {
             this.scene.cameras.main.ignore(costLabel);
             this.confirmElements.push(costLabel);
 
-            // Build cost display showing all required resources
-            let costParts: string[] = [];
-            if (reward.treeCost > 0) {
-                costParts.push(`🌳${reward.treeCost}`);
-            }
-            costParts.push(`🍄${reward.mushroomCost}`);
-            costParts.push(`🧬${reward.sporeCost}`);
-            const totalCostDisplay = costParts.join(' + ');
+            // Build cost display with image icons
+            const costIconSize = 14;
+            let costDisplayX = modalX - 60;
+            const costY = modalY + 22;
 
-            const costText = this.scene.add.text(modalX, modalY + 22, totalCostDisplay, {
+            // Tree cost (if > 0)
+            if (reward.treeCost > 0) {
+                const treeCostNum = this.scene.add.text(costDisplayX, costY, `${reward.treeCost}`, {
+                    fontSize: '10px',
+                    fontFamily: 'PixelFont',
+                    color: '#fef08a',
+                    resolution: 2
+                });
+                treeCostNum.setOrigin(0, 0.5);
+                treeCostNum.setDepth(5402);
+                this.scene.cameras.main.ignore(treeCostNum);
+                this.confirmElements.push(treeCostNum);
+                costDisplayX += treeCostNum.width + 2;
+
+                const treeCostIcon = this.scene.add.image(costDisplayX + costIconSize / 2, costY, CROP_DEFINITIONS.tree.fruitImage);
+                treeCostIcon.setDisplaySize(costIconSize, costIconSize);
+                treeCostIcon.setDepth(5402);
+                this.scene.cameras.main.ignore(treeCostIcon);
+                this.confirmElements.push(treeCostIcon);
+                costDisplayX += costIconSize + 4;
+
+                const plusText1 = this.scene.add.text(costDisplayX, costY, '+', {
+                    fontSize: '10px',
+                    fontFamily: 'PixelFont',
+                    color: '#fef08a',
+                    resolution: 2
+                });
+                plusText1.setOrigin(0, 0.5);
+                plusText1.setDepth(5402);
+                this.scene.cameras.main.ignore(plusText1);
+                this.confirmElements.push(plusText1);
+                costDisplayX += plusText1.width + 4;
+            }
+
+            // Mushroom cost
+            const mushCostNum = this.scene.add.text(costDisplayX, costY, `${reward.mushroomCost}`, {
                 fontSize: '10px',
                 fontFamily: 'PixelFont',
                 color: '#fef08a',
                 resolution: 2
             });
-            costText.setOrigin(0.5);
-            costText.setDepth(5402);
-            this.scene.cameras.main.ignore(costText);
-            this.confirmElements.push(costText);
+            mushCostNum.setOrigin(0, 0.5);
+            mushCostNum.setDepth(5402);
+            this.scene.cameras.main.ignore(mushCostNum);
+            this.confirmElements.push(mushCostNum);
+            costDisplayX += mushCostNum.width + 2;
+
+            const mushCostIcon = this.scene.add.image(costDisplayX + costIconSize / 2, costY, CROP_DEFINITIONS.mushroom.fruitImage);
+            mushCostIcon.setDisplaySize(costIconSize, costIconSize);
+            mushCostIcon.setDepth(5402);
+            this.scene.cameras.main.ignore(mushCostIcon);
+            this.confirmElements.push(mushCostIcon);
+            costDisplayX += costIconSize + 4;
+
+            const plusText2 = this.scene.add.text(costDisplayX, costY, '+', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#fef08a',
+                resolution: 2
+            });
+            plusText2.setOrigin(0, 0.5);
+            plusText2.setDepth(5402);
+            this.scene.cameras.main.ignore(plusText2);
+            this.confirmElements.push(plusText2);
+            costDisplayX += plusText2.width + 4;
+
+            // Algae cost
+            const algaeCostNum = this.scene.add.text(costDisplayX, costY, `${reward.sporeCost}`, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#fef08a',
+                resolution: 2
+            });
+            algaeCostNum.setOrigin(0, 0.5);
+            algaeCostNum.setDepth(5402);
+            this.scene.cameras.main.ignore(algaeCostNum);
+            this.confirmElements.push(algaeCostNum);
+            costDisplayX += algaeCostNum.width + 2;
+
+            const algaeCostIcon = this.scene.add.image(costDisplayX + costIconSize / 2, costY, CROP_DEFINITIONS.algae.fruitImage);
+            algaeCostIcon.setDisplaySize(costIconSize, costIconSize);
+            algaeCostIcon.setDepth(5402);
+            this.scene.cameras.main.ignore(algaeCostIcon);
+            this.confirmElements.push(algaeCostIcon);
 
             // Buttons row
             const btnY = modalY + 52;

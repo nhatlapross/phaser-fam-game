@@ -444,7 +444,7 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(valueText);
         this.modalElements.push(valueText);
 
-        const editBtn = this.scene.add.text(editX - 10, y, 'Edit', {
+        const editBtn = this.scene.add.text(editX - 18, y, 'Edit', {
             fontSize: '10px',
             fontFamily: 'PixelFont',
             color: '#4ade80',
@@ -516,7 +516,7 @@ export class ProfileManager extends BaseManager {
 
         // Show shortened address
         const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-        const addressText = this.scene.add.text(labelX + 60, y, shortAddress, {
+        const addressText = this.scene.add.text(labelX + 50, y, shortAddress, {
             fontSize: '10px',
             fontFamily: 'PixelFont',
             color: '#FFF8E1',
@@ -529,7 +529,7 @@ export class ProfileManager extends BaseManager {
         this.modalElements.push(addressText);
 
         // Copy button
-        const copyBtnX = centerX + modalWidth / 2 - 45;
+        const copyBtnX = centerX + modalWidth / 2 - 53;
         const copyBtn = this.scene.add.text(copyBtnX, y, 'Copy', {
             fontSize: '10px',
             fontFamily: 'PixelFont',
@@ -622,7 +622,7 @@ export class ProfileManager extends BaseManager {
 
         // Title
         const titleText = fieldName === 'avatar' ? 'Edit Avatar' : 'Edit Username';
-        const title = this.scene.add.text(formX, formY - formHeight / 2 + 25, titleText, {
+        const title = this.scene.add.text(formX, formY - formHeight / 2 + 30, titleText, {
             fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',

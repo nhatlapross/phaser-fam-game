@@ -272,7 +272,7 @@ export class CheckinManager extends BaseManager {
             }
 
             // Quantity label
-            const quantityText = this.scene.add.text(dayX, dayY + 14, reward.label, {
+            const quantityText = this.scene.add.text(dayX, dayY + 18, reward.label, {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
                 color: isChecked ? '#FFFFFF' : reward.color,
