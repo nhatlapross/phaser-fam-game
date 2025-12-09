@@ -1826,12 +1826,22 @@ export class FarmingGame extends Scene {
 
                 console.log('Planted', selectedPlantType, 'at', tileKey, '- Seeds left:', this.seedCounts[selectedPlantType]);
 
-                // Call API to plant seed on backend (async, don't wait for response)
+                // Call API to plant seed on backend and store the plantId for future API calls
                 // Use landId from state if available, otherwise use tileKey
                 const landId = state.landId || tileKey;
-                SeedService.plantSeed(landId, selectedPlantType).catch(error => {
-                    console.error('Failed to plant seed in database:', error);
-                });
+                SeedService.plantSeed(landId, selectedPlantType)
+                    .then(plantId => {
+                        if (plantId) {
+                            const currentState = this.farmLandStates.get(tileKey);
+                            if (currentState) {
+                                currentState.plantId = plantId;
+                                console.log(`Plant ID ${plantId} stored for tile ${tileKey}`);
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Failed to plant seed in database:', error);
+                    });
             } else {
                 console.log('No', selectedPlantType, 'seeds left!');
             }
@@ -1845,6 +1855,7 @@ export class FarmingGame extends Scene {
         // Check if we have water
         if (!wateringCan || wateringCan.count === undefined || wateringCan.count <= 0) {
             console.log('No water left!');
+            this.showToastMessage('No water left!', 0xef4444);
             return;
         }
 
@@ -1852,16 +1863,30 @@ export class FarmingGame extends Scene {
             // Cannot water dead plants
             if (state.isDead) {
                 console.log('This plant is dead and cannot be watered!');
+                this.showToastMessage('This plant is dead!', 0xef4444);
                 return;
             }
 
-            // Reset care timer (prevents death/wilt)
-            state.lastCareTime = Date.now();
+            // If no plantId, plant is not synced with backend
+            if (!state.plantId) {
+                console.warn('No plantId available for watering - plant may not be synced with backend');
+                this.showToastMessage('Plant not synced yet', 0xfbbf24);
+                return;
+            }
 
-            // Reset health bar to full
+            // Call API first to check if watering is allowed
+            const result = await GardenService.waterPlant(state.plantId);
+            
+            if (!result.success) {
+                // Show error message to user
+                this.showToastMessage(result.message || 'Cannot water now', 0xef4444);
+                return;
+            }
+
+            // API succeeded - update local state
+            state.lastCareTime = Date.now();
             this.resetHealthBar(tileKey);
 
-            // If plant was wilted, restore it
             if (state.isWilted) {
                 state.isWilted = false;
                 console.log('Plant at', tileKey, 'has been restored from wilted state!');
@@ -1873,25 +1898,14 @@ export class FarmingGame extends Scene {
                 state.plantStage++;
                 wateringCan.count--;
                 this.updateToolbar();
-
-                // Update plant sprite
                 this.updatePlantSprite(x, y, state.cropType, state.plantStage, false, state.isWilted);
-
                 console.log('Watered and grew to stage', state.plantStage, 'at', tileKey, '- Water left:', wateringCan.count);
+                this.showToastMessage('Watered!', 0x4ade80);
             } else {
-                // Still consume water but just reset timer
                 wateringCan.count--;
                 this.updateToolbar();
                 console.log('Plant is already fully grown at', tileKey, '- Care timer reset');
-            }
-
-            // Call API to water plant on backend (async, don't wait for response)
-            if (state.plantId) {
-                GardenService.waterPlant(state.plantId).catch(error => {
-                    console.error('Failed to water plant in database:', error);
-                });
-            } else {
-                console.warn('No plantId available for watering - plant may not be synced with backend');
+                this.showToastMessage('Plant fully grown!', 0x4ade80);
             }
         }
     }

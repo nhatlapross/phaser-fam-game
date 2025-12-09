@@ -106,13 +106,13 @@ export class SeedService {
      * Plants a seed on a land plot via API
      * @param landId The land plot identifier
      * @param plantType The type of seed to plant
-     * @returns A Promise that resolves to true if successful, false otherwise
+     * @returns A Promise that resolves to the plantId if successful, null otherwise
      */
-    static async plantSeed(landId: string, plantType: 'algae' | 'mushroom' | 'tree'): Promise<boolean> {
+    static async plantSeed(landId: string, plantType: 'algae' | 'mushroom' | 'tree'): Promise<string | null> {
         const token = SeedService.getAccessToken();
         if (!token) {
             console.log('No access token available for planting seed');
-            return false;
+            return null;
         }
 
         const seedType = SeedService.mapPlantTypeToApiSeedType(plantType);
@@ -134,19 +134,22 @@ export class SeedService {
             );
 
             if (response.ok) {
-                console.log(`Successfully planted ${plantType} seed on land ${landId}`);
-                return true;
+                const data = await response.json();
+                console.log(`Successfully planted ${plantType} seed on land ${landId}`, data);
+                // Extract plantId from response - could be in different locations
+                const plantId = data?.plant?.id || data?.id || data?.plantId;
+                return plantId || null;
             } else {
                 console.error(
                     "Error planting seed:",
                     response.statusText,
                     await response.text()
                 );
-                return false;
+                return null;
             }
         } catch (error) {
             console.error("Network error planting seed:", error);
-            return false;
+            return null;
         }
     }
 }

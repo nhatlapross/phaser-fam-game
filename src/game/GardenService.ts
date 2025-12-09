@@ -159,38 +159,45 @@ export class GardenService {
      * @param plantId The plant ID from the backend
      * @returns A Promise that resolves to true if successful, false otherwise
      */
-    static async waterPlant(plantId: string): Promise<boolean> {
+    static async waterPlant(plantId: string): Promise<{ success: boolean; message?: string }> {
         const token = GardenService.getAccessToken();
         if (!token) {
             console.log('No access token available for watering plant');
-            return false;
+            return { success: false, message: 'Not authenticated' };
         }
 
+        const url = `${GardenService.API_BASE_URL}/plant/${plantId}/water`;
+        console.log(`[WaterPlant] Calling API: PATCH ${url}`);
+
         try {
-            const response = await fetch(
-                `${GardenService.API_BASE_URL}/plant/${plantId}/water`,
-                {
-                    method: "PATCH",
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                    },
-                }
-            );
+            const response = await fetch(url, {
+                method: "PATCH",
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                },
+            });
+
+            const responseText = await response.text();
+            console.log(`[WaterPlant] Response status: ${response.status}, body:`, responseText);
 
             if (response.ok) {
-                console.log(`Successfully watered plant ${plantId}`);
-                return true;
+                console.log(`[WaterPlant] Successfully watered plant ${plantId}`);
+                return { success: true };
             } else {
-                console.error(
-                    "Error watering plant:",
-                    response.statusText,
-                    await response.text()
-                );
-                return false;
+                // Parse error message from response
+                let errorMessage = 'Failed to water plant';
+                try {
+                    const errorData = JSON.parse(responseText);
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    // Use default message if parsing fails
+                }
+                console.error("[WaterPlant] Error:", response.status, errorMessage);
+                return { success: false, message: errorMessage };
             }
         } catch (error) {
-            console.error("Network error watering plant:", error);
-            return false;
+            console.error("[WaterPlant] Network error watering plant:", error);
+            return { success: false, message: 'Network error' };
         }
     }
 
