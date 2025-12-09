@@ -9,6 +9,7 @@ interface FactoryCallbacks {
     closeSeedSelector: () => void;
     closeChestPanel: () => void;
     showToastMessage: (text: string, color: number) => void;
+    playSuccessSound: () => void;
 }
 
 /**
@@ -119,8 +120,8 @@ export class FactoryManager extends BaseManager {
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
 
-        const panelWidth = 340;
-        const panelHeight = 300;
+        const panelWidth = 420;
+        const panelHeight = 380;
         const panelX = screenWidth / 2;
         const panelY = screenHeight / 2;
 
@@ -154,16 +155,16 @@ export class FactoryManager extends BaseManager {
         });
 
         // Close button
-        const closeBtnBg = this.scene.add.sprite(panelX + panelWidth / 2 - 25, panelY - panelHeight / 2 + 35, 'square-buttons', 7);
-        closeBtnBg.setDisplaySize(24, 24);
+        const closeBtnBg = this.scene.add.sprite(panelX + panelWidth / 2 - 30, panelY - panelHeight / 2 + 40, 'square-buttons', 7);
+        closeBtnBg.setDisplaySize(32, 32);
         closeBtnBg.setDepth(5302);
         closeBtnBg.setAlpha(0);
         closeBtnBg.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(closeBtnBg);
         this.addElement(closeBtnBg);
 
-        const closeText = this.scene.add.text(panelX + panelWidth / 2 - 25, panelY - panelHeight / 2 + 35, 'X', {
-            fontSize: '14px',
+        const closeText = this.scene.add.text(panelX + panelWidth / 2 - 30, panelY - panelHeight / 2 + 40, 'X', {
+            fontSize: '18px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2
@@ -186,15 +187,15 @@ export class FactoryManager extends BaseManager {
         closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
 
         // Title
-        const title = this.scene.add.text(panelX, panelY - panelHeight / 2 + 38, 'Phygital Exchange', {
-            fontSize: '11px',
+        const title = this.scene.add.text(panelX, panelY - panelHeight / 2 + 42, 'Phygital Exchange', {
+            fontSize: '16px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2
         });
         title.setOrigin(0.5);
         title.setDepth(5301);
-        title.setStroke('#5D4037', 2);
+        title.setStroke('#5D4037', 3);
         title.setAlpha(0);
         this.scene.cameras.main.ignore(title);
         this.addElement(title);
@@ -211,84 +212,84 @@ export class FactoryManager extends BaseManager {
         const mushroomCount = this.getFruitCountInChest('mushroom');
         const algaeCount = this.getFruitCountInChest('algae');
 
-        const inventoryY = panelY - panelHeight / 2 + 58;
-        const invSpacing = 55; // Space between each fruit group
+        const inventoryY = panelY - panelHeight / 2 + 68;
+        const invSpacing = 70; // Space between each fruit group
         const invStartX = panelX - invSpacing; // Center the 3 groups
 
         // Tree fruit count - use image sprite like chest
         const treeIcon = this.scene.add.image(invStartX - invSpacing, inventoryY, CROP_DEFINITIONS.tree.fruitImage);
-        treeIcon.setDisplaySize(18, 18);
+        treeIcon.setDisplaySize(24, 24);
         treeIcon.setDepth(5302);
         this.scene.cameras.main.ignore(treeIcon);
         this.addElement(treeIcon);
 
-        const treeText = this.scene.add.text(invStartX - invSpacing + 12, inventoryY, `${treeCount}`, {
-            fontSize: '10px',
+        const treeText = this.scene.add.text(invStartX - invSpacing + 16, inventoryY, `${treeCount}`, {
+            fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#2d5016',
             resolution: 2
         });
         treeText.setOrigin(0, 0.5);
         treeText.setDepth(5302);
-        treeText.setStroke('#000000', 1);
+        treeText.setStroke('#000000', 2);
         this.scene.cameras.main.ignore(treeText);
         this.addElement(treeText);
 
         // Mushroom count - use image sprite like chest
         const mushIcon = this.scene.add.image(invStartX, inventoryY, CROP_DEFINITIONS.mushroom.fruitImage);
-        mushIcon.setDisplaySize(18, 18);
+        mushIcon.setDisplaySize(24, 24);
         mushIcon.setDepth(5302);
         this.scene.cameras.main.ignore(mushIcon);
         this.addElement(mushIcon);
 
-        const mushText = this.scene.add.text(invStartX + 12, inventoryY, `${mushroomCount}`, {
-            fontSize: '10px',
+        const mushText = this.scene.add.text(invStartX + 16, inventoryY, `${mushroomCount}`, {
+            fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#92400e',
             resolution: 2
         });
         mushText.setOrigin(0, 0.5);
         mushText.setDepth(5302);
-        mushText.setStroke('#000000', 1);
+        mushText.setStroke('#000000', 2);
         this.scene.cameras.main.ignore(mushText);
         this.addElement(mushText);
 
         // Algae/Spore count - use image sprite like chest
         const sporeIcon = this.scene.add.image(invStartX + invSpacing, inventoryY, CROP_DEFINITIONS.algae.fruitImage);
-        sporeIcon.setDisplaySize(18, 18);
+        sporeIcon.setDisplaySize(24, 24);
         sporeIcon.setDepth(5302);
         this.scene.cameras.main.ignore(sporeIcon);
         this.addElement(sporeIcon);
 
-        const sporeText = this.scene.add.text(invStartX + invSpacing + 12, inventoryY, `${algaeCount}`, {
-            fontSize: '10px',
+        const sporeText = this.scene.add.text(invStartX + invSpacing + 16, inventoryY, `${algaeCount}`, {
+            fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#1e40af',
             resolution: 2
         });
         sporeText.setOrigin(0, 0.5);
         sporeText.setDepth(5302);
-        sporeText.setStroke('#000000', 1);
+        sporeText.setStroke('#000000', 2);
         this.scene.cameras.main.ignore(sporeText);
         this.addElement(sporeText);
 
         // Table header - positioned relative to panel edges
-        const tableWidth = panelWidth - 75; // Table width with padding
-        const tableOffsetX = 10; // Shift table to the right
-        const headerY = panelY - 60; // Increased gap from inventory display
+        const tableWidth = panelWidth - 85; // Narrower table width
+        const tableOffsetX = 12; // Center the table
+        const headerY = panelY - 85; // Increased gap from inventory display (moved up)
         const tableLeftEdge = panelX - tableWidth / 2 + tableOffsetX;
         const tableRightEdge = panelX + tableWidth / 2 + tableOffsetX;
-        const col1X = tableLeftEdge + 5;   // Formula column (left edge + padding)
-        const col2X = panelX + tableOffsetX + 5; // Result column (center + offset)
-        const col3X = tableRightEdge - 30; // Action button (right edge - padding)
+        const col1X = tableLeftEdge + 10;   // Formula column (left edge + padding)
+        const col2X = panelX + tableOffsetX + 20; // Result column (center + offset)
+        const col3X = tableRightEdge - 22; // Action button (right edge - padding, moved left 2px)
 
-        const headerBg = this.scene.add.rectangle(panelX + tableOffsetX, headerY, tableWidth, 16, 0x5D4037);
+        const headerBg = this.scene.add.rectangle(panelX + tableOffsetX, headerY, tableWidth, 24, 0x5D4037);
         headerBg.setDepth(5301);
         this.scene.cameras.main.ignore(headerBg);
         this.addElement(headerBg);
 
         const headerFormula = this.scene.add.text(col1X, headerY, 'Formula', {
-            fontSize: '8px',
+            fontSize: '12px',
             fontFamily: 'PixelFont',
             color: '#FFF8E1',
             resolution: 2
@@ -299,7 +300,7 @@ export class FactoryManager extends BaseManager {
         this.addElement(headerFormula);
 
         const headerResult = this.scene.add.text(col2X, headerY, 'Result', {
-            fontSize: '8px',
+            fontSize: '12px',
             fontFamily: 'PixelFont',
             color: '#FFF8E1',
             resolution: 2
@@ -310,7 +311,7 @@ export class FactoryManager extends BaseManager {
         this.addElement(headerResult);
 
         const headerAction = this.scene.add.text(col3X, headerY, '', {
-            fontSize: '8px',
+            fontSize: '12px',
             fontFamily: 'PixelFont',
             color: '#FFF8E1',
             resolution: 2
@@ -320,9 +321,9 @@ export class FactoryManager extends BaseManager {
         this.scene.cameras.main.ignore(headerAction);
         this.addElement(headerAction);
 
-        // Scrollable area - inside the panel
-        const scrollAreaTop = headerY + 12;
-        const scrollAreaHeight = 180;
+        // Scrollable area - inside the panel (taller to fit modal)
+        const scrollAreaTop = headerY + 16;
+        const scrollAreaHeight = 220;
 
         // Create mask for scroll area - use screen coordinates
         const maskGraphics = this.scene.make.graphics({ x: 0, y: 0 });
@@ -332,7 +333,7 @@ export class FactoryManager extends BaseManager {
         this.addElement(maskGraphics);
 
         // Reward rows
-        const rowHeight = 28;
+        const rowHeight = 38;
         const totalContentHeight = EXCHANGE_REWARDS.length * rowHeight;
         this.maxScrollOffset = Math.max(0, totalContentHeight - scrollAreaHeight);
 
@@ -378,13 +379,13 @@ export class FactoryManager extends BaseManager {
                 });
 
                 // Column 1: Formula with image icons (e.g., "5 x tree + 7 x mushroom + 14 x algae")
-                const iconSize = 12;
+                const iconSize = 18;
                 let formulaX = col1X;
 
                 // Tree cost (if > 0)
                 if (reward.treeCost > 0) {
                     const treeNumText = this.scene.add.text(formulaX, baseY, `${reward.treeCost}`, {
-                        fontSize: '8px',
+                        fontSize: '12px',
                         fontFamily: 'PixelFont',
                         color: canAfford ? '#3d2817' : '#888888',
                         resolution: 2
@@ -406,10 +407,10 @@ export class FactoryManager extends BaseManager {
                     this.addElement(treeIconFormula);
                     this.contentElements.push(treeIconFormula);
                     (treeIconFormula as any).originalY = baseY;
-                    formulaX += iconSize + 2;
+                    formulaX += iconSize + 4;
 
                     const plusText1 = this.scene.add.text(formulaX, baseY, '+', {
-                        fontSize: '8px',
+                        fontSize: '12px',
                         fontFamily: 'PixelFont',
                         color: canAfford ? '#3d2817' : '#888888',
                         resolution: 2
@@ -421,12 +422,12 @@ export class FactoryManager extends BaseManager {
                     this.addElement(plusText1);
                     this.contentElements.push(plusText1);
                     (plusText1 as any).originalY = baseY;
-                    formulaX += plusText1.width + 2;
+                    formulaX += plusText1.width + 4;
                 }
 
                 // Mushroom cost
                 const mushNumText = this.scene.add.text(formulaX, baseY, `${reward.mushroomCost}`, {
-                    fontSize: '8px',
+                    fontSize: '12px',
                     fontFamily: 'PixelFont',
                     color: canAfford ? '#3d2817' : '#888888',
                     resolution: 2
@@ -448,10 +449,10 @@ export class FactoryManager extends BaseManager {
                 this.addElement(mushIconFormula);
                 this.contentElements.push(mushIconFormula);
                 (mushIconFormula as any).originalY = baseY;
-                formulaX += iconSize + 2;
+                formulaX += iconSize + 4;
 
                 const plusText2 = this.scene.add.text(formulaX, baseY, '+', {
-                    fontSize: '8px',
+                    fontSize: '12px',
                     fontFamily: 'PixelFont',
                     color: canAfford ? '#3d2817' : '#888888',
                     resolution: 2
@@ -463,11 +464,11 @@ export class FactoryManager extends BaseManager {
                 this.addElement(plusText2);
                 this.contentElements.push(plusText2);
                 (plusText2 as any).originalY = baseY;
-                formulaX += plusText2.width + 2;
+                formulaX += plusText2.width + 4;
 
                 // Algae/Spore cost
                 const algaeNumText = this.scene.add.text(formulaX, baseY, `${reward.sporeCost}`, {
-                    fontSize: '8px',
+                    fontSize: '12px',
                     fontFamily: 'PixelFont',
                     color: canAfford ? '#3d2817' : '#888888',
                     resolution: 2
@@ -492,7 +493,7 @@ export class FactoryManager extends BaseManager {
 
                 // Column 2: Result (icon + name)
                 const resultText = this.scene.add.text(col2X, baseY, `${reward.icon} ${reward.name}`, {
-                    fontSize: '8px',
+                    fontSize: '12px',
                     fontFamily: 'PixelFont',
                     color: canAfford ? '#3d2817' : '#888888',
                     resolution: 2
@@ -508,7 +509,7 @@ export class FactoryManager extends BaseManager {
 
                 // Change button
                 const btnBg = this.scene.add.sprite(col3X, baseY, 'square-buttons', canAfford ? 6 : 7);
-                btnBg.setDisplaySize(50, 18);
+                btnBg.setDisplaySize(65, 26);
                 btnBg.setDepth(5303);
                 btnBg.setMask(scrollMask);
                 this.scene.cameras.main.ignore(btnBg);
@@ -517,7 +518,7 @@ export class FactoryManager extends BaseManager {
                 (btnBg as any).originalY = baseY;
 
                 const btnText = this.scene.add.text(col3X, baseY, 'Change', {
-                    fontSize: '7px',
+                    fontSize: '9px',
                     fontFamily: 'PixelFont',
                     color: canAfford ? '#FFFFFF' : '#999999',
                     resolution: 2
@@ -577,8 +578,8 @@ export class FactoryManager extends BaseManager {
         const screenHeight = this.scene.scale.height;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
-        const modalWidth = 220;
-        const modalHeight = 160;
+        const modalWidth = 280;
+        const modalHeight = 200;
 
         // Overlay
         const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.7);
@@ -609,21 +610,21 @@ export class FactoryManager extends BaseManager {
 
         this.scene.time.delayedCall(100, () => {
             // Title
-            const title = this.scene.add.text(modalX, modalY - 55, `Exchange for ${reward.name}?`, {
-                fontSize: '10px',
+            const title = this.scene.add.text(modalX, modalY - 70, `Exchange for ${reward.name}?`, {
+                fontSize: '14px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
                 resolution: 2
             });
             title.setOrigin(0.5);
             title.setDepth(5402);
-            title.setStroke('#5D4037', 2);
+            title.setStroke('#5D4037', 3);
             this.scene.cameras.main.ignore(title);
             this.confirmElements.push(title);
 
             // Reward icon
-            const rewardIcon = this.scene.add.text(modalX, modalY - 25, reward.icon, {
-                fontSize: '24px',
+            const rewardIcon = this.scene.add.text(modalX, modalY - 30, reward.icon, {
+                fontSize: '32px',
                 resolution: 2
             });
             rewardIcon.setOrigin(0.5);
@@ -632,8 +633,8 @@ export class FactoryManager extends BaseManager {
             this.confirmElements.push(rewardIcon);
 
             // Total cost label
-            const costLabel = this.scene.add.text(modalX, modalY + 5, 'Total Cost:', {
-                fontSize: '8px',
+            const costLabel = this.scene.add.text(modalX, modalY + 10, 'Total Cost:', {
+                fontSize: '12px',
                 fontFamily: 'PixelFont',
                 color: '#FFF8E1',
                 resolution: 2
@@ -644,14 +645,14 @@ export class FactoryManager extends BaseManager {
             this.confirmElements.push(costLabel);
 
             // Build cost display with image icons
-            const costIconSize = 14;
-            let costDisplayX = modalX - 60;
-            const costY = modalY + 22;
+            const costIconSize = 18;
+            let costDisplayX = modalX - 80;
+            const costY = modalY + 32;
 
             // Tree cost (if > 0)
             if (reward.treeCost > 0) {
                 const treeCostNum = this.scene.add.text(costDisplayX, costY, `${reward.treeCost}`, {
-                    fontSize: '10px',
+                    fontSize: '12px',
                     fontFamily: 'PixelFont',
                     color: '#fef08a',
                     resolution: 2
@@ -670,7 +671,7 @@ export class FactoryManager extends BaseManager {
                 costDisplayX += costIconSize + 4;
 
                 const plusText1 = this.scene.add.text(costDisplayX, costY, '+', {
-                    fontSize: '10px',
+                    fontSize: '12px',
                     fontFamily: 'PixelFont',
                     color: '#fef08a',
                     resolution: 2
@@ -684,7 +685,7 @@ export class FactoryManager extends BaseManager {
 
             // Mushroom cost
             const mushCostNum = this.scene.add.text(costDisplayX, costY, `${reward.mushroomCost}`, {
-                fontSize: '10px',
+                fontSize: '12px',
                 fontFamily: 'PixelFont',
                 color: '#fef08a',
                 resolution: 2
@@ -703,7 +704,7 @@ export class FactoryManager extends BaseManager {
             costDisplayX += costIconSize + 4;
 
             const plusText2 = this.scene.add.text(costDisplayX, costY, '+', {
-                fontSize: '10px',
+                fontSize: '12px',
                 fontFamily: 'PixelFont',
                 color: '#fef08a',
                 resolution: 2
@@ -716,7 +717,7 @@ export class FactoryManager extends BaseManager {
 
             // Algae cost
             const algaeCostNum = this.scene.add.text(costDisplayX, costY, `${reward.sporeCost}`, {
-                fontSize: '10px',
+                fontSize: '12px',
                 fontFamily: 'PixelFont',
                 color: '#fef08a',
                 resolution: 2
@@ -734,26 +735,26 @@ export class FactoryManager extends BaseManager {
             this.confirmElements.push(algaeCostIcon);
 
             // Buttons row
-            const btnY = modalY + 52;
-            const btnSpacing = 70;
+            const btnY = modalY + 70;
+            const btnSpacing = 90;
 
             // Confirm button
             const confirmBtn = this.scene.add.sprite(modalX - btnSpacing / 2, btnY, 'square-buttons', 6);
-            confirmBtn.setDisplaySize(60, 24);
+            confirmBtn.setDisplaySize(75, 30);
             confirmBtn.setDepth(5402);
             confirmBtn.setInteractive({ useHandCursor: true });
             this.scene.cameras.main.ignore(confirmBtn);
             this.confirmElements.push(confirmBtn);
 
             const confirmText = this.scene.add.text(modalX - btnSpacing / 2, btnY, 'Confirm', {
-                fontSize: '9px',
+                fontSize: '12px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
                 resolution: 2
             });
             confirmText.setOrigin(0.5);
             confirmText.setDepth(5403);
-            confirmText.setStroke('#2d5016', 1);
+            confirmText.setStroke('#2d5016', 2);
             this.scene.cameras.main.ignore(confirmText);
             this.confirmElements.push(confirmText);
 
@@ -765,21 +766,21 @@ export class FactoryManager extends BaseManager {
 
             // Cancel button
             const cancelBtn = this.scene.add.sprite(modalX + btnSpacing / 2, btnY, 'square-buttons', 7);
-            cancelBtn.setDisplaySize(60, 24);
+            cancelBtn.setDisplaySize(75, 30);
             cancelBtn.setDepth(5402);
             cancelBtn.setInteractive({ useHandCursor: true });
             this.scene.cameras.main.ignore(cancelBtn);
             this.confirmElements.push(cancelBtn);
 
             const cancelText = this.scene.add.text(modalX + btnSpacing / 2, btnY, 'Cancel', {
-                fontSize: '9px',
+                fontSize: '12px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
                 resolution: 2
             });
             cancelText.setOrigin(0.5);
             cancelText.setDepth(5403);
-            cancelText.setStroke('#5D4037', 1);
+            cancelText.setStroke('#5D4037', 2);
             this.scene.cameras.main.ignore(cancelText);
             this.confirmElements.push(cancelText);
 
@@ -834,6 +835,9 @@ export class FactoryManager extends BaseManager {
             this.callbacks.updateToolbar();
             this.closeConfirmModal();
             this.close();
+
+            // Play success sound
+            this.callbacks.playSuccessSound();
 
             // Show success animation
             this.playWorkingAnimation();

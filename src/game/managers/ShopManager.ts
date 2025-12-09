@@ -21,6 +21,7 @@ interface ShopCallbacks {
     getToolbarItems: () => { name: string; count?: number }[];
     updateToolbar: () => void;
     refreshProfileUI: () => void;
+    playSuccessSound: () => void;
 }
 
 /**
@@ -597,6 +598,7 @@ export class ShopManager extends BaseManager {
 
         this.callbacks.updateToolbar();
         this.callbacks.refreshProfileUI();
+        this.callbacks.playSuccessSound();
     }
 
     private showMessage(message: string, color: string): void {

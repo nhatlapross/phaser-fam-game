@@ -178,6 +178,22 @@ export class Preloader extends Scene
             frameWidth: 159,
             frameHeight: 119
         });
+
+        // ========== Audio Assets ==========
+        // Reset path for audio files (they are in public/sound, not assets/sound)
+        this.load.setPath('');
+
+        // Theme songs (random playback)
+        this.load.audio('theme1', 'sound/theme/theme1.mp3');
+        this.load.audio('theme2', 'sound/theme/theme2.mp3');
+        this.load.audio('theme3', 'sound/theme/theme3.mp3');
+        this.load.audio('theme4', 'sound/theme/theme4.mp3');
+
+        // Sound effects
+        this.load.audio('sfx-walk', 'sound/effect/walk.mp3');
+        this.load.audio('sfx-hit', 'sound/effect/hit.mp3');
+        this.load.audio('sfx-water', 'sound/effect/water.mp3');
+        this.load.audio('sfx-success', 'sound/effect/confirm.mp3');
     }
 
     create ()
