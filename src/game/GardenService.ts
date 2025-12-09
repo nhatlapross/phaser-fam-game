@@ -233,4 +233,50 @@ export class GardenService {
             return false;
         }
     }
+
+    /**
+     * Clears a land plot by removing the plant via API
+     * @param landId The land ID from the backend
+     * @returns A Promise that resolves to the response data if successful, null otherwise
+     */
+    static async clearLand(landId: string): Promise<{
+        success: boolean;
+        land: { id: string; plotIndex: number; plant: null };
+        removedPlant: { type: string; stage: string } | null;
+        message: string;
+    } | null> {
+        const token = GardenService.getAccessToken();
+        if (!token) {
+            console.log('No access token available for clearing land');
+            return null;
+        }
+
+        try {
+            const response = await fetch(
+                `${GardenService.API_BASE_URL}/land/${landId}/clear`,
+                {
+                    method: "DELETE",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`Successfully cleared land ${landId}:`, data.message);
+                return data;
+            } else {
+                console.error(
+                    "Error clearing land:",
+                    response.statusText,
+                    await response.text()
+                );
+                return null;
+            }
+        } catch (error) {
+            console.error("Network error clearing land:", error);
+            return null;
+        }
+    }
 }

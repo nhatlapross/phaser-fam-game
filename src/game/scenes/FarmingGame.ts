@@ -2026,6 +2026,8 @@ export class FarmingGame extends Scene {
         const state = this.farmLandStates.get(tileKey);
 
         if (state && state.planted && state.cropType) {
+            const landId = state.landId;
+
             // Remove plant regardless of stage or state
             state.planted = false;
             state.plantStage = 0;
@@ -2039,6 +2041,21 @@ export class FarmingGame extends Scene {
             this.removePlant(x, y);
 
             console.log('Digested/removed plant at', tileKey);
+
+            // Call API to clear land on backend
+            if (landId) {
+                GardenService.clearLand(landId).then(result => {
+                    if (result?.success) {
+                        console.log(`API: Cleared land ${landId} - ${result.message}`);
+                    } else {
+                        console.error(`API: Failed to clear land ${landId}`);
+                    }
+                }).catch(error => {
+                    console.error('Failed to clear land in database:', error);
+                });
+            } else {
+                console.warn(`No landId found for tile ${tileKey}, skipping API call`);
+            }
         } else {
             console.log('No plant to digest at', tileKey);
         }
