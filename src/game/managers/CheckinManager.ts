@@ -16,10 +16,25 @@ interface CheckinCallbacks {
 export class CheckinManager extends BaseManager {
     private checkinSign!: Phaser.GameObjects.Image;
     private callbacks: CheckinCallbacks;
+    private cachedStreakStatus: StreakStatusResponse | null = null;
+    private cachedStreakHistory: StreakHistoryResponse | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: CheckinCallbacks) {
         super(scene);
         this.callbacks = callbacks;
+    }
+
+    /**
+     * Set streak data from external cache (e.g., GameDataService)
+     * Use this to avoid duplicate API calls
+     */
+    public setStreakFromCache(status: StreakStatusResponse | null, history: StreakHistoryResponse | null): void {
+        this.cachedStreakStatus = status;
+        this.cachedStreakHistory = history;
+        console.log('CheckinManager: Streak data set from external cache', {
+            status: status ? 'loaded' : 'null',
+            historyCount: history?.checkins?.length ?? 0
+        });
     }
 
     /**
@@ -93,11 +108,21 @@ export class CheckinManager extends BaseManager {
             ease: 'Back.easeOut'
         });
 
-        // Fetch streak status and history from API
-        const [streakStatus, streakHistory] = await Promise.all([
-            StreakService.getStatus(),
-            StreakService.getHistory(7)
-        ]);
+        // Use cached data if available, otherwise fetch from API
+        let streakStatus: StreakStatusResponse | null;
+        let streakHistory: StreakHistoryResponse | null;
+
+        if (this.cachedStreakStatus || this.cachedStreakHistory) {
+            streakStatus = this.cachedStreakStatus;
+            streakHistory = this.cachedStreakHistory;
+            console.log('CheckinManager: Using cached streak data');
+        } else {
+            console.log('CheckinManager: Fetching streak data from API');
+            [streakStatus, streakHistory] = await Promise.all([
+                StreakService.getStatus(),
+                StreakService.getHistory(7)
+            ]);
+        }
 
         // Title and content
         this.scene.time.delayedCall(100, () => {

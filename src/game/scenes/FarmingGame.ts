@@ -357,13 +357,13 @@ export class FarmingGame extends Scene {
             }
             console.log('Seeds loaded from cache:', this.seedCounts);
 
-            // Load fertilizers from cache
-            this.fertilizerCounts = { common: 0, rare: 0, epic: 0 };
-            if (Array.isArray(cachedData.fertilizers)) {
-                cachedData.fertilizers.forEach(item => {
-                    if (item && item.items && item.items.type) {
-                        const fertilizerType = FertilizerService.mapFertilizerType(item.items.type);
-                        this.fertilizerCounts[fertilizerType] = item.quantity;
+            // Load fertilizers from cache (new API format: { fertilizers: [], total: number })
+            this.fertilizerCounts = { common: 0, rare: 0, epic: 0, legendary: 0 };
+            if (cachedData.fertilizers && Array.isArray(cachedData.fertilizers.fertilizers)) {
+                cachedData.fertilizers.fertilizers.forEach(item => {
+                    if (item && item.type) {
+                        const fertilizerType = FertilizerService.mapFertilizerType(item.type);
+                        this.fertilizerCounts[fertilizerType] = item.amount;
                     }
                 });
             }
@@ -389,6 +389,11 @@ export class FarmingGame extends Scene {
             // Set missions to MailboxManager from cache
             if (cachedData.missions) {
                 this.mailboxManager.setMissionsFromCache(cachedData.missions);
+            }
+
+            // Set streak data to CheckinManager from cache
+            if (cachedData.streak) {
+                this.checkinManager.setStreakFromCache(cachedData.streak.status, cachedData.streak.history);
             }
 
             // Update UI

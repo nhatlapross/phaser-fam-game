@@ -4,9 +4,10 @@
 import { UserService } from './UserService';
 import { GardenService, GardenResponse } from './GardenService';
 import { SeedService, SeedInventoryItem } from './SeedService';
-import { FertilizerService, FertilizerInventoryItem } from './FertilizerService';
+import { FertilizerService, FertilizerInventoryResponse } from './FertilizerService';
 import { FruitService } from './FruitService';
 import { MissionService, Mission } from './MissionService';
+import { StreakService, StreakStatusResponse, StreakHistoryResponse } from './StreakService';
 import { PlantType } from './types/GameTypes';
 
 // Types for pre-loaded data
@@ -34,14 +35,20 @@ export interface FruitInventoryItem {
     count: number;
 }
 
+export interface StreakData {
+    status: StreakStatusResponse | null;
+    history: StreakHistoryResponse | null;
+}
+
 export interface GameData {
     user: UserData | null;
     garden: GardenResponse;
     seeds: SeedInventoryItem[];
-    fertilizers: FertilizerInventoryItem[];
+    fertilizers: FertilizerInventoryResponse | null;
     fruits: FruitInventoryItem[];
     currencies: CurrencyBalances;
     missions: Mission[] | null;
+    streak: StreakData;
     loadedAt: number;
 }
 
@@ -67,10 +74,11 @@ export class GameDataService {
                 user: null,
                 garden: [],
                 seeds: [],
-                fertilizers: [],
+                fertilizers: null,
                 fruits: [],
                 currencies: { gold: 0, ruby: 0 },
                 missions: null,
+                streak: { status: null, history: null },
                 loadedAt: Date.now()
             };
             cachedGameData = emptyData;
@@ -88,7 +96,9 @@ export class GameDataService {
             fertilizersResult,
             fruitsResult,
             currenciesResult,
-            missionsResult
+            missionsResult,
+            streakStatusResult,
+            streakHistoryResult
         ] = await Promise.allSettled([
             UserService.getUserProfile(),
             GardenService.getGarden(),
@@ -96,7 +106,9 @@ export class GameDataService {
             FertilizerService.getFertilizerInventory(),
             FruitService.getFruitInventory(),
             FruitService.getCurrencyBalances(),
-            MissionService.getMissions()
+            MissionService.getMissions(),
+            StreakService.getStatus(),
+            StreakService.getHistory(7)
         ]);
 
         onProgress?.(80);
@@ -106,12 +118,16 @@ export class GameDataService {
             user: userResult.status === 'fulfilled' ? userResult.value : null,
             garden: gardenResult.status === 'fulfilled' ? gardenResult.value : [],
             seeds: seedsResult.status === 'fulfilled' ? seedsResult.value : [],
-            fertilizers: fertilizersResult.status === 'fulfilled' ? fertilizersResult.value : [],
+            fertilizers: fertilizersResult.status === 'fulfilled' ? fertilizersResult.value : null,
             fruits: fruitsResult.status === 'fulfilled' ? fruitsResult.value : [],
             currencies: currenciesResult.status === 'fulfilled'
                 ? currenciesResult.value
                 : { gold: 0, ruby: 0 },
             missions: missionsResult.status === 'fulfilled' ? missionsResult.value : null,
+            streak: {
+                status: streakStatusResult.status === 'fulfilled' ? streakStatusResult.value : null,
+                history: streakHistoryResult.status === 'fulfilled' ? streakHistoryResult.value : null
+            },
             loadedAt: Date.now()
         };
 
@@ -137,6 +153,12 @@ export class GameDataService {
         if (missionsResult.status === 'rejected') {
             console.error('Failed to fetch missions:', missionsResult.reason);
         }
+        if (streakStatusResult.status === 'rejected') {
+            console.error('Failed to fetch streak status:', streakStatusResult.reason);
+        }
+        if (streakHistoryResult.status === 'rejected') {
+            console.error('Failed to fetch streak history:', streakHistoryResult.reason);
+        }
 
         onProgress?.(100);
 
@@ -147,11 +169,13 @@ export class GameDataService {
             user: gameData.user?.username,
             gardenPlots: gameData.garden.length,
             seedTypes: gameData.seeds.length,
-            fertilizerTypes: gameData.fertilizers.length,
+            fertilizerTypes: gameData.fertilizers?.fertilizers?.length ?? 0,
             fruitSlots: gameData.fruits.length,
             gold: gameData.currencies.gold,
             ruby: gameData.currencies.ruby,
-            missions: gameData.missions?.length ?? 0
+            missions: gameData.missions?.length ?? 0,
+            streakStatus: gameData.streak.status ? 'loaded' : 'null',
+            streakHistory: gameData.streak.history?.checkins?.length ?? 0
         });
 
         return gameData;
@@ -209,7 +233,7 @@ export class GameDataService {
         return seeds;
     }
 
-    static async refreshFertilizers(): Promise<FertilizerInventoryItem[]> {
+    static async refreshFertilizers(): Promise<FertilizerInventoryResponse | null> {
         const fertilizers = await FertilizerService.getFertilizerInventory();
         if (cachedGameData) {
             cachedGameData.fertilizers = fertilizers;
