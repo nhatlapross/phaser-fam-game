@@ -57,12 +57,13 @@ export class FarmingGame extends Scene {
     };
 
     // Fertilizer counts per type (loaded from API, defaults to 0)
-    private fertilizerCounts: Record<'common' | 'rare' | 'epic', number> = {
+    private fertilizerCounts: Record<'common' | 'rare' | 'epic' | 'legendary', number> = {
         common: 0,
         rare: 0,
-        epic: 0
+        epic: 0,
+        legendary: 0
     };
-    private selectedFertilizerIndex: number = 0; // Index in fertilizer types (0=common, 1=rare, 2=epic)
+    private selectedFertilizerIndex: number = 0; // Index in fertilizer types (0=common, 1=rare, 2=epic, 3=legendary)
 
     // Toolbar items (6 slots: hand, watering can, seed, fertilizer, digest, chest)
     private toolbarItems: ToolbarItem[] = [
@@ -551,31 +552,32 @@ export class FarmingGame extends Scene {
      */
     private async fetchFertilizerInventory() {
         try {
-            const inventory = await FertilizerService.getFertilizerInventory();
+            const response = await FertilizerService.getFertilizerInventory();
 
             // Reset all fertilizer counts to 0 first
             this.fertilizerCounts = {
                 common: 0,
                 rare: 0,
-                epic: 0
+                epic: 0,
+                legendary: 0
             };
 
-            // Validate that inventory is an array
-            if (!Array.isArray(inventory)) {
-                console.warn('Fertilizer inventory is not an array:', inventory);
+            // Validate response
+            if (!response || !Array.isArray(response.fertilizers)) {
+                console.warn('Fertilizer inventory response is invalid:', response);
                 this.updateToolbar();
                 return;
             }
 
             // Update fertilizer counts from API response
-            inventory.forEach(item => {
-                if (item && item.items && item.items.type) {
-                    const fertilizerType = FertilizerService.mapFertilizerType(item.items.type);
-                    this.fertilizerCounts[fertilizerType] = item.quantity;
+            response.fertilizers.forEach(item => {
+                if (item && item.type) {
+                    const fertilizerType = FertilizerService.mapFertilizerType(item.type);
+                    this.fertilizerCounts[fertilizerType] = item.amount;
                 }
             });
 
-            console.log('Fertilizer inventory updated:', this.fertilizerCounts);
+            console.log('Fertilizer inventory updated:', this.fertilizerCounts, 'Total:', response.total);
 
             // Update toolbar to reflect new counts
             this.updateToolbar();
@@ -1893,7 +1895,7 @@ export class FarmingGame extends Scene {
         const state = this.farmLandStates.get(tileKey);
         
         // Get selected fertilizer type
-        const fertilizerTypes: ('common' | 'rare' | 'epic')[] = ['common', 'rare', 'epic'];
+        const fertilizerTypes: ('common' | 'rare' | 'epic' | 'legendary')[] = ['common', 'rare', 'epic', 'legendary'];
         const selectedFertilizerType = fertilizerTypes[this.selectedFertilizerIndex];
         const currentFertilizerCount = this.fertilizerCounts[selectedFertilizerType];
 

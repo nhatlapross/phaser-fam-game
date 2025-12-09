@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
 import { CheckinData, GAME_CONSTANTS } from '../types/GameTypes';
+import { StreakService, StreakStatusResponse, StreakHistoryResponse } from '../StreakService';
 
 interface CheckinCallbacks {
     onRewardWater: () => void;
@@ -53,7 +54,7 @@ export class CheckinManager extends BaseManager {
     /**
      * Open the check-in modal
      */
-    public open(): void {
+    public async open(): Promise<void> {
         if (this.isOpen) return;
         this.isOpen = true;
 
@@ -92,9 +93,15 @@ export class CheckinManager extends BaseManager {
             ease: 'Back.easeOut'
         });
 
+        // Fetch streak status and history from API
+        const [streakStatus, streakHistory] = await Promise.all([
+            StreakService.getStatus(),
+            StreakService.getHistory(7)
+        ]);
+
         // Title and content
         this.scene.time.delayedCall(100, () => {
-            this.createModalContent(modalX, modalY, modalWidth, modalHeight);
+            this.createModalContent(modalX, modalY, modalWidth, modalHeight, streakStatus, streakHistory);
         });
 
         // Close on overlay click
@@ -109,7 +116,7 @@ export class CheckinManager extends BaseManager {
         this.destroyElements();
     }
 
-    private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
+    private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number, streakStatus: StreakStatusResponse | null, streakHistory: StreakHistoryResponse | null): void {
         // Close button
         const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 30, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
         closeBtnBg.setDisplaySize(24, 24);
@@ -173,10 +180,23 @@ export class CheckinManager extends BaseManager {
 
         this.scene.tweens.add({ targets: subtitle, alpha: 1, duration: 150, delay: 50 });
 
-        // Get checkin data
+        // Get checkin data - prefer API history, fallback to localStorage
         const checkinData = this.getCheckinData();
-        const todayDayOfWeek = this.getDayOfWeek();
-        const canCheckin = this.canCheckinToday();
+        
+        // Use API status if available
+        const canCheckin = streakStatus ? streakStatus.canCheckinNow : this.canCheckinToday();
+        const currentStreak = streakStatus ? streakStatus.currentStreak : checkinData.streak;
+        
+        // Get checked streak days from history API (streakDay is 1-7)
+        const checkedStreakDays: number[] = [];
+        if (streakHistory && streakHistory.checkins.length > 0) {
+            streakHistory.checkins.forEach(checkin => {
+                if (!checkedStreakDays.includes(checkin.streakDay)) {
+                    checkedStreakDays.push(checkin.streakDay);
+                }
+            });
+            console.log('Checked streak days from history:', checkedStreakDays);
+        }
 
         // Rewards configuration based on the image
         // Day 1 (Mon): 100 Gold, Day 2 (Tue): 1 Glove, Day 3 (Wed): 20 Gem
@@ -201,13 +221,19 @@ export class CheckinManager extends BaseManager {
         rewards.forEach((reward, index) => {
             const dayX = startX + index * (dayBoxSize + daySpacing) + 10;
 
-            // Map index to day of week (0=Mon -> dayOfWeek 1, etc.)
-            const dayOfWeekIndex = (index + 1) % 7; // Mon=1, Tue=2, ..., Sun=0
-            const isToday = dayOfWeekIndex === todayDayOfWeek;
-            const isChecked = checkinData.checkedDays.includes(dayOfWeekIndex);
+            // streakDay is 1-7 (Day 1 to Day 7 in the cycle)
+            const streakDay = index + 1;
+            
+            // Check if this day is checked using history API data
+            const isChecked = checkedStreakDays.includes(streakDay);
+            
+            // Determine if this is the next day to check in
+            // Next day = currentStreak + 1 (if canCheckin is true)
+            const nextStreakDay = currentStreak + 1;
+            const isNextDay = canCheckin && streakDay === nextStreakDay;
 
             // Day box background
-            const boxFrame = isChecked ? 6 : (isToday ? 6 : 7);
+            const boxFrame = isChecked ? 6 : (isNextDay ? 6 : 7);
             const dayBox = this.scene.add.sprite(dayX, dayY, 'square-buttons', boxFrame);
             dayBox.setDisplaySize(dayBoxSize, dayBoxSize + 8);
             dayBox.setDepth(5302);
@@ -217,7 +243,7 @@ export class CheckinManager extends BaseManager {
 
             if (isChecked) {
                 dayBox.setTint(0x4ade80);
-            } else if (!isToday) {
+            } else if (!isNextDay) {
                 dayBox.setTint(0x888888);
             }
 
@@ -225,7 +251,7 @@ export class CheckinManager extends BaseManager {
             const dayLabel = this.scene.add.text(dayX, dayY - 18, reward.day, {
                 fontSize: '7px',
                 fontFamily: 'PixelFont',
-                color: isToday ? '#FFFFFF' : '#CCCCCC',
+                color: isNextDay ? '#FFFFFF' : '#CCCCCC',
                 resolution: 2
             });
             dayLabel.setOrigin(0.5);
@@ -242,7 +268,7 @@ export class CheckinManager extends BaseManager {
                 rewardIcon.setDepth(5303);
                 rewardIcon.setAlpha(0);
                 if (isChecked) rewardIcon.setTint(0xffffff);
-                else if (!isToday) rewardIcon.setTint(0x888888);
+                else if (!isNextDay) rewardIcon.setTint(0x888888);
                 this.scene.cameras.main.ignore(rewardIcon);
                 this.addElement(rewardIcon);
 
@@ -316,20 +342,20 @@ export class CheckinManager extends BaseManager {
                 delay: index * 30
             });
 
-            // Make today's box clickable
-            if (isToday && canCheckin && !isChecked) {
+            // Make next day's box clickable if can check in
+            if (isNextDay && !isChecked) {
                 dayBox.setInteractive({ useHandCursor: true });
                 dayBox.on('pointerover', () => dayBox.setTint(0xffff88));
                 dayBox.on('pointerout', () => dayBox.clearTint());
                 dayBox.on('pointerdown', () => {
-                    this.performCheckin(dayOfWeekIndex, dayBox, quantityText, checkinData, index);
+                    this.performCheckin(streakDay, dayBox, quantityText, checkinData, index);
                 });
             }
         });
 
         // Streak info
         const infoY = dayY + 45;
-        const streakText = this.scene.add.text(modalX, infoY, `Current Streak: ${checkinData.streak} day${checkinData.streak !== 1 ? 's' : ''}`, {
+        const streakText = this.scene.add.text(modalX, infoY, `Current Streak: ${currentStreak} day${currentStreak !== 1 ? 's' : ''}`, {
             fontSize: '10px',
             fontFamily: 'PixelFont',
             color: '#FFF8E1',
@@ -345,41 +371,52 @@ export class CheckinManager extends BaseManager {
         this.scene.tweens.add({ targets: streakText, alpha: 1, duration: 150, delay: 200 });
     }
 
-    private performCheckin(
+    private async performCheckin(
         dayIndex: number,
         dayBox: Phaser.GameObjects.Sprite,
         quantityText: Phaser.GameObjects.Text,
         checkinData: CheckinData,
         rewardIndex: number
-    ): void {
-        const today = this.getTodayString();
+    ): Promise<void> {
+        // Disable button immediately to prevent double clicks
+        dayBox.disableInteractive();
 
-        // Calculate streak
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayString = `${yesterday.getFullYear()}-${yesterday.getMonth() + 1}-${yesterday.getDate()}`;
+        // Call API
+        const result = await StreakService.checkin();
 
-        let newStreak = 1;
-        if (checkinData.lastCheckin === yesterdayString) {
-            newStreak = checkinData.streak + 1;
+        if (!result.success) {
+            // Re-enable button on failure
+            dayBox.setInteractive({ useHandCursor: true });
+            const errorResult = result as { success: false; message: string };
+            this.showCheckinReward(errorResult.message || 'Check-in failed!', 0xef4444);
+            return;
         }
 
-        // Update checked days
+        const successResult = result as {
+            success: true;
+            streakDay: number;
+            currentStreak: number;
+            rewards: { gold: number; ruby: number; items: string[] };
+            message: string;
+        };
+
+        const today = this.getTodayString();
+
+        // Update checked days based on API response
         if (!checkinData.checkedDays.includes(dayIndex)) {
             checkinData.checkedDays.push(dayIndex);
         }
 
-        // Save
+        // Save with streak from API
         this.saveCheckinData({
             checkedDays: checkinData.checkedDays,
             lastCheckin: today,
-            streak: newStreak
+            streak: successResult.currentStreak
         });
 
         // Update UI
         dayBox.setTint(0x4ade80);
         quantityText.setColor('#FFFFFF');
-        dayBox.disableInteractive();
 
         // Add checkmark
         const checkmark = this.scene.add.text(dayBox.x, dayBox.y, '✓', {
@@ -403,32 +440,23 @@ export class CheckinManager extends BaseManager {
             yoyo: true
         });
 
-        // Rewards based on day index
-        const rewardMessages = [
-            '+100 Gold!',
-            '+1 Glove!',
-            '+20 Gems!',
-            '+2 Algae Seeds!',
-            '+1 Pesticide!',
-            '+200 Gold!',
-            '+1 Mushroom Seed!'
-        ];
+        // Build reward message from API response
+        const rewardParts: string[] = [];
+        if (successResult.rewards.gold > 0) {
+            rewardParts.push(`+${successResult.rewards.gold} Gold`);
+        }
+        if (successResult.rewards.ruby > 0) {
+            rewardParts.push(`+${successResult.rewards.ruby} Ruby`);
+        }
+        if (successResult.rewards.items.length > 0) {
+            rewardParts.push(...successResult.rewards.items.map(item => `+${item}`));
+        }
 
-        const rewardColors = [
-            0xFFD700,
-            0x98D8C8,
-            0xE066FF,
-            0x4ade80,
-            0xFF6B6B,
-            0xFFD700,
-            0xfbbf24
-        ];
+        const rewardMessage = rewardParts.length > 0 ? rewardParts.join(', ') + '!' : successResult.message;
+        this.showCheckinReward(rewardMessage, 0x4ade80);
 
-        // Give reward based on day
-        this.callbacks.onRewardWater(); // Base reward (keeping for compatibility)
-        this.showCheckinReward(rewardMessages[rewardIndex], rewardColors[rewardIndex]);
-
-        // Check for 7-day streak bonus (Day 7 = Mushroom Seed)
+        // Trigger callbacks for compatibility
+        this.callbacks.onRewardWater();
         if (rewardIndex === 6) {
             this.callbacks.onRewardMushroomSeed();
         }
@@ -490,10 +518,6 @@ export class CheckinManager extends BaseManager {
     private getTodayString(): string {
         const today = new Date();
         return `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
-    }
-
-    private getDayOfWeek(): number {
-        return new Date().getDay();
     }
 
     private canCheckinToday(): boolean {
