@@ -7,6 +7,7 @@ interface CheckinCallbacks {
     onRewardWater: () => void;
     onRewardMushroomSeed: () => void;
     updateToolbar: () => void;
+    playSuccessSound: () => void;
 }
 
 /**
@@ -479,6 +480,9 @@ export class CheckinManager extends BaseManager {
 
         const rewardMessage = rewardParts.length > 0 ? rewardParts.join(', ') + '!' : successResult.message;
         this.showCheckinReward(rewardMessage, 0x4ade80);
+
+        // Play success sound
+        this.callbacks.playSuccessSound();
 
         // Trigger callbacks for compatibility
         this.callbacks.onRewardWater();

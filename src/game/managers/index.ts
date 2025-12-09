@@ -7,6 +7,7 @@ export { MailboxManager } from './MailboxManager';
 export { ProfileManager } from './ProfileManager';
 export { ToolbarManager } from './ToolbarManager';
 export { PlotManager } from './PlotManager';
+export { SoundManager } from './SoundManager';
 
 // Re-export types
 export * from '../types/GameTypes';

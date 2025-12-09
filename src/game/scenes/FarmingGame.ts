@@ -17,6 +17,7 @@ import {
     ProfileManager,
     ToolbarManager,
     PlotManager,
+    SoundManager,
     // Import types from GameTypes
     PlantType,
     TileState,
@@ -135,6 +136,7 @@ export class FarmingGame extends Scene {
     private profileManager!: ProfileManager;
     private toolbarManager!: ToolbarManager;
     private plotManager!: PlotManager;
+    private soundManager!: SoundManager;
 
     constructor() {
         super('FarmingGame');
@@ -215,6 +217,9 @@ export class FarmingGame extends Scene {
         // Handle screen resize
         this.scale.on('resize', this.onResize, this);
 
+        // Start playing theme music
+        this.soundManager.playRandomTheme();
+
         EventBus.emit('current-scene-ready', this);
     }
 
@@ -241,7 +246,8 @@ export class FarmingGame extends Scene {
             onRewardMushroomSeed: () => {
                 this.seedCounts.mushroom++;
             },
-            updateToolbar: () => this.updateToolbar()
+            updateToolbar: () => this.updateToolbar(),
+            playSuccessSound: () => this.soundManager.playSuccessSound()
         });
 
         // ShopManager
@@ -255,7 +261,8 @@ export class FarmingGame extends Scene {
             setChestInventory: (inv) => { this.chestInventory = inv; },
             getToolbarItems: () => this.toolbarItems,
             updateToolbar: () => this.updateToolbar(),
-            refreshProfileUI: () => this.createUserProfileUI()
+            refreshProfileUI: () => this.createUserProfileUI(),
+            playSuccessSound: () => this.soundManager.playSuccessSound()
         });
 
         // FactoryManager (Phygital Exchange)
@@ -265,7 +272,8 @@ export class FarmingGame extends Scene {
             updateToolbar: () => this.updateToolbar(),
             closeSeedSelector: () => this.closeSeedSelector(),
             closeChestPanel: () => this.closeChestPanel(),
-            showToastMessage: (text, color) => this.showToastMessage(text, color)
+            showToastMessage: (text, color) => this.showToastMessage(text, color),
+            playSuccessSound: () => this.soundManager.playSuccessSound()
         }, this.TILE_SIZE);
 
         // MailboxManager
@@ -273,7 +281,8 @@ export class FarmingGame extends Scene {
             getSeedCounts: () => this.seedCounts,
             getFertilizerCounts: () => this.fertilizerCounts,
             updateToolbar: () => this.updateToolbar(),
-            showToastMessage: (text, color) => this.showToastMessage(text, color)
+            showToastMessage: (text, color) => this.showToastMessage(text, color),
+            playSuccessSound: () => this.soundManager.playSuccessSound()
         }, this.TILE_SIZE);
 
         // ProfileManager
@@ -314,6 +323,9 @@ export class FarmingGame extends Scene {
             refreshProfileUI: () => this.createUserProfileUI(),
             showFloatingMessage: (msg, x, y) => this.showFloatingMessage(msg, x, y)
         });
+
+        // SoundManager
+        this.soundManager = new SoundManager(this);
     }
 
     private recreateUIForResize() {
@@ -1818,6 +1830,9 @@ export class FarmingGame extends Scene {
                 this.seedCounts[selectedPlantType]--;
                 this.updateToolbar();
 
+                // Play plant sound effect
+                this.soundManager.playPlantSound();
+
                 // Show plant sprite (sprout stage - when planted, seed becomes sprout)
                 this.showPlant(x, y, selectedPlantType, PLANT_STAGES.SPROUT);
 
@@ -1860,6 +1875,9 @@ export class FarmingGame extends Scene {
 
             // Reset health bar to full
             this.resetHealthBar(tileKey);
+
+            // Play water sound effect
+            this.soundManager.playWaterSound();
 
             // If plant was wilted, restore it
             if (state.isWilted) {
@@ -2360,8 +2378,11 @@ export class FarmingGame extends Scene {
         // Set velocity
         this.player.setVelocity(velocityX, velocityY);
 
-        // Update animations
+        // Update animations and walk sound
         if (velocityX !== 0 || velocityY !== 0) {
+            // Start walk sound if not already playing
+            this.soundManager.startWalkSound();
+
             if (Math.abs(velocityX) > Math.abs(velocityY)) {
                 // Horizontal movement
                 if (velocityX < 0) {
@@ -2378,6 +2399,9 @@ export class FarmingGame extends Scene {
                 }
             }
         } else {
+            // Stop walk sound when idle
+            this.soundManager.stopWalkSound();
+
             // Idle
             const currentAnim = this.player.anims.currentAnim;
             if (currentAnim) {

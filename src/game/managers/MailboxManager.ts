@@ -9,6 +9,7 @@ interface MailboxCallbacks {
     getFertilizerCounts: () => Record<FertilizerType, number>;
     updateToolbar: () => void;
     showToastMessage: (text: string, color: number) => void;
+    playSuccessSound: () => void;
 }
 
 /**
@@ -1023,6 +1024,7 @@ export class MailboxManager extends BaseManager {
 
             if (result) {
                 this.callbacks.showToastMessage('Link submitted successfully!', 0x22c55e);
+                this.callbacks.playSuccessSound();
                 this.closeMissionDetails();
                 this.refreshCache();
                 // Refresh missions list
@@ -1187,6 +1189,9 @@ export class MailboxManager extends BaseManager {
                 rewardMessage += result.reward.message + '\n';
             }
             rewardMessage += `Reward: ${result.reward.itemType}\nAmount: ${result.reward.amount}`;
+
+            // Play success sound for successful redeem
+            this.callbacks.playSuccessSound();
 
             this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
 
