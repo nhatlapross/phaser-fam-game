@@ -4,7 +4,7 @@ export interface Plant {
     id: string;
     type: 'ALGAE' | 'MUSHROOM' | 'TREE';
     name: string;
-    stage: 'SEED' | 'SPROUT' | 'YOUNG' | 'MATURE' | 'FLOWER' | 'FRUIT';
+    stage: 'DIGGING' | 'SEED' | 'SPROUT' | 'YOUNG' | 'MATURE' | 'FLOWER' | 'FRUIT';
     plantedAt: string;
     waterCount: number;
 }
@@ -111,11 +111,15 @@ export class GardenService {
 
     /**
      * Maps API plant stage to game plant stage (0-5)
+     * API stages: DIGGING -> SEED -> SPROUT -> YOUNG -> MATURE -> FLOWER -> FRUIT
+     * Game stages: 0 (SEED) -> 1 (SPROUT) -> 2 (YOUNG) -> 3 (MATURE) -> 4 (FLOWER) -> 5 (FRUIT)
      */
     static mapStageToGameStage(apiStage: string): number {
         switch (apiStage.toUpperCase()) {
+            case 'DIGGING':
+                return 1; // DIGGING maps to SPROUT (stage 1) - shows sprout sprite
             case 'SEED':
-                // return 0; // SEED
+                return 1; // SEED maps to SPROUT (stage 1) - shows sprout sprite
             case 'SPROUT':
                 return 1; // SPROUT
             case 'YOUNG':
@@ -127,7 +131,7 @@ export class GardenService {
             case 'FRUIT':
                 return 5; // FRUIT
             default:
-                return 1; // Default to SPROUT
+                return 1; // Default to SPROUT for unknown stages
         }
     }
 
