@@ -206,6 +206,18 @@ export class FarmingGame extends Scene {
             loop: true
         });
 
+        // Periodic garden data refresh from backend (every 30 seconds)
+        // This ensures plant stages and health are synced with the backend
+        this.time.addEvent({
+            delay: 30000, // Refresh every 30 seconds
+            callback: () => {
+                console.log('[Periodic Refresh] Syncing garden data from backend...');
+                this.loadGardenData();
+            },
+            callbackScope: this,
+            loop: true
+        });
+
         // Listen for wallet connection
         EventBus.on('wallet-connected', this.onWalletConnected, this);
         // Check if already connected
@@ -2201,37 +2213,13 @@ export class FarmingGame extends Scene {
     }
 
     private updateHealthBar(tileKey: string) {
-        const state = this.farmLandStates.get(tileKey);
-        if (!state || !state.healthBarFill || !state.lastCareTime) return;
-
-        // Calculate health percentage (100% at lastCareTime, 0% at DEATH_TIMER_MS)
-        const currentTime = Date.now();
-        const timeSinceLastCare = currentTime - state.lastCareTime;
-        const healthPercent = Math.max(0, 1 - (timeSinceLastCare / DEATH_TIMER_MS));
-
-        // Update fill width
-        const maxWidth = 12;
-        const newWidth = maxWidth * healthPercent;
-        state.healthBarFill.setSize(newWidth, 2);
-
-        // Update fill color based on health (green -> yellow -> red)
-        let color: number;
-        if (healthPercent > 0.6) {
-            // Green (healthy)
-            color = 0x00ff00;
-        } else if (healthPercent > 0.3) {
-            // Yellow (warning)
-            color = 0xffff00;
-        } else {
-            // Red (danger)
-            color = 0xff0000;
-        }
-        state.healthBarFill.setFillStyle(color, 1);
-
-        // Adjust position to keep bar left-aligned
-        const [x, y] = tileKey.split(',').map(Number);
-        const barX = x * this.TILE_SIZE + this.TILE_SIZE / 2 - (maxWidth - newWidth) / 2;
-        state.healthBarFill.setPosition(barX, y * this.TILE_SIZE - 2);
+        // NOTE: Health bar is now managed by backend API data
+        // The health bar is set when loading garden data from the backend
+        // We don't recalculate it based on local time anymore
+        // The backend provides progress.percentage which is the source of truth
+        
+        // This method is kept for compatibility but does nothing
+        // Health bar updates happen in loadGardenData() when fresh data is fetched
     }
 
     private resetHealthBar(tileKey: string) {
@@ -2287,42 +2275,19 @@ export class FarmingGame extends Scene {
     }
 
     private checkPlantHealth() {
-        const currentTime = Date.now();
-
+        // NOTE: Plant health and lifecycle is now managed by the backend API
+        // The backend tracks plant stages, watering, and death through the /garden endpoint
+        // We only update the health bar display here based on local state
+        // The actual plant state (stage, isDead, etc.) is synced from the backend
+        
         this.farmLandStates.forEach((state, tileKey) => {
             if (!state.planted || !state.cropType) return;
 
             // Skip dead plants (but keep their health bar hidden)
             if (state.isDead) return;
 
-            // Skip if no care time recorded (newly planted)
-            if (!state.lastCareTime) return;
-
             // Update health bar display
             this.updateHealthBar(tileKey);
-
-            const timeSinceLastCare = currentTime - state.lastCareTime;
-
-            // Check if plant should die or wilt
-            if (timeSinceLastCare >= DEATH_TIMER_MS) {
-                // Plants at FLOWER stage or above don't die, they just wilt
-                if (state.plantStage >= PLANT_STAGES.FLOWER) {
-                    if (!state.isWilted) {
-                        state.isWilted = true;
-                        // Update sprite to show wilted state
-                        const [x, y] = tileKey.split(',').map(Number);
-                        this.updatePlantSprite(x, y, state.cropType, state.plantStage, false, true);
-                        console.log(`Plant at ${tileKey} has wilted! (Stage ${state.plantStage})`);
-                    }
-                } else {
-                    // Plant dies permanently
-                    state.isDead = true;
-                    const [x, y] = tileKey.split(',').map(Number);
-                    this.updatePlantSprite(x, y, state.cropType, state.plantStage, true, false);
-                    // Health bar is removed in removePlant (called by updatePlantSprite)
-                    console.log(`Plant at ${tileKey} has DIED! No care for 72 hours.`);
-                }
-            }
         });
     }
 
