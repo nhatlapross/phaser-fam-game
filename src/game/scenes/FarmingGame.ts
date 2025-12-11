@@ -1926,21 +1926,15 @@ export class FarmingGame extends Scene {
                 console.log('Plant at', tileKey, 'has been restored from wilted state!');
             }
 
-            const maxStage = PLANT_STAGES.FRUIT;
-
-            if (state.plantStage < maxStage) {
-                state.plantStage++;
-                wateringCan.count--;
-                this.updateToolbar();
-                this.updatePlantSprite(x, y, state.cropType, state.plantStage, false, state.isWilted);
-                console.log('Watered and grew to stage', state.plantStage, 'at', tileKey, '- Water left:', wateringCan.count);
-                this.showToastMessage('Watered!', 0x4ade80);
-            } else {
-                wateringCan.count--;
-                this.updateToolbar();
-                console.log('Plant is already fully grown at', tileKey, '- Care timer reset');
-                this.showToastMessage('Plant fully grown!', 0x4ade80);
-            }
+            // Don't change plant stage immediately - let the API refresh handle it
+            // The backend will update the stage when appropriate
+            wateringCan.count--;
+            this.updateToolbar();
+            console.log('Watered plant at', tileKey, '- Water left:', wateringCan.count);
+            this.showToastMessage('Watered!', 0x4ade80);
+            
+            // Trigger a garden data refresh to get updated stage from backend
+            this.loadGardenData();
         }
     }
 
