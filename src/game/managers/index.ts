@@ -8,6 +8,7 @@ export { ProfileManager } from './ProfileManager';
 export { ToolbarManager } from './ToolbarManager';
 export { PlotManager } from './PlotManager';
 export { SoundManager } from './SoundManager';
+export { WellManager } from './WellManager';
 
 // Re-export types
 export * from '../types/GameTypes';

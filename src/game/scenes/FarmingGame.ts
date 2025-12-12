@@ -18,6 +18,7 @@ import {
     ToolbarManager,
     PlotManager,
     SoundManager,
+    WellManager,
     // Import types from GameTypes
     PlantType,
     TileState,
@@ -137,6 +138,7 @@ export class FarmingGame extends Scene {
     private toolbarManager!: ToolbarManager;
     private plotManager!: PlotManager;
     private soundManager!: SoundManager;
+    private wellManager!: WellManager;
 
     constructor() {
         super('FarmingGame');
@@ -164,6 +166,9 @@ export class FarmingGame extends Scene {
 
         // Create shop using manager
         this.shopManager.createShop(this.TILE_SIZE);
+
+        // Create well using manager
+        this.wellManager.createWell();
 
         // Create player
         this.createPlayer();
@@ -338,6 +343,20 @@ export class FarmingGame extends Scene {
 
         // SoundManager
         this.soundManager = new SoundManager(this);
+
+        // WellManager
+        this.wellManager = new WellManager(this, {
+            getWaterCount: () => {
+                const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
+                return wateringCan?.count || 0;
+            },
+            addWater: (amount) => {
+                const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
+                if (wateringCan) wateringCan.count = (wateringCan.count || 0) + amount;
+            },
+            updateToolbar: () => this.updateToolbar(),
+            playSuccessSound: () => this.soundManager.playSuccessSound()
+        }, this.TILE_SIZE);
     }
 
     private recreateUIForResize() {
@@ -996,6 +1015,11 @@ export class FarmingGame extends Scene {
         const shopY = centerY - 5;
         const shopExclusionRadius = 3; // Tiles to exclude around shop
 
+        // Well exclusion zone (well is at centerX + 5, centerY)
+        const wellX = centerX + 5;
+        const wellY = centerY;
+        const wellExclusionRadius = 4; // Tiles to exclude around well
+
         for (let i = 0; i < plantCount; i++) {
             // Random position on the island (rows 11-39, cols 10-39)
             const x = Phaser.Math.Between(11, 38);
@@ -1012,6 +1036,10 @@ export class FarmingGame extends Scene {
             // Skip if position is in shop exclusion zone
             const distFromShop = Math.max(Math.abs(x - shopX), Math.abs(y - shopY));
             if (distFromShop < shopExclusionRadius) continue;
+
+            // Skip if position is in well exclusion zone
+            const distFromWell = Math.max(Math.abs(x - wellX), Math.abs(y - wellY));
+            if (distFromWell < wellExclusionRadius) continue;
 
             // Skip if not on land
             if (!this.isLandTile(x, y)) continue;
@@ -1048,6 +1076,11 @@ export class FarmingGame extends Scene {
         const centerY = 25;
         const exclusionRadius = 4;
 
+        // Well exclusion zone
+        const wellX = centerX + 5;
+        const wellY = centerY;
+        const wellExclusionRadius = 4;
+
         // Check if all tiles for large object are on land and not in exclusion zone
         for (let dy = 0; dy < height; dy++) {
             for (let dx = 0; dx < width; dx++) {
@@ -1058,9 +1091,15 @@ export class FarmingGame extends Scene {
                     return false;
                 }
 
-                // Check exclusion zone
+                // Check center exclusion zone
                 const distFromCenter = Math.max(Math.abs(checkX - centerX), Math.abs(checkY - centerY));
                 if (distFromCenter < exclusionRadius) {
+                    return false;
+                }
+
+                // Check well exclusion zone
+                const distFromWell = Math.max(Math.abs(checkX - wellX), Math.abs(checkY - wellY));
+                if (distFromWell < wellExclusionRadius) {
                     return false;
                 }
             }

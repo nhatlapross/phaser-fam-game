@@ -179,6 +179,18 @@ export class Preloader extends Scene
             frameHeight: 119
         });
 
+        // Well spritesheet (2 frames for animation)
+        this.load.spritesheet('well', 'objects/well/well.png', {
+            frameWidth: 177,
+            frameHeight: 177
+        });
+
+        // Turtle tutor spritesheet (2 frames for idle animation)
+        this.load.spritesheet('tutor', 'objects/well/tutor.png', {
+            frameWidth: 45,
+            frameHeight: 55
+        });
+
         // ========== Audio Assets ==========
         // Reset path for audio files (they are in public/sound, not assets/sound)
         this.load.setPath('');

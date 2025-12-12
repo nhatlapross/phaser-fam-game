@@ -1,0 +1,471 @@
+@baseUrl = http://localhost:3000
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4YTY0YmFkYS0xNjdmLTRlYmItYWI3YS1kZmFkNThjYTg4NTIiLCJ3YWxsZXRBZGRyZXNzIjoiMHgzOWM1MTE1N2FlYjgxMTk2N2Q1MTg1YjQ1NGE4ODNkZjgyMDk3MjY0IiwiaWF0IjoxNzY1MTE2MzYyLCJleHAiOjE3NjU3MjExNjJ9.X6Yn1A70Ww_gEtxo9lO4V3Fbo8C9MRlJ_d30UsMRnP0
+
+###
+# --------------------
+# App Controller
+# --------------------
+
+### Get App Status
+GET {{baseUrl}}/
+
+###
+# --------------------
+# Auth Controller
+# --------------------
+
+### Register User
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "walletAddress": "0x39c51157aeb811967d5185b454a883df82097265",
+  "username": "test265"
+}
+
+### Login User
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "walletAddress": "0x39c51157aeb811967d5185b454a883df82097264"
+}
+
+###
+# --------------------
+# Event Controller
+# --------------------
+
+### Create a new event
+POST {{baseUrl}}/events
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Test Event",
+  "description": "This is a test event",
+  "location": "Metaverse",
+  "startTime": "2025-12-01T12:00:00.000Z",
+  "endTime": "2025-12-01T15:00:00.000Z",
+  "creatorWallet": "0x39c51157aeb811967d5185b454a883df82097265"
+}
+
+### Check in to a nearby event
+POST {{baseUrl}}/events/check-in
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "eventId": "c91fef29-f5a4-4e74-b6ee-48bab97d95be",
+  "verificationCode": "123456"
+}
+
+### Get all active events
+GET {{baseUrl}}/events/active
+Authorization: Bearer {{token}}
+
+### Get a single event by ID
+GET {{baseUrl}}/events/event-id-1
+Authorization: Bearer {{token}}
+
+### Admin check-in user by scanning QR
+POST {{baseUrl}}/events/event-id-1/admin-check-in
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "userId": "user-id-2",
+  "verificationCode": "654321"
+}
+
+### Offline check-in with code
+POST {{baseUrl}}/events/offline-check-in
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "code": "BANGKOK2025"
+}
+
+### Get offline reward rates
+GET {{baseUrl}}/events/offline-reward-rates
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# Fertilizer Controller
+# --------------------
+
+### Get fertilizer inventory
+GET {{baseUrl}}/fertilizer/inventory
+Authorization: Bearer {{token}}
+
+### Apply fertilizer to a plant
+POST {{baseUrl}}/fertilizer/apply
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "landId": "land-id-1",
+  "fertilizerType": "FERTILIZER_COMMON"
+}
+
+### Compost fruits to create fertilizer
+POST {{baseUrl}}/fertilizer/compost
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "fruitAmount": 10
+}
+
+###
+# --------------------
+# Inventory Controller
+# --------------------
+
+### Get user inventory
+GET {{baseUrl}}/inventory
+Authorization: Bearer {{token}}
+
+### Get user inventory with category filter
+GET {{baseUrl}}/inventory?category=SEEDS
+Authorization: Bearer {{token}}
+
+### Get inventory summary
+GET {{baseUrl}}/inventory/summary
+Authorization: Bearer {{token}}
+
+### Add item to inventory (Admin/System)
+POST {{baseUrl}}/inventory/add
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemType": "SEED_RARE",
+  "amount": 10
+}
+
+### Remove item from inventory
+DELETE {{baseUrl}}/inventory/remove
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemType": "SEED_COMMON",
+  "amount": 1
+}
+
+### Transfer item to another user
+POST {{baseUrl}}/inventory/transfer
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "recipientId": "user-id-2",
+  "itemType": "FRUIT",
+  "amount": 1
+}
+
+### Check if user has enough of an item
+GET {{baseUrl}}/inventory/check/SEED_COMMON/5
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# Land Controller (Legacy)
+# --------------------
+
+### Get land by wallet address (Legacy)
+GET {{baseUrl}}/land/0x39c51157aeb811967d5185b454a883df82097264
+Authorization: Bearer {{token}}
+
+### Assign a seed to a land (Legacy)
+POST {{baseUrl}}/land/assign-seed
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "landId": "land-id-1",
+  "seedId": "seed-id-1"
+}
+
+###
+# --------------------
+# Mission Controller
+# --------------------
+
+### Get all missions for current user
+GET {{baseUrl}}/missions
+Authorization: Bearer {{token}}
+
+### Claim rewards for a completed mission
+POST {{baseUrl}}/missions/0bb2f472-3b74-4790-b473-226ab003816c/claim
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# Phygital Controller
+# --------------------
+
+### Get Phygital Rewards
+GET {{baseUrl}}/phygital/rewards
+Authorization: Bearer {{token}}
+
+### Redeem a Phygital Reward
+POST {{baseUrl}}/phygital/redeem
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "rewardKey": "TOTE_BAG",
+  "paymentType": "MUSHROOM",
+  "contact": "@telegram_user",
+  "shippingAddress": "123 Farm Lane, Metaverse City"
+}
+
+### Get Redemption History
+GET {{baseUrl}}/phygital/redemptions
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# Plant Controller
+# --------------------
+
+### Get user's garden
+GET {{baseUrl}}/garden
+Authorization: Bearer {{token}}
+
+### Plant a seed on a land plot
+POST {{baseUrl}}/plant/plant
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "landId": "2a149acb-10d0-4108-9d55-63ea0113a0bd",
+  "seedType": "ALGAE"
+}
+
+### Water a plant
+PATCH {{baseUrl}}/plant/4b3bda37-fe47-4eec-9a7c-9c0f79ed246e/water
+Authorization: Bearer {{token}}
+
+### Harvest fruits from a mature plant
+POST {{baseUrl}}/plant/plant-id-1/harvest
+Authorization: Bearer {{token}}
+
+### Interact with plant (Legacy)
+PATCH {{baseUrl}}/plant/plant-id-1/interact
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "action": "social"
+}
+
+### Clear Land (Remove Plant)
+DELETE {{baseUrl}}/land/2a149acb-10d0-4108-9d55-63ea0113a0bd/clear
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# Progression Controller
+# --------------------
+
+### Get XP & level progression
+GET {{baseUrl}}/progression
+Authorization: Bearer {{token}}
+
+### Claim level-up rewards
+POST {{baseUrl}}/progression/claim-level
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "level": 1
+}
+
+###
+# --------------------
+# Setup: Reset & Populate Seeds
+# --------------------
+
+### Clear Common Seeds
+DELETE {{baseUrl}}/inventory/remove
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemType": "SEED_RARE",
+  "amount": 1
+}
+
+### Clear Algae Seeds
+DELETE {{baseUrl}}/inventory/remove
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemType": "SEED_ALGAE",
+  "amount": 100
+}
+
+### Clear Mushroom Seeds
+DELETE {{baseUrl}}/inventory/remove
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemType": "SEED_TECH",
+  "amount": 10
+}
+
+### Clear Tree Seeds
+DELETE {{baseUrl}}/inventory/remove
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemType": "SEED_TREE",
+  "amount": 100
+}
+
+### Add ALGAE Seeds (Plantable)
+POST {{baseUrl}}/inventory/add
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemType": "SEED_ALGAE",
+  "amount": 5
+}
+
+### Add MUSHROOM Seeds (Plantable)
+POST {{baseUrl}}/inventory/add
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemType": "SEED_MUSHROOM",
+  "amount": 10
+}
+
+### Add TREE Seeds (Plantable)
+POST {{baseUrl}}/inventory/add
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemType": "SEED_TREE",
+  "amount": 1
+}
+
+###
+# --------------------
+# Seed Controller
+# --------------------
+
+### Get user seed inventory
+GET {{baseUrl}}/seed/inventory
+Authorization: Bearer {{token}}
+
+### Add seed to inventory (admin/reward)
+POST {{baseUrl}}/seed/add
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "type": "SOCIAL",
+  "rarity": "RARE"
+}
+
+### Craft MUSHROOM seed
+POST {{baseUrl}}/seed/craft/mushroom
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# Shop Controller
+# --------------------
+
+### Get Gold Shop Catalog
+GET {{baseUrl}}/shop/gold
+Authorization: Bearer {{token}}
+
+### Purchase Item from Gold Shop
+POST {{baseUrl}}/shop/gold/purchase
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemKey": "SHOVEL"
+}
+
+###
+# --------------------
+# Soulbound Token Controller
+# --------------------
+
+### Get user soulbound tokens
+GET {{baseUrl}}/soulbound-tokens
+Authorization: Bearer {{token}}
+
+### Issue a custom soulbound token
+POST {{baseUrl}}/soulbound-tokens/issue
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Super Tester",
+  "metadata": {
+    "description": "Awarded for extensive testing"
+  }
+}
+
+### Check and auto-issue badges
+POST {{baseUrl}}/soulbound-tokens/check-badges
+Authorization: Bearer {{token}}
+
+### Get all available badge configurations
+GET {{baseUrl}}/soulbound-tokens/badge-configs
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# Streak Controller
+# --------------------
+
+### Daily Check-in
+POST {{baseUrl}}/streak/checkin
+Authorization: Bearer {{token}}
+
+### Get Streak Status
+GET {{baseUrl}}/streak/status
+Authorization: Bearer {{token}}
+
+### Get Check-in History
+GET {{baseUrl}}/streak/history?page=1&limit=10
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# User Controller
+# --------------------
+
+### Get current user profile
+GET {{baseUrl}}/user/profile
+Authorization: Bearer {{token}}
+
+### Update user profile
+PATCH {{baseUrl}}/user/profile
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "username": "new-test-user"
+}
+
+### Get QR code data for social features
+GET {{baseUrl}}/user/qr
+Authorization: Bearer {{token}}
