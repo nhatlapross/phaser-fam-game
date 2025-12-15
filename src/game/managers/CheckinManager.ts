@@ -214,14 +214,20 @@ export class CheckinManager extends BaseManager {
         const currentStreak = streakStatus ? streakStatus.currentStreak : checkinData.streak;
         
         // Get checked streak days from history API (streakDay is 1-7)
+        // IMPORTANT: Only include days from the CURRENT cycle (streakDay <= currentStreak)
+        // If currentStreak is 0, no days should be shown as checked (cycle has reset)
         const checkedStreakDays: number[] = [];
-        if (streakHistory && streakHistory.checkins.length > 0) {
+        if (streakHistory && streakHistory.checkins.length > 0 && currentStreak > 0) {
             streakHistory.checkins.forEach(checkin => {
-                if (!checkedStreakDays.includes(checkin.streakDay)) {
+                // Only include checkins that are part of the current streak
+                // streakDay should be <= currentStreak to be in the current cycle
+                if (checkin.streakDay <= currentStreak && !checkedStreakDays.includes(checkin.streakDay)) {
                     checkedStreakDays.push(checkin.streakDay);
                 }
             });
-            console.log('Checked streak days from history:', checkedStreakDays);
+            console.log('Checked streak days from current cycle:', checkedStreakDays, '(currentStreak:', currentStreak, ')');
+        } else {
+            console.log('No checked days - currentStreak is', currentStreak);
         }
 
         // Rewards configuration based on the image
@@ -492,6 +498,10 @@ export class CheckinManager extends BaseManager {
 
         // Update toolbar
         this.callbacks.updateToolbar();
+
+        // Clear cached data so fresh data is fetched when modal reopens
+        this.cachedStreakStatus = null;
+        this.cachedStreakHistory = null;
     }
 
     private showCheckinReward(text: string, color: number): void {
