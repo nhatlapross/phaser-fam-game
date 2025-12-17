@@ -1109,6 +1109,9 @@ export class FarmingGame extends Scene {
 
     private addSmallTree(x: number, y: number) {
         // Small tree: sprite 0 (top), sprite 9 (bottom)
+        // Use bottom row Y for depth, slight offset so player can cover tree base
+        const baseDepth = (y + 1) * this.TILE_SIZE - 4;
+
         const topSprite = this.add.sprite(
             x * this.TILE_SIZE + this.TILE_SIZE / 2,
             y * this.TILE_SIZE + this.TILE_SIZE / 2,
@@ -1116,7 +1119,7 @@ export class FarmingGame extends Scene {
             0
         );
         topSprite.setOrigin(0.5);
-        topSprite.setDepth(y * this.TILE_SIZE);
+        topSprite.setDepth(baseDepth);
 
         const bottomSprite = this.add.sprite(
             x * this.TILE_SIZE + this.TILE_SIZE / 2,
@@ -1125,11 +1128,14 @@ export class FarmingGame extends Scene {
             9
         );
         bottomSprite.setOrigin(0.5);
-        bottomSprite.setDepth((y + 1) * this.TILE_SIZE);
+        bottomSprite.setDepth(baseDepth);
     }
 
     private addMediumTree(x: number, y: number) {
         // Medium tree: 2x2 grid (1, 2, 10, 11)
+        // Use bottom row Y for depth, slight offset so player can cover tree base
+        const baseDepth = (y + 1) * this.TILE_SIZE - 4;
+
         const sprites = [
             { frame: 1, dx: 0, dy: 0 },
             { frame: 2, dx: 1, dy: 0 },
@@ -1145,12 +1151,15 @@ export class FarmingGame extends Scene {
                 s.frame
             );
             sprite.setOrigin(0.5);
-            sprite.setDepth((y + s.dy) * this.TILE_SIZE);
+            sprite.setDepth(baseDepth);
         });
     }
 
     private addLargeTree(x: number, y: number) {
         // Large tree: 2x2 grid (3, 4, 12, 13)
+        // Use bottom row Y for depth, slight offset so player can cover tree base
+        const baseDepth = (y + 1) * this.TILE_SIZE - 4;
+
         const sprites = [
             { frame: 3, dx: 0, dy: 0 },
             { frame: 4, dx: 1, dy: 0 },
@@ -1166,12 +1175,15 @@ export class FarmingGame extends Scene {
                 s.frame
             );
             sprite.setOrigin(0.5);
-            sprite.setDepth((y + s.dy) * this.TILE_SIZE);
+            sprite.setDepth(baseDepth);
         });
     }
 
     private addMushroom(x: number, y: number) {
         // Random mushroom: sprites 5, 6, 7, 8
+        // Use bottom of sprite for depth, slight offset so player can cover base
+        const baseDepth = y * this.TILE_SIZE + this.TILE_SIZE - 4;
+
         const mushroomFrame = Phaser.Math.Between(5, 8);
         const sprite = this.add.sprite(
             x * this.TILE_SIZE + this.TILE_SIZE / 2,
@@ -1180,11 +1192,14 @@ export class FarmingGame extends Scene {
             mushroomFrame
         );
         sprite.setOrigin(0.5);
-        sprite.setDepth(y * this.TILE_SIZE);
+        sprite.setDepth(baseDepth);
     }
 
     private addBush(x: number, y: number) {
         // Random bush: sprites 27, 28
+        // Use bottom of sprite for depth, slight offset so player can cover base
+        const baseDepth = y * this.TILE_SIZE + this.TILE_SIZE - 4;
+
         const bushFrame = Phaser.Math.Between(27, 28);
         const sprite = this.add.sprite(
             x * this.TILE_SIZE + this.TILE_SIZE / 2,
@@ -1193,7 +1208,7 @@ export class FarmingGame extends Scene {
             bushFrame
         );
         sprite.setOrigin(0.5);
-        sprite.setDepth(y * this.TILE_SIZE);
+        sprite.setDepth(baseDepth);
     }
 
     private createFarmPlots() {
