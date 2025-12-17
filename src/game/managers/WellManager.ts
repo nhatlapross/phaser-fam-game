@@ -1,23 +1,12 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
+import { ShopService } from '../ShopService';
 
 interface WellCallbacks {
     getWaterCount: () => number;
     addWater: (amount: number) => void;
     updateToolbar: () => void;
     playSuccessSound: () => void;
-}
-
-// Storage key for well data
-const WELL_STORAGE_KEY = 'fam_game_well_data';
-
-// Well configuration
-const WATER_RECHARGE_TIME_MS = 2 * 60 * 1000; // 2 minutes in milliseconds
-const MAX_WATER_STORED = 5;
-
-interface WellData {
-    lastClaimTime: number;
-    storedWater: number;
 }
 
 /**
@@ -30,6 +19,8 @@ export class WellManager extends BaseManager {
     private callbacks: WellCallbacks;
     private tileSize: number;
     private updateTimer?: Phaser.Time.TimerEvent;
+    private nextClaimAt: Date | null = null;
+    private isClaimingWater: boolean = false;
 
     constructor(scene: Phaser.Scene, callbacks: WellCallbacks, tileSize: number) {
         super(scene);
@@ -126,38 +117,21 @@ export class WellManager extends BaseManager {
     }
 
     /**
-     * Calculate current stored water based on time passed
+     * Check if water can be claimed now
      */
-    private calculateStoredWater(): number {
-        const data = this.getWellData();
-        const now = Date.now();
-        const timePassed = now - data.lastClaimTime;
-
-        // Calculate how many water units have been regenerated
-        const newWater = Math.floor(timePassed / WATER_RECHARGE_TIME_MS);
-        const totalWater = Math.min(data.storedWater + newWater, MAX_WATER_STORED);
-
-        return totalWater;
+    private canClaimWater(): boolean {
+        if (!this.nextClaimAt) return true; // First time or no data
+        return new Date() >= this.nextClaimAt;
     }
 
     /**
      * Get time until next water is available (in seconds)
      */
     private getTimeUntilNextWater(): number {
-        const data = this.getWellData();
-        const currentWater = this.calculateStoredWater();
-
-        if (currentWater >= MAX_WATER_STORED) {
-            return 0; // Already at max
-        }
-
-        const now = Date.now();
-        const timeSinceLastClaim = now - data.lastClaimTime;
-        const waterGenerated = Math.floor(timeSinceLastClaim / WATER_RECHARGE_TIME_MS);
-        const timeIntoCurrentCycle = timeSinceLastClaim - (waterGenerated * WATER_RECHARGE_TIME_MS);
-        const timeRemaining = WATER_RECHARGE_TIME_MS - timeIntoCurrentCycle;
-
-        return Math.ceil(timeRemaining / 1000); // Return in seconds
+        if (!this.nextClaimAt) return 0;
+        const now = new Date();
+        if (now >= this.nextClaimAt) return 0;
+        return Math.ceil((this.nextClaimAt.getTime() - now.getTime()) / 1000);
     }
 
     /**
@@ -282,22 +256,21 @@ export class WellManager extends BaseManager {
 
         this.scene.tweens.add({ targets: wellIcon, alpha: 1, duration: 150, delay: 50 });
 
-        // Water count display
-        const storedWater = this.calculateStoredWater();
-        const waterCountText = this.scene.add.text(modalX, modalY + 15, `${storedWater}/${MAX_WATER_STORED}`, {
-            fontSize: '16px',
+        // Status text (shows if water is available or countdown)
+        const statusText = this.scene.add.text(modalX, modalY + 15, '', {
+            fontSize: '12px',
             fontFamily: 'PixelFont',
             color: '#4FC3F7',
             resolution: 2
         });
-        waterCountText.setOrigin(0.5);
-        waterCountText.setDepth(5302);
-        waterCountText.setStroke('#1565C0', 2);
-        waterCountText.setAlpha(0);
-        this.scene.cameras.main.ignore(waterCountText);
-        this.addElement(waterCountText);
+        statusText.setOrigin(0.5);
+        statusText.setDepth(5302);
+        statusText.setStroke('#1565C0', 2);
+        statusText.setAlpha(0);
+        this.scene.cameras.main.ignore(statusText);
+        this.addElement(statusText);
 
-        this.scene.tweens.add({ targets: waterCountText, alpha: 1, duration: 150, delay: 100 });
+        this.scene.tweens.add({ targets: statusText, alpha: 1, duration: 150, delay: 100 });
 
         // Timer text (shows countdown to next water)
         const timerText = this.scene.add.text(modalX, modalY + 35, '', {
@@ -316,16 +289,26 @@ export class WellManager extends BaseManager {
 
         // Update timer display
         const updateTimerDisplay = () => {
-            const currentWater = this.calculateStoredWater();
-            waterCountText.setText(`${currentWater}/${MAX_WATER_STORED}`);
+            const canClaim = this.canClaimWater();
 
-            if (currentWater >= MAX_WATER_STORED) {
-                timerText.setText('Well is full!');
+            if (canClaim) {
+                statusText.setText('💧 Water Ready!');
+                statusText.setColor('#4CAF50');
+                timerText.setText('Click to collect');
             } else {
+                statusText.setText('⏳ Recharging...');
+                statusText.setColor('#FFA726');
                 const seconds = this.getTimeUntilNextWater();
-                const mins = Math.floor(seconds / 60);
+                const hours = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
                 const secs = seconds % 60;
-                timerText.setText(`Next water: ${mins}:${secs.toString().padStart(2, '0')}`);
+                if (hours > 0) {
+                    timerText.setText(`Next: ${hours}h ${mins}m ${secs}s`);
+                } else if (mins > 0) {
+                    timerText.setText(`Next: ${mins}m ${secs}s`);
+                } else {
+                    timerText.setText(`Next: ${secs}s`);
+                }
             }
         };
 
@@ -371,14 +354,13 @@ export class WellManager extends BaseManager {
         claimBtnBg.on('pointerover', () => claimBtnBg.setTint(0x88ff88));
         claimBtnBg.on('pointerout', () => claimBtnBg.clearTint());
         claimBtnBg.on('pointerdown', () => {
-            const waterToClaim = this.calculateStoredWater();
-            if (waterToClaim > 0) {
-                this.claimWater(waterToClaim, waterCountText, timerText);
+            if (this.canClaimWater()) {
+                this.claimWaterFromAPI(statusText, timerText, claimBtnBg, claimBtnText);
             }
         });
 
         // Description
-        const descText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 25, '+1 water every 2 minutes', {
+        const descText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 25, '+3h Growth Time per Water', {
             fontSize: '8px',
             fontFamily: 'PixelFont',
             color: '#8D6E63',
@@ -393,29 +375,57 @@ export class WellManager extends BaseManager {
         this.scene.tweens.add({ targets: descText, alpha: 1, duration: 150, delay: 200 });
     }
 
-    private claimWater(amount: number, waterCountText: Phaser.GameObjects.Text, timerText: Phaser.GameObjects.Text): void {
-        // Add water to player's watering can
-        this.callbacks.addWater(amount);
+    private async claimWaterFromAPI(
+        statusText: Phaser.GameObjects.Text,
+        timerText: Phaser.GameObjects.Text,
+        claimBtn: Phaser.GameObjects.Sprite,
+        claimBtnText: Phaser.GameObjects.Text
+    ): Promise<void> {
+        if (this.isClaimingWater) return;
+        this.isClaimingWater = true;
 
-        // Reset well storage
-        const now = Date.now();
-        this.saveWellData({
-            lastClaimTime: now,
-            storedWater: 0
-        });
+        // Disable button while claiming
+        claimBtn.disableInteractive();
+        claimBtnText.setText('...');
 
-        // Update UI
-        waterCountText.setText(`0/${MAX_WATER_STORED}`);
-        timerText.setText(`Next water: 2:00`);
+        const result = await ShopService.claimFreeWater();
 
-        // Play success sound
-        this.callbacks.playSuccessSound();
+        if (result && result.success) {
+            // Add water to player's inventory
+            this.callbacks.addWater(result.amount);
 
-        // Update toolbar
-        this.callbacks.updateToolbar();
+            // Update next claim time
+            if (result.nextClaimAt) {
+                this.nextClaimAt = new Date(result.nextClaimAt);
+            }
 
-        // Show floating reward message
-        this.showClaimReward(`+${amount} Water!`);
+            // Play success sound
+            this.callbacks.playSuccessSound();
+
+            // Update toolbar
+            this.callbacks.updateToolbar();
+
+            // Show floating reward message
+            this.showClaimReward(`+${result.amount} Water!`);
+
+            // Update UI
+            statusText.setText('⏳ Recharging...');
+            statusText.setColor('#FFA726');
+        } else {
+            // Show error message
+            const errorMsg = result?.message || 'Failed to claim water';
+            this.showClaimReward(errorMsg);
+            
+            // If there's a nextClaimAt in error response, update it
+            if (result?.nextClaimAt) {
+                this.nextClaimAt = new Date(result.nextClaimAt);
+            }
+        }
+
+        // Re-enable button
+        claimBtn.setInteractive({ useHandCursor: true });
+        claimBtnText.setText('Claim');
+        this.isClaimingWater = false;
     }
 
     private showClaimReward(text: string): void {
@@ -444,31 +454,6 @@ export class WellManager extends BaseManager {
                 rewardText.destroy();
             }
         });
-    }
-
-    // Storage helpers
-    private getWellData(): WellData {
-        if (typeof window === 'undefined') {
-            return { lastClaimTime: Date.now(), storedWater: 0 };
-        }
-        const stored = localStorage.getItem(WELL_STORAGE_KEY);
-        if (stored) {
-            try {
-                return JSON.parse(stored);
-            } catch {
-                return { lastClaimTime: Date.now(), storedWater: 0 };
-            }
-        }
-        // First time - start with full well
-        const initialData = { lastClaimTime: Date.now() - (MAX_WATER_STORED * WATER_RECHARGE_TIME_MS), storedWater: 0 };
-        this.saveWellData(initialData);
-        return initialData;
-    }
-
-    private saveWellData(data: WellData): void {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(WELL_STORAGE_KEY, JSON.stringify(data));
-        }
     }
 
     public destroy(): void {

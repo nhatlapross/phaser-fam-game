@@ -1,14 +1,15 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
 import { PlantType, ChestSlot, ShopPurchaseLimits } from '../types/GameTypes';
-
-interface ShopItem {
-    name: string;
-    price: number;
-    desc: string;
-    limit: string;
-    key: string;
-}
+import {
+    ShopService,
+    GoldShopResponse,
+    GemShopResponse,
+    CashShopResponse,
+    GoldShopItem,
+    GemShopItem,
+    CashShopItem
+} from '../ShopService';
 
 interface ShopCallbacks {
     getPlayerGold: () => number;
@@ -38,14 +39,20 @@ export class ShopManager extends BaseManager {
         mushroomExchange: { count: 0, lastReset: Date.now() }
     };
 
+    // Cached shop data
+    private goldShopData: GoldShopResponse | null = null;
+    private gemShopData: GemShopResponse | null = null;
+    private cashShopData: CashShopResponse | null = null;
+
+    // Content elements for tab switching
+    private contentElements: Phaser.GameObjects.GameObject[] = [];
+    private balanceText: Phaser.GameObjects.Text | null = null;
+
     constructor(scene: Phaser.Scene, callbacks: ShopCallbacks) {
         super(scene);
         this.callbacks = callbacks;
     }
 
-    /**
-     * Create the shop sprite on the map
-     */
     public createShop(tileSize: number): void {
         const centerX = 25;
         const centerY = 25;
@@ -54,7 +61,6 @@ export class ShopManager extends BaseManager {
         const shopX = factoryX - 80;
         const shopY = factoryY + 24;
 
-        // Create shop animation
         if (!this.scene.anims.exists('shop-idle')) {
             this.scene.anims.create({
                 key: 'shop-idle',
@@ -74,21 +80,14 @@ export class ShopManager extends BaseManager {
             this.open();
         });
 
-        // Setup hover effect with tint + shadow
         this.setupHoverEffect(this.shopSprite, 10);
     }
 
-    /**
-     * Get the shop sprite for camera ignore setup
-     */
     public getShopSprite(): Phaser.GameObjects.Sprite {
         return this.shopSprite;
     }
 
-    /**
-     * Open the shop modal
-     */
-    public open(): void {
+    public async open(): Promise<void> {
         if (this.isOpen) return;
         this.isOpen = true;
         this.activeTab = 'gold';
@@ -96,7 +95,7 @@ export class ShopManager extends BaseManager {
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
         const modalWidth = 340;
-        const modalHeight = 360;
+        const modalHeight = 320;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
 
@@ -119,7 +118,6 @@ export class ShopManager extends BaseManager {
         this.scene.cameras.main.ignore(modalBg);
         this.addElement(modalBg);
 
-        // Animate modal
         modalBg.setScale(0);
         this.scene.tweens.add({
             targets: modalBg,
@@ -129,483 +127,394 @@ export class ShopManager extends BaseManager {
             ease: 'Back.easeOut'
         });
 
+        await this.fetchShopData();
+
         this.scene.time.delayedCall(100, () => {
             this.createModalContent(modalX, modalY, modalWidth, modalHeight);
         });
     }
 
-    /**
-     * Close the shop modal
-     */
+    private async fetchShopData(): Promise<void> {
+        const [goldData, gemData, cashData] = await Promise.all([
+            ShopService.getGoldShop(),
+            ShopService.getGemShop(),
+            ShopService.getCashShop()
+        ]);
+
+        this.goldShopData = goldData;
+        this.gemShopData = gemData;
+        this.cashShopData = cashData;
+
+        console.log('Shop data loaded:', {
+            gold: goldData?.items.length ?? 0,
+            gem: gemData?.items.length ?? 0,
+            cash: cashData?.items.length ?? 0
+        });
+    }
+
     public close(): void {
         this.isOpen = false;
+        this.contentElements = [];
+        this.balanceText = null;
         this.destroyElements();
     }
 
+
     private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
+        // Balance display
+        const goldBalance = this.goldShopData?.user.balanceGold ?? 0;
+        const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
+        
+        this.balanceText = this.scene.add.text(modalX, modalY - modalHeight / 2 + 48, `💰 ${goldBalance}    💎 ${gemBalance}`, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        this.balanceText.setOrigin(0.5);
+        this.balanceText.setDepth(5302);
+        this.balanceText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(this.balanceText);
+        this.addElement(this.balanceText);
+
         // Title
         const title = this.scene.add.text(modalX, modalY - modalHeight / 2 + 65, 'SHOP', {
             fontSize: '16px',
             fontFamily: 'PixelFont',
-            color: '#ffffffff',
+            color: '#FFFFFF',
             resolution: 2
         });
         title.setOrigin(0.5);
         title.setDepth(5302);
         title.setStroke('#5D4037', 3);
-        title.setAlpha(0);
         this.scene.cameras.main.ignore(title);
         this.addElement(title);
-        this.scene.tweens.add({ targets: title, alpha: 1, duration: 150 });
 
         // Tab buttons
         const tabY = modalY - modalHeight / 2 + 90;
         const tabWidth = 80;
         const tabHeight = 24;
 
-        // Gold tab
         const goldTabBg = this.scene.add.sprite(modalX - 95, tabY, 'square-buttons', 6);
         goldTabBg.setDisplaySize(tabWidth, tabHeight);
         goldTabBg.setDepth(5302);
-        goldTabBg.setAlpha(0);
         goldTabBg.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(goldTabBg);
         this.addElement(goldTabBg);
 
         const goldTabText = this.scene.add.text(modalX - 95, tabY, '💰 Gold', {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
+            fontSize: '9px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2
         });
         goldTabText.setOrigin(0.5);
         goldTabText.setDepth(5303);
         goldTabText.setStroke('#5D4037', 1);
-        goldTabText.setAlpha(0);
         this.scene.cameras.main.ignore(goldTabText);
         this.addElement(goldTabText);
 
-        // Gem tab
         const gemTabBg = this.scene.add.sprite(modalX, tabY, 'square-buttons', 7);
         gemTabBg.setDisplaySize(tabWidth, tabHeight);
         gemTabBg.setDepth(5302);
-        gemTabBg.setAlpha(0);
         gemTabBg.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(gemTabBg);
         this.addElement(gemTabBg);
 
         const gemTabText = this.scene.add.text(modalX, tabY, '💎 Gem', {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
+            fontSize: '9px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2
         });
         gemTabText.setOrigin(0.5);
         gemTabText.setDepth(5303);
         gemTabText.setStroke('#5D4037', 1);
-        gemTabText.setAlpha(0);
         this.scene.cameras.main.ignore(gemTabText);
         this.addElement(gemTabText);
 
-        // Cash tab
         const cashTabBg = this.scene.add.sprite(modalX + 95, tabY, 'square-buttons', 7);
         cashTabBg.setDisplaySize(tabWidth, tabHeight);
         cashTabBg.setDepth(5302);
-        cashTabBg.setAlpha(0);
         cashTabBg.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(cashTabBg);
         this.addElement(cashTabBg);
 
         const cashTabText = this.scene.add.text(modalX + 95, tabY, '💵 Cash', {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
+            fontSize: '9px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2
         });
         cashTabText.setOrigin(0.5);
         cashTabText.setDepth(5303);
         cashTabText.setStroke('#5D4037', 1);
-        cashTabText.setAlpha(0);
         this.scene.cameras.main.ignore(cashTabText);
         this.addElement(cashTabText);
 
-        this.scene.tweens.add({
-            targets: [goldTabBg, goldTabText, gemTabBg, gemTabText, cashTabBg, cashTabText],
-            alpha: 1,
-            duration: 150
-        });
-
-        // Close button (same style as mailbox)
+        // Close button
         const closeBtnX = modalX + modalWidth / 2 - 35;
         const closeBtnY = modalY - modalHeight / 2 + 48;
 
         const closeBtnBg = this.scene.add.sprite(closeBtnX, closeBtnY, 'square-buttons', 7);
         closeBtnBg.setDisplaySize(24, 24);
         closeBtnBg.setDepth(5302);
-        closeBtnBg.setAlpha(0);
         closeBtnBg.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(closeBtnBg);
         this.addElement(closeBtnBg);
 
         const closeText = this.scene.add.text(closeBtnX, closeBtnY, 'X', {
-            fontSize: '10px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
+            fontSize: '10px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2
         });
         closeText.setOrigin(0.5);
         closeText.setDepth(5303);
         closeText.setStroke('#5D4037', 1);
-        closeText.setAlpha(0);
         this.scene.cameras.main.ignore(closeText);
         this.addElement(closeText);
-
-        this.scene.tweens.add({
-            targets: [closeBtnBg, closeText],
-            alpha: 1,
-            duration: 150
-        });
 
         closeBtnBg.on('pointerdown', () => this.close());
         closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
         closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
 
         // Content area
-        const contentY = modalY + 40;
-        const contentElements: Phaser.GameObjects.GameObject[] = [];
+        const contentStartY = modalY - modalHeight / 2 + 115;
+        const itemHeight = 38;
 
         const showGoldContent = () => {
-            contentElements.forEach(el => el.destroy());
-            contentElements.length = 0;
-
+            this.clearContentElements();
+            this.activeTab = 'gold';
             goldTabBg.setTexture('square-buttons', 6);
             gemTabBg.setTexture('square-buttons', 7);
             cashTabBg.setTexture('square-buttons', 7);
 
-            const items: ShopItem[] = [
-                { name: '🔧 Shovel', price: 500, desc: 'Remove dead plants', limit: '1/wk', key: 'shovel' },
-                { name: '🧤 Gloves', price: 30, desc: 'Catch bugs', limit: '', key: 'gloves' },
-                { name: '💧 Growth Water', price: 100, desc: '-1h grow time', limit: '1/day', key: 'growthWater' },
-                { name: '🐟 Fish Food', price: 20, desc: 'Feed fish', limit: '', key: 'fishFood' },
-                { name: '🍄 Mushroom Trade', price: 0, desc: '5 Algae = 1 Spore', limit: '2/wk', key: 'mushroomExchange' }
-            ];
-
-            items.forEach((item, index) => {
-                const itemY = contentY - 80 + index * 36;
-                this.createShopItem(modalX, itemY, item, 'gold', contentElements);
-            });
+            if (this.goldShopData && this.goldShopData.items.length > 0) {
+                // Show max 5 items
+                const items = this.goldShopData.items.slice(0, 5);
+                items.forEach((item, index) => {
+                    const itemY = contentStartY + index * itemHeight;
+                    this.createShopItem(modalX, itemY, item.icon, item.name, item.description, 
+                        `💰${item.priceGold}`, item.affordable, () => this.handleGoldPurchase(item));
+                });
+            } else {
+                this.showLoadingOrEmpty('No items available');
+            }
         };
 
         const showGemContent = () => {
-            contentElements.forEach(el => el.destroy());
-            contentElements.length = 0;
-
+            this.clearContentElements();
+            this.activeTab = 'gem';
             goldTabBg.setTexture('square-buttons', 7);
             gemTabBg.setTexture('square-buttons', 6);
             cashTabBg.setTexture('square-buttons', 7);
 
-            const items: ShopItem[] = [
-                { name: '🌱 Algae Seed', price: 10, desc: '+1 Algae seed', limit: '', key: 'algaeSeed' },
-                { name: '🍄 Mushroom Spore', price: 50, desc: '+1 Mushroom seed', limit: '', key: 'mushroomSeed' },
-                { name: '⚡ Mid Booster', price: 500, desc: '-12h grow time', limit: '', key: 'mediumGrowth' },
-                { name: '🚀 High Booster', price: 1000, desc: '-24h grow time', limit: '', key: 'highGrowth' },
-                { name: '💰 Gold Exchange', price: 100, desc: '+1000 Gold', limit: '', key: 'goldExchange' }
-            ];
-
-            items.forEach((item, index) => {
-                const itemY = contentY - 80 + index * 36;
-                this.createShopItem(modalX, itemY, item, 'gem', contentElements);
-            });
+            if (this.gemShopData && this.gemShopData.items.length > 0) {
+                const items = this.gemShopData.items.slice(0, 5);
+                items.forEach((item, index) => {
+                    const itemY = contentStartY + index * itemHeight;
+                    this.createShopItem(modalX, itemY, item.icon, item.name, item.description,
+                        `💎${item.priceGem}`, item.affordable, () => this.handleGemPurchase(item));
+                });
+            } else {
+                this.showLoadingOrEmpty('No items available');
+            }
         };
 
         const showCashContent = () => {
-            contentElements.forEach(el => el.destroy());
-            contentElements.length = 0;
-
+            this.clearContentElements();
+            this.activeTab = 'cash';
             goldTabBg.setTexture('square-buttons', 7);
             gemTabBg.setTexture('square-buttons', 7);
             cashTabBg.setTexture('square-buttons', 6);
 
-            const items: ShopItem[] = [
-                { name: '💎 100 Gems', price: 5, desc: '$5 USD', limit: '', key: 'gems100' },
-                { name: '💎 500 Gems', price: 20, desc: '$20 USD', limit: '', key: 'gems500' },
-                { name: '💎 1200 Gems', price: 50, desc: '$50 USD', limit: '', key: 'gems1200' },
-                { name: '💎 2400 Gems', price: 100, desc: '$100 USD', limit: '', key: 'gems2400' },
-                { name: '🏝️ Land Slot 2', price: 15, desc: '$15 USD', limit: '', key: 'land2' },
-                { name: '🏝️ Land Slot 3', price: 50, desc: '$50 USD', limit: '', key: 'land3' }
-            ];
-
-            items.forEach((item, index) => {
-                const itemY = contentY - 90 + index * 32;
-                this.createShopItem(modalX, itemY, item, 'cash', contentElements);
-            });
+            if (this.cashShopData && this.cashShopData.items.length > 0) {
+                const items = this.cashShopData.items.slice(0, 5);
+                items.forEach((item, index) => {
+                    const itemY = contentStartY + index * itemHeight;
+                    this.createShopItem(modalX, itemY, item.icon, item.name, item.description,
+                        `$${item.priceUSD}`, item.available, () => this.handleCashPurchase(item));
+                });
+            } else {
+                this.showLoadingOrEmpty('No items available');
+            }
         };
 
-        // Tab click handlers
-        goldTabBg.on('pointerdown', () => {
-            this.activeTab = 'gold';
-            showGoldContent();
-        });
+        goldTabBg.on('pointerdown', showGoldContent);
+        gemTabBg.on('pointerdown', showGemContent);
+        cashTabBg.on('pointerdown', showCashContent);
 
-        gemTabBg.on('pointerdown', () => {
-            this.activeTab = 'gem';
-            showGemContent();
-        });
-
-        cashTabBg.on('pointerdown', () => {
-            this.activeTab = 'cash';
-            showCashContent();
-        });
-
-        // Show initial content
         showGoldContent();
     }
 
-    private createShopItem(
-        modalX: number,
-        itemY: number,
-        item: ShopItem,
-        currency: 'gold' | 'gem' | 'cash',
-        contentElements: Phaser.GameObjects.GameObject[]
-    ): void {
-        const cardWidth = 260;
-        const cardHeight = 30;
-        const cardX = modalX + 10;
+    private clearContentElements(): void {
+        this.contentElements.forEach(el => el.destroy());
+        this.contentElements = [];
+    }
 
-        // Card border
-        const cardBorder = this.scene.add.rectangle(cardX, itemY, cardWidth + 2, cardHeight + 2, 0x8B7355);
+    private showLoadingOrEmpty(message: string): void {
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+
+        const text = this.scene.add.text(screenWidth / 2, screenHeight / 2, message, {
+            fontSize: '12px', fontFamily: 'PixelFont', color: '#8B7355', resolution: 2
+        });
+        text.setOrigin(0.5);
+        text.setDepth(5304);
+        this.scene.cameras.main.ignore(text);
+        this.addElement(text);
+        this.contentElements.push(text);
+    }
+
+    private createShopItem(
+        modalX: number, itemY: number, icon: string, name: string, 
+        desc: string, price: string, canBuy: boolean, onBuy: () => void
+    ): void {
+        const cardWidth = 280;
+        const cardHeight = 32;
+
+        const cardBorder = this.scene.add.rectangle(modalX, itemY, cardWidth + 2, cardHeight + 2, 0x8B7355);
         cardBorder.setDepth(5302);
         this.scene.cameras.main.ignore(cardBorder);
         this.addElement(cardBorder);
-        contentElements.push(cardBorder);
+        this.contentElements.push(cardBorder);
 
-        // Card background
-        const cardBg = this.scene.add.rectangle(cardX, itemY, cardWidth, cardHeight, 0xD4C4A8);
+        const bgColor = canBuy ? 0xD4C4A8 : 0xB0B0B0;
+        const cardBg = this.scene.add.rectangle(modalX, itemY, cardWidth, cardHeight, bgColor);
         cardBg.setDepth(5303);
-        cardBg.setInteractive({ useHandCursor: true });
+        cardBg.setInteractive({ useHandCursor: canBuy });
         this.scene.cameras.main.ignore(cardBg);
         this.addElement(cardBg);
-        contentElements.push(cardBg);
+        this.contentElements.push(cardBg);
 
-        const leftEdge = cardX - cardWidth / 2 + 10;
+        const leftEdge = modalX - cardWidth / 2 + 12;
 
-        // Item name
-        const nameText = this.scene.add.text(leftEdge, itemY - 5, item.name, {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#5D4037',
-            resolution: 2
+        const nameText = this.scene.add.text(leftEdge, itemY - 6, `${icon} ${name}`, {
+            fontSize: '10px', fontFamily: 'PixelFont', color: canBuy ? '#5D4037' : '#666666', resolution: 2
         });
         nameText.setOrigin(0, 0.5);
         nameText.setDepth(5304);
         this.scene.cameras.main.ignore(nameText);
         this.addElement(nameText);
-        contentElements.push(nameText);
+        this.contentElements.push(nameText);
 
-        // Description
-        const descText = this.scene.add.text(leftEdge, itemY + 7, item.desc, {
-            fontSize: '7px',
-            fontFamily: 'PixelFont',
-            color: '#8B7355',
-            resolution: 2
+        const descText = this.scene.add.text(leftEdge, itemY + 8, desc, {
+            fontSize: '7px', fontFamily: 'PixelFont', color: '#8B7355', resolution: 2
         });
         descText.setOrigin(0, 0.5);
         descText.setDepth(5304);
         this.scene.cameras.main.ignore(descText);
         this.addElement(descText);
-        contentElements.push(descText);
+        this.contentElements.push(descText);
 
-        // Limit text
-        if (item.limit) {
-            const limitText = this.scene.add.text(cardX + 25, itemY, item.limit, {
-                fontSize: '7px',
-                fontFamily: 'PixelFont',
-                color: '#e74c3c',
-                resolution: 2
-            });
-            limitText.setOrigin(0.5);
-            limitText.setDepth(5304);
-            this.scene.cameras.main.ignore(limitText);
-            this.addElement(limitText);
-            contentElements.push(limitText);
-        }
-
-        // Price/Buy button
-        const priceIcon = currency === 'gold' ? '💰' : currency === 'gem' ? '💎' : '💵';
-        const priceText = currency === 'cash' ? `$${item.price}` : `${priceIcon}${item.price}`;
-        const btnX = cardX + cardWidth / 2 - 35;
-
-        const buyBtn = this.scene.add.sprite(btnX, itemY, 'square-buttons', 6);
-        buyBtn.setDisplaySize(55, 22);
+        const btnX = modalX + cardWidth / 2 - 38;
+        const buyBtn = this.scene.add.sprite(btnX, itemY, 'square-buttons', canBuy ? 6 : 7);
+        buyBtn.setDisplaySize(60, 24);
         buyBtn.setDepth(5304);
-        buyBtn.setInteractive({ useHandCursor: true });
+        if (canBuy) buyBtn.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(buyBtn);
         this.addElement(buyBtn);
-        contentElements.push(buyBtn);
+        this.contentElements.push(buyBtn);
 
-        const buyText = this.scene.add.text(btnX, itemY, priceText, {
-            fontSize: '8px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
+        const buyText = this.scene.add.text(btnX, itemY, price, {
+            fontSize: '9px', fontFamily: 'PixelFont', color: canBuy ? '#FFFFFF' : '#999999', resolution: 2
         });
         buyText.setOrigin(0.5);
         buyText.setDepth(5305);
         buyText.setStroke('#5D4037', 1);
         this.scene.cameras.main.ignore(buyText);
         this.addElement(buyText);
-        contentElements.push(buyText);
+        this.contentElements.push(buyText);
 
-        // Hover effects
-        cardBg.on('pointerover', () => {
-            cardBg.setFillStyle(0xE8D9C0);
-            nameText.setColor('#f59e0b');
-        });
-        cardBg.on('pointerout', () => {
-            cardBg.setFillStyle(0xD4C4A8);
-            nameText.setColor('#5D4037');
-        });
-
-        // Buy button click
-        buyBtn.on('pointerover', () => buyBtn.setTint(0xffff88));
-        buyBtn.on('pointerout', () => buyBtn.clearTint());
-        buyBtn.on('pointerdown', () => {
-            this.handlePurchase(item, currency);
-        });
+        if (canBuy) {
+            cardBg.on('pointerover', () => { cardBg.setFillStyle(0xE8D9C0); nameText.setColor('#f59e0b'); });
+            cardBg.on('pointerout', () => { cardBg.setFillStyle(0xD4C4A8); nameText.setColor('#5D4037'); });
+            buyBtn.on('pointerover', () => buyBtn.setTint(0xffff88));
+            buyBtn.on('pointerout', () => buyBtn.clearTint());
+            buyBtn.on('pointerdown', onBuy);
+        }
     }
 
-    private handlePurchase(item: ShopItem, currency: 'gold' | 'gem' | 'cash'): void {
-        const now = Date.now();
-        const oneDay = 24 * 60 * 60 * 1000;
-        const oneWeek = 7 * oneDay;
-
-        // Check purchase limits
-        if (item.key === 'shovel') {
-            if (now - this.purchaseLimits.shovel.lastReset > oneWeek) {
-                this.purchaseLimits.shovel = { count: 0, lastReset: now };
+    private async handleGoldPurchase(item: GoldShopItem): Promise<void> {
+        console.log('Purchasing gold item:', item.key);
+        
+        const result = await ShopService.purchaseGoldItem(item.key);
+        
+        if (result && result.success) {
+            this.showMessage(result.message, '#4CAF50');
+            this.callbacks.playSuccessSound();
+            
+            // Update cached balance
+            if (this.goldShopData) {
+                this.goldShopData.user.balanceGold = result.balanceGold;
             }
-            if (this.purchaseLimits.shovel.count >= 1) {
-                this.showMessage('Weekly limit reached!', '#e74c3c');
-                return;
+            
+            // Update balance display
+            if (this.balanceText) {
+                const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
+                this.balanceText.setText(`💰 ${result.balanceGold}    💎 ${gemBalance}`);
             }
+            
+            // Refresh profile UI
+            this.callbacks.refreshProfileUI();
+            
+            // Refresh shop data to update affordable status
+            await this.fetchShopData();
+        } else {
+            this.showMessage('Purchase failed', '#F44336');
         }
+    }
 
-        if (item.key === 'growthWater') {
-            if (now - this.purchaseLimits.growthWater.lastReset > oneDay) {
-                this.purchaseLimits.growthWater = { count: 0, lastReset: now };
+    private async handleGemPurchase(item: GemShopItem): Promise<void> {
+        console.log('Purchasing gem item:', item.key);
+        
+        const result = await ShopService.purchaseGemItem(item.key, 1);
+        
+        if (result && result.success) {
+            this.showMessage(result.message, '#4CAF50');
+            this.callbacks.playSuccessSound();
+            
+            // Update cached balances
+            if (this.gemShopData) {
+                this.gemShopData.user.balanceGem = result.balanceGem;
             }
-            if (this.purchaseLimits.growthWater.count >= 1) {
-                this.showMessage('Daily limit reached!', '#e74c3c');
-                return;
+            if (this.goldShopData) {
+                this.goldShopData.user.balanceGold = result.balanceGold;
             }
+            
+            // Update balance display
+            if (this.balanceText) {
+                this.balanceText.setText(`💰 ${result.balanceGold}    💎 ${result.balanceGem}`);
+            }
+            
+            // Refresh profile UI
+            this.callbacks.refreshProfileUI();
+            
+            // Refresh shop data to update affordable status
+            await this.fetchShopData();
+        } else {
+            this.showMessage('Purchase failed', '#F44336');
         }
+    }
 
-        if (item.key === 'mushroomExchange') {
-            if (now - this.purchaseLimits.mushroomExchange.lastReset > oneWeek) {
-                this.purchaseLimits.mushroomExchange = { count: 0, lastReset: now };
-            }
-            if (this.purchaseLimits.mushroomExchange.count >= 2) {
-                this.showMessage('Weekly limit reached!', '#e74c3c');
-                return;
-            }
-            const chestInventory = this.callbacks.getChestInventory();
-            const algaeCount = chestInventory.reduce((total, slot) =>
-                slot.type === 'algae' ? total + slot.count : total, 0);
-            if (algaeCount < 5) {
-                this.showMessage('Need 5 mature Algae!', '#e74c3c');
-                return;
-            }
-        }
-
-        // Check currency
-        if (currency === 'gold' && item.price > 0) {
-            if (this.callbacks.getPlayerGold() < item.price) {
-                this.showMessage('Not enough Gold!', '#e74c3c');
-                return;
-            }
-            this.callbacks.setPlayerGold(this.callbacks.getPlayerGold() - item.price);
-        } else if (currency === 'gem') {
-            if (this.callbacks.getPlayerGems() < item.price) {
-                this.showMessage('Not enough Gems!', '#e74c3c');
-                return;
-            }
-            this.callbacks.setPlayerGems(this.callbacks.getPlayerGems() - item.price);
-        } else if (currency === 'cash') {
-            this.showMessage('IAP not available yet', '#f59e0b');
-            return;
-        }
-
-        // Apply purchase effect
-        const seedCounts = this.callbacks.getSeedCounts();
-        const toolbarItems = this.callbacks.getToolbarItems();
-
-        switch (item.key) {
-            case 'shovel':
-                this.purchaseLimits.shovel.count++;
-                this.showMessage('Purchased Shovel!', '#4ade80');
-                break;
-            case 'gloves':
-                this.showMessage('Purchased Gloves!', '#4ade80');
-                break;
-            case 'growthWater':
-                this.purchaseLimits.growthWater.count++;
-                const waterItem = toolbarItems.find(t => t.name === 'wateringCan');
-                if (waterItem) waterItem.count = (waterItem.count || 0) + 10;
-                this.showMessage('Purchased Growth Water!', '#4ade80');
-                break;
-            case 'fishFood':
-                this.showMessage('Purchased Fish Food!', '#4ade80');
-                break;
-            case 'mushroomExchange':
-                this.purchaseLimits.mushroomExchange.count++;
-                let chestInventory = this.callbacks.getChestInventory();
-                let toRemove = 5;
-                for (let i = 0; i < chestInventory.length && toRemove > 0; i++) {
-                    if (chestInventory[i].type === 'algae') {
-                        const remove = Math.min(chestInventory[i].count, toRemove);
-                        chestInventory[i].count -= remove;
-                        toRemove -= remove;
-                    }
-                }
-                chestInventory = chestInventory.filter(slot => slot.count > 0);
-                this.callbacks.setChestInventory(chestInventory);
-                seedCounts.mushroom++;
-                this.showMessage('Trade success! +1 Spore', '#4ade80');
-                break;
-            case 'algaeSeed':
-                seedCounts.algae++;
-                this.showMessage('Purchased Algae Seed!', '#4ade80');
-                break;
-            case 'mushroomSeed':
-                seedCounts.mushroom++;
-                this.showMessage('Purchased Mushroom Spore!', '#4ade80');
-                break;
-            case 'mediumGrowth':
-                const fertItem = toolbarItems.find(t => t.name === 'fertilizer');
-                if (fertItem) fertItem.count = (fertItem.count || 0) + 3;
-                this.showMessage('Purchased Mid Booster!', '#4ade80');
-                break;
-            case 'highGrowth':
-                const fertItem2 = toolbarItems.find(t => t.name === 'fertilizer');
-                if (fertItem2) fertItem2.count = (fertItem2.count || 0) + 5;
-                this.showMessage('Purchased High Booster!', '#4ade80');
-                break;
-            case 'goldExchange':
-                this.callbacks.setPlayerGold(this.callbacks.getPlayerGold() + 1000);
-                this.showMessage('Trade success! +1000 Gold', '#4ade80');
-                break;
-        }
-
-        this.callbacks.updateToolbar();
-        this.callbacks.refreshProfileUI();
-        this.callbacks.playSuccessSound();
+    private async handleCashPurchase(item: CashShopItem): Promise<void> {
+        console.log('Purchasing cash item:', item.key);
+        
+        // Cash purchases require payment integration
+        // For now, show a message that payment is required
+        // In production, this would integrate with Stripe or another payment provider
+        this.showMessage(`Payment required: $${item.priceUSD}`, '#2196F3');
+        
+        // Example of how the API would be called after payment:
+        // const result = await ShopService.purchaseCashItem(item.key, paymentId, 'stripe');
+        // if (result && result.success) {
+        //     this.showMessage(result.message, '#4CAF50');
+        //     if (this.gemShopData) {
+        //         this.gemShopData.user.balanceGem = result.balanceGem;
+        //     }
+        //     if (this.balanceText) {
+        //         const goldBalance = this.goldShopData?.user.balanceGold ?? 0;
+        //         this.balanceText.setText(`💰 ${goldBalance}    💎 ${result.balanceGem}`);
+        //     }
+        //     this.callbacks.refreshProfileUI();
+        //     await this.fetchShopData();
+        // }
     }
 
     private showMessage(message: string, color: string): void {
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
 
-        const msgText = this.scene.add.text(screenWidth / 2, screenHeight / 2 + 120, message, {
+        const msgText = this.scene.add.text(screenWidth / 2, screenHeight / 2 + 100, message, {
             fontSize: '12px',
             fontFamily: 'PixelFont',
             color: color,
@@ -613,7 +522,6 @@ export class ShopManager extends BaseManager {
         });
         msgText.setOrigin(0.5);
         msgText.setDepth(5400);
-        msgText.setStroke('#000000', 2);
         this.scene.cameras.main.ignore(msgText);
 
         this.scene.tweens.add({
