@@ -7,6 +7,7 @@ import { FertilizerService } from '../FertilizerService';
 import { GardenService } from '../GardenService';
 import { FruitService } from '../FruitService';
 import { GameDataService } from '../GameDataService';
+import { ShopService } from '../ShopService';
 
 // Import managers
 import {
@@ -70,7 +71,7 @@ export class FarmingGame extends Scene {
     // Toolbar items (6 slots: hand, watering can, seed, fertilizer, digest, chest)
     private toolbarItems: ToolbarItem[] = [
         { type: 'tool', name: 'hand' },
-        { type: 'tool', name: 'wateringCan', count: 100 },
+        { type: 'tool', name: 'wateringCan', count: 0 }, // count is fetched from API
         { type: 'seed', name: 'seed' }, // count is managed by seedCounts
         { type: 'tool', name: 'fertilizer' }, // count is managed by fertilizerCounts
         { type: 'tool', name: 'digest' },
@@ -450,6 +451,7 @@ export class FarmingGame extends Scene {
             this.fetchSeedInventory();
             this.fetchFertilizerInventory();
             this.fetchFruitInventory();
+            this.fetchWaterInventory();
             this.loadGardenData();
             this.fetchUserProfile();
             // Preload missions (will be cached by MailboxManager)
@@ -668,6 +670,28 @@ export class FarmingGame extends Scene {
             this.updateToolbar();
         } catch (error) {
             console.error('Error fetching fruit inventory:', error);
+            this.updateToolbar();
+        }
+    }
+
+    /**
+     * Fetches water count from inventory API and updates watering can
+     */
+    private async fetchWaterInventory() {
+        try {
+            const waterCount = await ShopService.getWaterCount();
+            
+            const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
+            if (wateringCan) {
+                wateringCan.count = waterCount;
+            }
+
+            console.log('Water inventory updated:', waterCount);
+
+            // Update toolbar to reflect new count
+            this.updateToolbar();
+        } catch (error) {
+            console.error('Error fetching water inventory:', error);
             this.updateToolbar();
         }
     }
@@ -1547,10 +1571,11 @@ export class FarmingGame extends Scene {
         console.log('FarmingGame: wallet connected', address);
         this.createWalletDisplay();
 
-        // Fetch seed, fertilizer, and fruit inventory from API
+        // Fetch seed, fertilizer, fruit, and water inventory from API
         this.fetchSeedInventory();
         this.fetchFertilizerInventory();
         this.fetchFruitInventory();
+        this.fetchWaterInventory();
 
         // Load garden data (planted crops)
         this.loadGardenData();

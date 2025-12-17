@@ -153,6 +153,38 @@ export interface CashPurchaseResponse {
     };
 }
 
+export interface FreeWaterResponse {
+    success: boolean;
+    message: string;
+    item: string;
+    amount: number;
+    nextClaimAt: string;
+}
+
+// Inventory Types
+export interface InventoryItem {
+    id: string;
+    itemType: string;
+    amount: number;
+    name: string;
+    rarity: string;
+    category: string;
+    icon: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface InventoryResponse {
+    userId: string;
+    inventory: InventoryItem[];
+    grouped: Record<string, InventoryItem[]>;
+    summary: {
+        totalItems: number;
+        totalTypes: number;
+        categories: number;
+    };
+}
+
 export class ShopService {
     private static API_BASE_URL =
         process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
@@ -369,6 +401,75 @@ export class ShopService {
             }
         } catch (error) {
             console.error("Network error purchasing cash item:", error);
+            return null;
+        }
+    }
+
+    /**
+     * Get water count from inventory
+     */
+    static async getWaterCount(): Promise<number> {
+        const token = this.getAccessToken();
+        if (!token) {
+            console.log('No access token available for inventory');
+            return 0;
+        }
+
+        try {
+            const response = await fetch(
+                `${this.API_BASE_URL}/inventory`,
+                {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (response.ok) {
+                const data: InventoryResponse = await response.json();
+                const waterItem = data.inventory.find(item => item.itemType === 'WATER');
+                return waterItem?.amount || 0;
+            } else {
+                console.error("Error fetching inventory:", response.statusText);
+                return 0;
+            }
+        } catch (error) {
+            console.error("Network error fetching inventory:", error);
+            return 0;
+        }
+    }
+
+    /**
+     * Claim free water from the well
+     */
+    static async claimFreeWater(): Promise<FreeWaterResponse | null> {
+        const token = this.getAccessToken();
+        if (!token) {
+            console.log('No access token available for claiming water');
+            return null;
+        }
+
+        try {
+            const response = await fetch(
+                `${this.API_BASE_URL}/shop/water/free`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (response.ok) {
+                return await response.json();
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.error("Error claiming free water:", errorData.message || response.statusText);
+                return { success: false, message: errorData.message || 'Failed to claim water', item: '', amount: 0, nextClaimAt: '' };
+            }
+        } catch (error) {
+            console.error("Network error claiming free water:", error);
             return null;
         }
     }
