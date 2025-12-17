@@ -27,6 +27,32 @@ export const PLANT_STAGES = {
 // Default: 5 minutes (300000ms) for demo, Production: 72 hours (259200000ms)
 export const DEATH_TIMER_MS = parseInt(process.env.NEXT_PUBLIC_DEATH_TIMER_MS || '300000', 10);
 
+// API Plant info stored in tile state
+export interface PlantApiInfo {
+    id: string;
+    type: string;
+    name: string;
+    stage: string;
+    plantedAt: string;
+    waterCount: number;
+}
+
+// API Progress info stored in tile state
+export interface PlantProgress {
+    percentage: number;
+    timeRemaining: string;
+    stage: string;
+    canWater: boolean;
+}
+
+// API Config info stored in tile state
+export interface PlantConfig {
+    diggingTime: string;
+    growingTime: string;
+    totalTime: string;
+    baseYield: number;
+}
+
 // Tile state for farm plots
 export interface TileState {
     tilled: boolean;
@@ -43,6 +69,10 @@ export interface TileState {
     plotIndex?: number; // Index of plot (0-15 for 4x4 grid)
     plantId?: string; // Plant ID from backend API (for watering, harvesting, etc.)
     landId?: string; // Land ID from backend API (for planting)
+    // API data
+    plantInfo?: PlantApiInfo; // Full plant info from API
+    progress?: PlantProgress; // Progress info from API
+    config?: PlantConfig; // Config info from API
 }
 
 // Crop definition for plant assets

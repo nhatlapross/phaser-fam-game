@@ -8,6 +8,7 @@ import { FertilizerService, FertilizerInventoryResponse } from './FertilizerServ
 import { FruitService } from './FruitService';
 import { MissionService, Mission } from './MissionService';
 import { StreakService, StreakStatusResponse, StreakHistoryResponse } from './StreakService';
+import { ShopService, GoldShopResponse, GemShopResponse, CashShopResponse } from './ShopService';
 import { PlantType } from './types/GameTypes';
 
 // Types for pre-loaded data
@@ -40,6 +41,12 @@ export interface StreakData {
     history: StreakHistoryResponse | null;
 }
 
+export interface ShopData {
+    goldShop: GoldShopResponse | null;
+    gemShop: GemShopResponse | null;
+    cashShop: CashShopResponse | null;
+}
+
 export interface GameData {
     user: UserData | null;
     garden: GardenResponse;
@@ -49,6 +56,7 @@ export interface GameData {
     currencies: CurrencyBalances;
     missions: Mission[] | null;
     streak: StreakData;
+    shop: ShopData;
     loadedAt: number;
 }
 
@@ -79,6 +87,7 @@ export class GameDataService {
                 currencies: { gold: 0, ruby: 0 },
                 missions: null,
                 streak: { status: null, history: null },
+                shop: { goldShop: null, gemShop: null, cashShop: null },
                 loadedAt: Date.now()
             };
             cachedGameData = emptyData;
@@ -98,7 +107,10 @@ export class GameDataService {
             currenciesResult,
             missionsResult,
             streakStatusResult,
-            streakHistoryResult
+            streakHistoryResult,
+            goldShopResult,
+            gemShopResult,
+            cashShopResult
         ] = await Promise.allSettled([
             UserService.getUserProfile(),
             GardenService.getGarden(),
@@ -108,7 +120,10 @@ export class GameDataService {
             FruitService.getCurrencyBalances(),
             MissionService.getMissions(),
             StreakService.getStatus(),
-            StreakService.getHistory(7)
+            StreakService.getHistory(7),
+            ShopService.getGoldShop(),
+            ShopService.getGemShop(),
+            ShopService.getCashShop()
         ]);
 
         onProgress?.(80);
@@ -127,6 +142,11 @@ export class GameDataService {
             streak: {
                 status: streakStatusResult.status === 'fulfilled' ? streakStatusResult.value : null,
                 history: streakHistoryResult.status === 'fulfilled' ? streakHistoryResult.value : null
+            },
+            shop: {
+                goldShop: goldShopResult.status === 'fulfilled' ? goldShopResult.value : null,
+                gemShop: gemShopResult.status === 'fulfilled' ? gemShopResult.value : null,
+                cashShop: cashShopResult.status === 'fulfilled' ? cashShopResult.value : null
             },
             loadedAt: Date.now()
         };
@@ -159,6 +179,15 @@ export class GameDataService {
         if (streakHistoryResult.status === 'rejected') {
             console.error('Failed to fetch streak history:', streakHistoryResult.reason);
         }
+        if (goldShopResult.status === 'rejected') {
+            console.error('Failed to fetch gold shop:', goldShopResult.reason);
+        }
+        if (gemShopResult.status === 'rejected') {
+            console.error('Failed to fetch gem shop:', gemShopResult.reason);
+        }
+        if (cashShopResult.status === 'rejected') {
+            console.error('Failed to fetch cash shop:', cashShopResult.reason);
+        }
 
         onProgress?.(100);
 
@@ -175,7 +204,10 @@ export class GameDataService {
             ruby: gameData.currencies.ruby,
             missions: gameData.missions?.length ?? 0,
             streakStatus: gameData.streak.status ? 'loaded' : 'null',
-            streakHistory: gameData.streak.history?.checkins?.length ?? 0
+            streakHistory: gameData.streak.history?.checkins?.length ?? 0,
+            goldShopItems: gameData.shop.goldShop?.items?.length ?? 0,
+            gemShopItems: gameData.shop.gemShop?.items?.length ?? 0,
+            cashShopItems: gameData.shop.cashShop?.items?.length ?? 0
         });
 
         return gameData;
@@ -263,5 +295,42 @@ export class GameDataService {
             cachedGameData.missions = missions;
         }
         return missions;
+    }
+
+    static async refreshGoldShop(): Promise<GoldShopResponse | null> {
+        const goldShop = await ShopService.getGoldShop();
+        if (cachedGameData) {
+            cachedGameData.shop.goldShop = goldShop;
+        }
+        return goldShop;
+    }
+
+    static async refreshGemShop(): Promise<GemShopResponse | null> {
+        const gemShop = await ShopService.getGemShop();
+        if (cachedGameData) {
+            cachedGameData.shop.gemShop = gemShop;
+        }
+        return gemShop;
+    }
+
+    static async refreshCashShop(): Promise<CashShopResponse | null> {
+        const cashShop = await ShopService.getCashShop();
+        if (cachedGameData) {
+            cachedGameData.shop.cashShop = cashShop;
+        }
+        return cashShop;
+    }
+
+    static async refreshAllShops(): Promise<ShopData> {
+        const [goldShop, gemShop, cashShop] = await Promise.all([
+            ShopService.getGoldShop(),
+            ShopService.getGemShop(),
+            ShopService.getCashShop()
+        ]);
+        const shopData: ShopData = { goldShop, gemShop, cashShop };
+        if (cachedGameData) {
+            cachedGameData.shop = shopData;
+        }
+        return shopData;
     }
 }

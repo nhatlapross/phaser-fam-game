@@ -384,47 +384,87 @@ export class WellManager extends BaseManager {
         if (this.isClaimingWater) return;
         this.isClaimingWater = true;
 
-        // Disable button while claiming
+        // === OPTIMISTIC UPDATE: Update UI immediately ===
+        const optimisticAmount = 1; // Default water amount
+        const previousWaterCount = this.callbacks.getWaterCount();
+
+        // 1. Show success immediately
+        this.callbacks.addWater(optimisticAmount);
+        this.callbacks.playSuccessSound();
+        this.callbacks.updateToolbar();
+        this.showClaimReward(`+${optimisticAmount} Water!`);
+
+        // 2. Update UI to recharging state
+        statusText.setText('⏳ Recharging...');
+        statusText.setColor('#FFA726');
+
+        // 3. Set optimistic next claim time (4 hours from now)
+        const optimisticNextClaim = new Date(Date.now() + 4 * 60 * 60 * 1000);
+        this.nextClaimAt = optimisticNextClaim;
+
+        // 4. Disable button
         claimBtn.disableInteractive();
-        claimBtnText.setText('...');
+        claimBtnText.setText('Claimed');
 
-        const result = await ShopService.claimFreeWater();
+        // === BACKGROUND API CALL ===
+        try {
+            const result = await ShopService.claimFreeWater();
 
-        if (result && result.success) {
-            // Add water to player's inventory
-            this.callbacks.addWater(result.amount);
+            if (result && result.success) {
+                // API success - update with actual values
+                const actualAmount = result.amount;
 
-            // Update next claim time
-            if (result.nextClaimAt) {
-                this.nextClaimAt = new Date(result.nextClaimAt);
+                // Adjust water if different from optimistic
+                if (actualAmount !== optimisticAmount) {
+                    const diff = actualAmount - optimisticAmount;
+                    this.callbacks.addWater(diff);
+                    this.callbacks.updateToolbar();
+                }
+
+                // Update with actual next claim time
+                if (result.nextClaimAt) {
+                    this.nextClaimAt = new Date(result.nextClaimAt);
+                }
+            } else {
+                // === ROLLBACK on failure ===
+                this.callbacks.addWater(-optimisticAmount); // Remove added water
+                this.callbacks.updateToolbar();
+
+                // Show error
+                const errorMsg = result?.message || 'Failed! Please try again';
+                this.showClaimReward(errorMsg);
+
+                // Restore UI to claimable state
+                statusText.setText('💧 Water Ready!');
+                statusText.setColor('#4CAF50');
+                timerText.setText('Click to collect');
+
+                // Update next claim time from error response if available
+                if (result?.nextClaimAt) {
+                    this.nextClaimAt = new Date(result.nextClaimAt);
+                } else {
+                    this.nextClaimAt = null; // Allow retry
+                }
+
+                // Re-enable button
+                claimBtn.setInteractive({ useHandCursor: true });
+                claimBtnText.setText('Claim');
             }
-
-            // Play success sound
-            this.callbacks.playSuccessSound();
-
-            // Update toolbar
+        } catch (error) {
+            // === ROLLBACK on network error ===
+            this.callbacks.addWater(-optimisticAmount);
             this.callbacks.updateToolbar();
+            this.showClaimReward('Network error! Try again');
 
-            // Show floating reward message
-            this.showClaimReward(`+${result.amount} Water!`);
+            statusText.setText('💧 Water Ready!');
+            statusText.setColor('#4CAF50');
+            timerText.setText('Click to collect');
+            this.nextClaimAt = null;
 
-            // Update UI
-            statusText.setText('⏳ Recharging...');
-            statusText.setColor('#FFA726');
-        } else {
-            // Show error message
-            const errorMsg = result?.message || 'Failed to claim water';
-            this.showClaimReward(errorMsg);
-            
-            // If there's a nextClaimAt in error response, update it
-            if (result?.nextClaimAt) {
-                this.nextClaimAt = new Date(result.nextClaimAt);
-            }
+            claimBtn.setInteractive({ useHandCursor: true });
+            claimBtnText.setText('Claim');
         }
 
-        // Re-enable button
-        claimBtn.setInteractive({ useHandCursor: true });
-        claimBtnText.setText('Claim');
         this.isClaimingWater = false;
     }
 

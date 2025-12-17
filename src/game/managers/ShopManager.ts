@@ -10,6 +10,7 @@ import {
     GemShopItem,
     CashShopItem
 } from '../ShopService';
+import { GameDataService } from '../GameDataService';
 
 interface ShopCallbacks {
     getPlayerGold: () => number;
@@ -94,7 +95,7 @@ export class ShopManager extends BaseManager {
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
-        const modalWidth = 340;
+        const modalWidth = 360;
         const modalHeight = 320;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
@@ -134,7 +135,30 @@ export class ShopManager extends BaseManager {
         });
     }
 
-    private async fetchShopData(): Promise<void> {
+    private async fetchShopData(forceRefresh: boolean = false): Promise<void> {
+        // Try to use cached data from GameDataService first
+        const cachedData = GameDataService.getCachedData();
+
+        if (!forceRefresh && cachedData?.shop) {
+            const { goldShop, gemShop, cashShop } = cachedData.shop;
+
+            // Use cached data if available
+            if (goldShop || gemShop || cashShop) {
+                this.goldShopData = goldShop;
+                this.gemShopData = gemShop;
+                this.cashShopData = cashShop;
+
+                console.log('Shop data loaded from cache:', {
+                    gold: goldShop?.items.length ?? 0,
+                    gem: gemShop?.items.length ?? 0,
+                    cash: cashShop?.items.length ?? 0
+                });
+                return;
+            }
+        }
+
+        // Fallback: fetch from API if no cached data or force refresh
+        console.log('Fetching shop data from API...');
         const [goldData, gemData, cashData] = await Promise.all([
             ShopService.getGoldShop(),
             ShopService.getGemShop(),
@@ -145,7 +169,7 @@ export class ShopManager extends BaseManager {
         this.gemShopData = gemData;
         this.cashShopData = cashData;
 
-        console.log('Shop data loaded:', {
+        console.log('Shop data loaded from API:', {
             gold: goldData?.items.length ?? 0,
             gem: gemData?.items.length ?? 0,
             cash: cashData?.items.length ?? 0
@@ -268,7 +292,7 @@ export class ShopManager extends BaseManager {
         closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
 
         // Content area
-        const contentStartY = modalY - modalHeight / 2 + 115;
+        const contentStartY = modalY - modalHeight / 2 + 125;
         const itemHeight = 38;
 
         const showGoldContent = () => {
@@ -362,21 +386,24 @@ export class ShopManager extends BaseManager {
         const cardWidth = 280;
         const cardHeight = 32;
 
-        const cardBorder = this.scene.add.rectangle(modalX, itemY, cardWidth + 2, cardHeight + 2, 0x8B7355);
+        // Thêm offset để đẩy card sang trái/phải                                                                                                              
+        const cardOffsetX = 15;  // Số dương = sang phải, số âm = sang trái   
+
+        const cardBorder = this.scene.add.rectangle(modalX + cardOffsetX, itemY, cardWidth + 2, cardHeight + 2, 0x8B7355);
         cardBorder.setDepth(5302);
         this.scene.cameras.main.ignore(cardBorder);
         this.addElement(cardBorder);
         this.contentElements.push(cardBorder);
 
         const bgColor = canBuy ? 0xD4C4A8 : 0xB0B0B0;
-        const cardBg = this.scene.add.rectangle(modalX, itemY, cardWidth, cardHeight, bgColor);
+        const cardBg = this.scene.add.rectangle(modalX + cardOffsetX, itemY, cardWidth, cardHeight, bgColor);
         cardBg.setDepth(5303);
         cardBg.setInteractive({ useHandCursor: canBuy });
         this.scene.cameras.main.ignore(cardBg);
         this.addElement(cardBg);
         this.contentElements.push(cardBg);
 
-        const leftEdge = modalX - cardWidth / 2 + 12;
+        const leftEdge = modalX - cardWidth / 2 + cardOffsetX + 10;
 
         const nameText = this.scene.add.text(leftEdge, itemY - 6, `${icon} ${name}`, {
             fontSize: '10px', fontFamily: 'PixelFont', color: canBuy ? '#5D4037' : '#666666', resolution: 2
@@ -397,7 +424,7 @@ export class ShopManager extends BaseManager {
         this.contentElements.push(descText);
 
         const btnX = modalX + cardWidth / 2 - 38;
-        const buyBtn = this.scene.add.sprite(btnX, itemY, 'square-buttons', canBuy ? 6 : 7);
+        const buyBtn = this.scene.add.sprite(btnX + cardOffsetX, itemY, 'square-buttons', canBuy ? 6 : 7);
         buyBtn.setDisplaySize(60, 24);
         buyBtn.setDepth(5304);
         if (canBuy) buyBtn.setInteractive({ useHandCursor: true });
@@ -405,7 +432,7 @@ export class ShopManager extends BaseManager {
         this.addElement(buyBtn);
         this.contentElements.push(buyBtn);
 
-        const buyText = this.scene.add.text(btnX, itemY, price, {
+        const buyText = this.scene.add.text(btnX + cardOffsetX, itemY, price, {
             fontSize: '9px', fontFamily: 'PixelFont', color: canBuy ? '#FFFFFF' : '#999999', resolution: 2
         });
         buyText.setOrigin(0.5);
@@ -426,63 +453,131 @@ export class ShopManager extends BaseManager {
 
     private async handleGoldPurchase(item: GoldShopItem): Promise<void> {
         console.log('Purchasing gold item:', item.key);
-        
-        const result = await ShopService.purchaseGoldItem(item.key);
-        
-        if (result && result.success) {
-            this.showMessage(result.message, '#4CAF50');
-            this.callbacks.playSuccessSound();
-            
-            // Update cached balance
-            if (this.goldShopData) {
-                this.goldShopData.user.balanceGold = result.balanceGold;
+
+        // === OPTIMISTIC UPDATE ===
+        const previousGoldBalance = this.goldShopData?.user.balanceGold ?? 0;
+        const optimisticNewBalance = previousGoldBalance - item.priceGold;
+
+        // 1. Show success immediately
+        this.showMessage(`Purchased ${item.name}!`, '#4CAF50');
+        this.callbacks.playSuccessSound();
+
+        // 2. Update balance display immediately
+        if (this.goldShopData) {
+            this.goldShopData.user.balanceGold = optimisticNewBalance;
+        }
+        if (this.balanceText) {
+            const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
+            this.balanceText.setText(`💰 ${optimisticNewBalance}    💎 ${gemBalance}`);
+        }
+
+        // 3. Refresh profile UI immediately
+        this.callbacks.refreshProfileUI();
+
+        // === BACKGROUND API CALL ===
+        try {
+            const result = await ShopService.purchaseGoldItem(item.key);
+
+            if (result && result.success) {
+                // Update with actual balance from API
+                if (this.goldShopData) {
+                    this.goldShopData.user.balanceGold = result.balanceGold;
+                }
+                if (this.balanceText) {
+                    const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
+                    this.balanceText.setText(`💰 ${result.balanceGold}    💎 ${gemBalance}`);
+                }
+
+                // Refresh shop data in background (don't await)
+                this.fetchShopData(true);
+            } else {
+                // === ROLLBACK on failure ===
+                if (this.goldShopData) {
+                    this.goldShopData.user.balanceGold = previousGoldBalance;
+                }
+                if (this.balanceText) {
+                    const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
+                    this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${gemBalance}`);
+                }
+                this.callbacks.refreshProfileUI();
+                this.showMessage('Purchase failed! Refunded.', '#F44336');
             }
-            
-            // Update balance display
+        } catch (error) {
+            // === ROLLBACK on network error ===
+            if (this.goldShopData) {
+                this.goldShopData.user.balanceGold = previousGoldBalance;
+            }
             if (this.balanceText) {
                 const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
-                this.balanceText.setText(`💰 ${result.balanceGold}    💎 ${gemBalance}`);
+                this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${gemBalance}`);
             }
-            
-            // Refresh profile UI
             this.callbacks.refreshProfileUI();
-            
-            // Refresh shop data to update affordable status
-            await this.fetchShopData();
-        } else {
-            this.showMessage('Purchase failed', '#F44336');
+            this.showMessage('Network error! Refunded.', '#F44336');
         }
     }
 
     private async handleGemPurchase(item: GemShopItem): Promise<void> {
         console.log('Purchasing gem item:', item.key);
-        
-        const result = await ShopService.purchaseGemItem(item.key, 1);
-        
-        if (result && result.success) {
-            this.showMessage(result.message, '#4CAF50');
-            this.callbacks.playSuccessSound();
-            
-            // Update cached balances
+
+        // === OPTIMISTIC UPDATE ===
+        const previousGemBalance = this.gemShopData?.user.balanceGem ?? 0;
+        const previousGoldBalance = this.goldShopData?.user.balanceGold ?? 0;
+        const optimisticGemBalance = previousGemBalance - item.priceGem;
+
+        // 1. Show success immediately
+        this.showMessage(`Purchased ${item.name}!`, '#4CAF50');
+        this.callbacks.playSuccessSound();
+
+        // 2. Update balance display immediately
+        if (this.gemShopData) {
+            this.gemShopData.user.balanceGem = optimisticGemBalance;
+        }
+        if (this.balanceText) {
+            this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${optimisticGemBalance}`);
+        }
+
+        // 3. Refresh profile UI immediately
+        this.callbacks.refreshProfileUI();
+
+        // === BACKGROUND API CALL ===
+        try {
+            const result = await ShopService.purchaseGemItem(item.key, 1);
+
+            if (result && result.success) {
+                // Update with actual balances from API
+                if (this.gemShopData) {
+                    this.gemShopData.user.balanceGem = result.balanceGem;
+                }
+                if (this.goldShopData) {
+                    this.goldShopData.user.balanceGold = result.balanceGold;
+                }
+                if (this.balanceText) {
+                    this.balanceText.setText(`💰 ${result.balanceGold}    💎 ${result.balanceGem}`);
+                }
+
+                // Refresh shop data in background (don't await)
+                this.fetchShopData(true);
+            } else {
+                // === ROLLBACK on failure ===
+                if (this.gemShopData) {
+                    this.gemShopData.user.balanceGem = previousGemBalance;
+                }
+                if (this.balanceText) {
+                    this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${previousGemBalance}`);
+                }
+                this.callbacks.refreshProfileUI();
+                this.showMessage('Purchase failed! Refunded.', '#F44336');
+            }
+        } catch (error) {
+            // === ROLLBACK on network error ===
             if (this.gemShopData) {
-                this.gemShopData.user.balanceGem = result.balanceGem;
+                this.gemShopData.user.balanceGem = previousGemBalance;
             }
-            if (this.goldShopData) {
-                this.goldShopData.user.balanceGold = result.balanceGold;
-            }
-            
-            // Update balance display
             if (this.balanceText) {
-                this.balanceText.setText(`💰 ${result.balanceGold}    💎 ${result.balanceGem}`);
+                this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${previousGemBalance}`);
             }
-            
-            // Refresh profile UI
             this.callbacks.refreshProfileUI();
-            
-            // Refresh shop data to update affordable status
-            await this.fetchShopData();
-        } else {
-            this.showMessage('Purchase failed', '#F44336');
+            this.showMessage('Network error! Refunded.', '#F44336');
         }
     }
 

@@ -9,6 +9,8 @@ export { ToolbarManager } from './ToolbarManager';
 export { PlotManager } from './PlotManager';
 export { SoundManager } from './SoundManager';
 export { WellManager } from './WellManager';
+export { PlantDetailManager } from './PlantDetailManager';
+export type { PlantDetailInfo } from './PlantDetailManager';
 
 // Re-export types
 export * from '../types/GameTypes';

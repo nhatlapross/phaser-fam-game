@@ -413,44 +413,16 @@ export class CheckinManager extends BaseManager {
         // Disable button immediately to prevent double clicks
         dayBox.disableInteractive();
 
-        // Call API
-        const result = await StreakService.checkin();
-
-        if (!result.success) {
-            // Re-enable button on failure
-            dayBox.setInteractive({ useHandCursor: true });
-            const errorResult = result as { success: false; message: string };
-            this.showCheckinReward(errorResult.message || 'Check-in failed!', 0xef4444);
-            return;
-        }
-
-        const successResult = result as {
-            success: true;
-            streakDay: number;
-            currentStreak: number;
-            rewards: { gold: number; ruby: number; items: string[] };
-            message: string;
-        };
-
+        // === OPTIMISTIC UPDATE: Update UI immediately ===
         const today = this.getTodayString();
+        const previousCheckedDays = [...checkinData.checkedDays];
+        const previousStreak = checkinData.streak;
 
-        // Update checked days based on API response
-        if (!checkinData.checkedDays.includes(dayIndex)) {
-            checkinData.checkedDays.push(dayIndex);
-        }
-
-        // Save with streak from API
-        this.saveCheckinData({
-            checkedDays: checkinData.checkedDays,
-            lastCheckin: today,
-            streak: successResult.currentStreak
-        });
-
-        // Update UI
+        // 1. Update UI immediately - show checked state
         dayBox.setTint(0x4ade80);
         quantityText.setColor('#FFFFFF');
 
-        // Add checkmark
+        // 2. Add checkmark immediately
         const checkmark = this.scene.add.text(dayBox.x, dayBox.y, '✓', {
             fontSize: '20px',
             fontFamily: 'PixelFont',
@@ -463,7 +435,7 @@ export class CheckinManager extends BaseManager {
         this.scene.cameras.main.ignore(checkmark);
         this.addElement(checkmark);
 
-        // Animate check
+        // 3. Animate check
         this.scene.tweens.add({
             targets: dayBox,
             scaleX: 1.2,
@@ -472,32 +444,107 @@ export class CheckinManager extends BaseManager {
             yoyo: true
         });
 
-        // Build reward message from API response
-        const rewardParts: string[] = [];
-        if (successResult.rewards.gold > 0) {
-            rewardParts.push(`+${successResult.rewards.gold} Gold`);
-        }
-        if (successResult.rewards.ruby > 0) {
-            rewardParts.push(`+${successResult.rewards.ruby} Ruby`);
-        }
-        if (successResult.rewards.items.length > 0) {
-            rewardParts.push(...successResult.rewards.items.map(item => `+${item}`));
-        }
+        // 4. Show optimistic reward message
+        this.showCheckinReward('Check-in successful!', 0x4ade80);
 
-        const rewardMessage = rewardParts.length > 0 ? rewardParts.join(', ') + '!' : successResult.message;
-        this.showCheckinReward(rewardMessage, 0x4ade80);
-
-        // Play success sound
+        // 5. Play success sound immediately
         this.callbacks.playSuccessSound();
 
-        // Trigger callbacks for compatibility
-        this.callbacks.onRewardWater();
-        if (rewardIndex === 6) {
-            this.callbacks.onRewardMushroomSeed();
+        // 6. Save optimistic data locally
+        if (!checkinData.checkedDays.includes(dayIndex)) {
+            checkinData.checkedDays.push(dayIndex);
         }
+        this.saveCheckinData({
+            checkedDays: checkinData.checkedDays,
+            lastCheckin: today,
+            streak: checkinData.streak + 1
+        });
 
-        // Update toolbar
-        this.callbacks.updateToolbar();
+        // === BACKGROUND API CALL ===
+        try {
+            const result = await StreakService.checkin();
+
+            if (result.success) {
+                const successResult = result as {
+                    success: true;
+                    streakDay: number;
+                    currentStreak: number;
+                    rewards: { gold: number; ruby: number; items: string[] };
+                    message: string;
+                };
+
+                // Update with actual streak from API
+                this.saveCheckinData({
+                    checkedDays: checkinData.checkedDays,
+                    lastCheckin: today,
+                    streak: successResult.currentStreak
+                });
+
+                // Show actual rewards (update the floating message)
+                const rewardParts: string[] = [];
+                if (successResult.rewards.gold > 0) {
+                    rewardParts.push(`+${successResult.rewards.gold} Gold`);
+                }
+                if (successResult.rewards.ruby > 0) {
+                    rewardParts.push(`+${successResult.rewards.ruby} Ruby`);
+                }
+                if (successResult.rewards.items.length > 0) {
+                    rewardParts.push(...successResult.rewards.items.map(item => `+${item}`));
+                }
+
+                if (rewardParts.length > 0) {
+                    this.showCheckinReward(rewardParts.join(', ') + '!', 0x4ade80);
+                }
+
+                // Trigger callbacks for compatibility
+                this.callbacks.onRewardWater();
+                if (rewardIndex === 6) {
+                    this.callbacks.onRewardMushroomSeed();
+                }
+
+                // Update toolbar
+                this.callbacks.updateToolbar();
+            } else {
+                // === ROLLBACK on failure ===
+                const errorResult = result as { success: false; message: string };
+
+                // Restore previous state
+                this.saveCheckinData({
+                    checkedDays: previousCheckedDays,
+                    lastCheckin: checkinData.lastCheckin,
+                    streak: previousStreak
+                });
+
+                // Restore UI
+                dayBox.clearTint();
+                dayBox.setTint(0x888888);
+                quantityText.setColor('#CCCCCC');
+                checkmark.destroy();
+
+                // Re-enable button
+                dayBox.setInteractive({ useHandCursor: true });
+                dayBox.on('pointerover', () => dayBox.setTint(0xffff88));
+                dayBox.on('pointerout', () => dayBox.clearTint());
+
+                // Show error
+                this.showCheckinReward(errorResult.message || 'Check-in failed!', 0xef4444);
+            }
+        } catch (error) {
+            // === ROLLBACK on network error ===
+            this.saveCheckinData({
+                checkedDays: previousCheckedDays,
+                lastCheckin: checkinData.lastCheckin,
+                streak: previousStreak
+            });
+
+            dayBox.clearTint();
+            dayBox.setTint(0x888888);
+            quantityText.setColor('#CCCCCC');
+            checkmark.destroy();
+
+            dayBox.setInteractive({ useHandCursor: true });
+            this.showCheckinReward('Network error! Try again', 0xef4444);
+        }
 
         // Clear cached data so fresh data is fetched when modal reopens
         this.cachedStreakStatus = null;

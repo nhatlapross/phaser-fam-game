@@ -20,6 +20,7 @@ import {
     PlotManager,
     SoundManager,
     WellManager,
+    PlantDetailManager,
     // Import types from GameTypes
     PlantType,
     TileState,
@@ -140,6 +141,7 @@ export class FarmingGame extends Scene {
     private plotManager!: PlotManager;
     private soundManager!: SoundManager;
     private wellManager!: WellManager;
+    private plantDetailManager!: PlantDetailManager;
 
     constructor() {
         super('FarmingGame');
@@ -358,6 +360,22 @@ export class FarmingGame extends Scene {
             updateToolbar: () => this.updateToolbar(),
             playSuccessSound: () => this.soundManager.playSuccessSound()
         }, this.TILE_SIZE);
+
+        // PlantDetailManager
+        this.plantDetailManager = new PlantDetailManager(this, {
+            onWater: (plantId) => {
+                // Find tile by plantId and water it
+                this.waterPlantById(plantId);
+            },
+            onHarvest: (plantId) => {
+                // Find tile by plantId and harvest it
+                this.harvestPlantById(plantId);
+            },
+            onRemove: (landId) => {
+                // Find tile by landId and remove plant
+                this.removePlantByLandId(landId);
+            }
+        });
     }
 
     private recreateUIForResize() {
@@ -511,6 +529,28 @@ export class FarmingGame extends Scene {
                 state.isWilted = false;
                 state.lastCareTime = new Date(plot.plant.plantedAt).getTime();
                 state.plantId = plot.plant.id;
+
+                // Store full API data for PlantDetailManager
+                state.plantInfo = {
+                    id: plot.plant.id,
+                    type: plot.plant.type,
+                    name: plot.plant.name,
+                    stage: plot.plant.stage,
+                    plantedAt: plot.plant.plantedAt,
+                    waterCount: plot.plant.waterCount
+                };
+                state.progress = plot.progress ? {
+                    percentage: plot.progress.percentage,
+                    timeRemaining: plot.progress.timeRemaining,
+                    stage: plot.progress.stage,
+                    canWater: plot.progress.canWater
+                } : undefined;
+                state.config = plot.config ? {
+                    diggingTime: plot.config.diggingTime,
+                    growingTime: plot.config.growingTime,
+                    totalTime: plot.config.totalTime,
+                    baseYield: plot.config.baseYield
+                } : undefined;
 
                 // Remove existing health bar
                 if (state.healthBarBg) {
@@ -760,6 +800,28 @@ export class FarmingGame extends Scene {
                     state.isWilted = false;
                     state.lastCareTime = new Date(plot.plant.plantedAt).getTime();
                     state.plantId = plot.plant.id;
+
+                    // Store full API data for PlantDetailManager
+                    state.plantInfo = {
+                        id: plot.plant.id,
+                        type: plot.plant.type,
+                        name: plot.plant.name,
+                        stage: plot.plant.stage,
+                        plantedAt: plot.plant.plantedAt,
+                        waterCount: plot.plant.waterCount
+                    };
+                    state.progress = plot.progress ? {
+                        percentage: plot.progress.percentage,
+                        timeRemaining: plot.progress.timeRemaining,
+                        stage: plot.progress.stage,
+                        canWater: plot.progress.canWater
+                    } : undefined;
+                    state.config = plot.config ? {
+                        diggingTime: plot.config.diggingTime,
+                        growingTime: plot.config.growingTime,
+                        totalTime: plot.config.totalTime,
+                        baseYield: plot.config.baseYield
+                    } : undefined;
 
                     // Remove existing health bar before creating new one
                     if (state.healthBarBg) {
@@ -2182,6 +2244,57 @@ export class FarmingGame extends Scene {
         }
     }
 
+    /**
+     * Find tile by plantId and water it (called from PlantDetailManager)
+     */
+    private waterPlantById(plantId: string): void {
+        // Find tile with this plantId
+        for (const [tileKey, state] of this.farmLandStates.entries()) {
+            if (state.plantId === plantId) {
+                const [xStr, yStr] = tileKey.split(',');
+                const x = parseInt(xStr, 10);
+                const y = parseInt(yStr, 10);
+                this.waterCrop(tileKey, x, y);
+                return;
+            }
+        }
+        console.warn('Plant not found with id:', plantId);
+    }
+
+    /**
+     * Find tile by plantId and harvest it (called from PlantDetailManager)
+     */
+    private harvestPlantById(plantId: string): void {
+        // Find tile with this plantId
+        for (const [tileKey, state] of this.farmLandStates.entries()) {
+            if (state.plantId === plantId) {
+                const [xStr, yStr] = tileKey.split(',');
+                const x = parseInt(xStr, 10);
+                const y = parseInt(yStr, 10);
+                this.harvestCrop(tileKey, x, y);
+                return;
+            }
+        }
+        console.warn('Plant not found with id:', plantId);
+    }
+
+    /**
+     * Find tile by landId and remove plant (called from PlantDetailManager)
+     */
+    private removePlantByLandId(landId: string): void {
+        // Find tile with this landId
+        for (const [tileKey, state] of this.farmLandStates.entries()) {
+            if (state.landId === landId) {
+                const [xStr, yStr] = tileKey.split(',');
+                const x = parseInt(xStr, 10);
+                const y = parseInt(yStr, 10);
+                this.digestCrop(tileKey, x, y);
+                return;
+            }
+        }
+        console.warn('Land not found with id:', landId);
+    }
+
     private showPlant(x: number, y: number, cropType: PlantType, stage: number, isDead: boolean = false, isWilted: boolean = false) {
         // IMPORTANT: Remove existing plant sprite first to prevent duplicates
         const existingPlant = this.children.getByName(`plant-${x}-${y}`);
@@ -2222,6 +2335,29 @@ export class FarmingGame extends Scene {
         if (isWilted) {
             plant.setTint(0xccaa66);
         }
+
+        // Make plant clickable to show details
+        plant.setInteractive({ useHandCursor: true });
+        plant.on('pointerdown', () => {
+            const tileKey = `${x},${y}`;
+            const state = this.farmLandStates.get(tileKey);
+            if (state && state.planted) {
+                // Get health percentage from health bar if available
+                let healthPercentage: number | undefined;
+                if (state.healthBarFill && state.healthBarBg) {
+                    const bgWidth = state.healthBarBg.width;
+                    const fillWidth = state.healthBarFill.width;
+                    healthPercentage = bgWidth > 0 ? (fillWidth / (bgWidth - 2)) * 100 : 100;
+                }
+
+                this.plantDetailManager.open({
+                    tileState: state,
+                    tileX: x,
+                    tileY: y,
+                    healthPercentage
+                });
+            }
+        });
 
         // Make sure UI camera ignores this game object
         this.uiCamera.ignore(plant);
