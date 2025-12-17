@@ -31,10 +31,40 @@ export const DEATH_TIMER_MS = parseInt(process.env.NEXT_PUBLIC_DEATH_TIMER_MS ||
 export interface PlantApiInfo {
     id: string;
     type: string;
+    typeName?: string;
     name: string;
     stage: string;
+    stageName?: string;
     plantedAt: string;
-    waterCount: number;
+    lastWateredAt?: string;
+    waterBalance?: number;
+    waterCount?: number;
+}
+
+// API Hydration info - plant health/water status
+export interface PlantHydration {
+    hoursToDeath: number;
+    isDead: boolean;
+    isWithering: boolean;
+    status: 'HEALTHY' | 'WITHERING' | 'DEAD';
+    message: string;
+    waterBalance: number;
+}
+
+// API Growth info - plant growth progress
+export interface PlantGrowth {
+    activeGrowthHours: number;
+    currentStage: string;
+    hoursRemaining: number;
+    progress: number;
+    totalHoursNeeded: number;
+}
+
+// API Soil Quality info
+export interface SoilQuality {
+    fertility: number;
+    hydration: number;
+    status: string;
 }
 
 // API Progress info stored in tile state
@@ -71,7 +101,10 @@ export interface TileState {
     landId?: string; // Land ID from backend API (for planting)
     // API data
     plantInfo?: PlantApiInfo; // Full plant info from API
-    progress?: PlantProgress; // Progress info from API
+    hydration?: PlantHydration; // Hydration/health info from API
+    growth?: PlantGrowth; // Growth progress info from API
+    soilQuality?: SoilQuality; // Soil quality info from API
+    progress?: PlantProgress; // Progress info from API (legacy)
     config?: PlantConfig; // Config info from API
 }
 

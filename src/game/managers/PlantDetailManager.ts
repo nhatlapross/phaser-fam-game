@@ -48,24 +48,28 @@ export class PlantDetailManager extends BaseManager {
         const lineHeight = 20;
         let infoRows = 0;
 
-        // Count progress info rows
-        if (tileState.progress) {
-            if (tileState.progress.percentage !== undefined) infoRows++;
-            if (tileState.progress.timeRemaining) infoRows++;
-            if (tileState.progress.canWater !== undefined) infoRows++;
+        // Count hydration info rows
+        if (tileState.hydration) {
+            infoRows += 2; // Health + Water status
+        }
+
+        // Count growth info rows
+        if (tileState.growth) {
+            if (tileState.growth.progress !== undefined) infoRows++;
+            if (tileState.growth.hoursRemaining !== undefined) infoRows++;
         }
 
         // Count plant info rows
         if (tileState.plantInfo) {
-            if (tileState.plantInfo.waterCount !== undefined && tileState.plantInfo.waterCount >= 0) infoRows++;
+            if (tileState.plantInfo.lastWateredAt) infoRows++;
             if (tileState.plantInfo.plantedAt) infoRows++;
         }
 
-        // Count config info rows
-        if (tileState.config) {
-            if (tileState.config.growingTime) infoRows++;
-            if (tileState.config.baseYield !== undefined && tileState.config.baseYield > 0) infoRows++;
-        }
+        // Count soil quality row
+        if (tileState.soilQuality) infoRows++;
+
+        // Status row is always shown
+        infoRows++;
 
         // Add button space if harvest available
         const stage = tileState.plantStage;
@@ -246,34 +250,46 @@ export class PlantDetailManager extends BaseManager {
         const leftX = modalX - 80;
         let currentY = infoStartY;
 
-        // Progress info from API
-        if (tileState.progress) {
-            // Progress percentage
-            if (tileState.progress.percentage !== undefined) {
-                this.createInfoRow(leftX, currentY, 'Progress:', `${tileState.progress.percentage}%`);
+        // Hydration info (health/water status) - Priority display
+        if (tileState.hydration) {
+            // Hours to death - Health indicator
+            const hoursToDeath = tileState.hydration.hoursToDeath;
+            const healthPercent = Math.min(Math.round((hoursToDeath / 72) * 100), 100);
+            let healthColor = '#4CAF50';
+            if (healthPercent <= 30) healthColor = '#F44336';
+            else if (healthPercent <= 60) healthColor = '#FF9800';
+            this.createInfoRow(leftX, currentY, 'Health:', `${healthPercent}% (${hoursToDeath}h left)`, healthColor);
+            currentY += lineHeight;
+
+            // Hydration status
+            const statusColor = tileState.hydration.status === 'HEALTHY' ? '#4CAF50' :
+                               tileState.hydration.status === 'WITHERING' ? '#FF9800' : '#F44336';
+            this.createInfoRow(leftX, currentY, 'Water:', tileState.hydration.status, statusColor);
+            currentY += lineHeight;
+        }
+
+        // Growth info
+        if (tileState.growth) {
+            // Growth progress
+            if (tileState.growth.progress !== undefined) {
+                this.createInfoRow(leftX, currentY, 'Growth:', `${tileState.growth.progress}%`);
                 currentY += lineHeight;
             }
 
-            // Time remaining
-            if (tileState.progress.timeRemaining) {
-                this.createInfoRow(leftX, currentY, 'Time Left:', tileState.progress.timeRemaining);
-                currentY += lineHeight;
-            }
-
-            // Can water
-            if (tileState.progress.canWater !== undefined) {
-                const canWaterText = tileState.progress.canWater ? 'Yes' : 'No';
-                const canWaterColor = tileState.progress.canWater ? '#4CAF50' : '#F44336';
-                this.createInfoRow(leftX, currentY, 'Can Water:', canWaterText, canWaterColor);
+            // Hours remaining to fully grown
+            if (tileState.growth.hoursRemaining !== undefined) {
+                this.createInfoRow(leftX, currentY, 'Time Left:', `${tileState.growth.hoursRemaining}h`);
                 currentY += lineHeight;
             }
         }
 
         // Plant info from API
         if (tileState.plantInfo) {
-            // Water count (only if defined and > 0)
-            if (tileState.plantInfo.waterCount !== undefined && tileState.plantInfo.waterCount >= 0) {
-                this.createInfoRow(leftX, currentY, 'Watered:', `${tileState.plantInfo.waterCount} times`);
+            // Last watered time
+            if (tileState.plantInfo.lastWateredAt) {
+                const wateredDate = new Date(tileState.plantInfo.lastWateredAt);
+                const wateredStr = this.formatDateTime(wateredDate);
+                this.createInfoRow(leftX, currentY, 'Watered:', wateredStr);
                 currentY += lineHeight;
             }
 
@@ -286,25 +302,26 @@ export class PlantDetailManager extends BaseManager {
             }
         }
 
-        // Config info from API
-        if (tileState.config) {
-            // Growing time
-            if (tileState.config.growingTime) {
-                this.createInfoRow(leftX, currentY, 'Grow Time:', tileState.config.growingTime);
-                currentY += lineHeight;
-            }
-
-            // Base yield
-            if (tileState.config.baseYield !== undefined && tileState.config.baseYield > 0) {
-                this.createInfoRow(leftX, currentY, 'Base Yield:', `${tileState.config.baseYield}`);
-                currentY += lineHeight;
-            }
+        // Soil quality (optional)
+        if (tileState.soilQuality) {
+            const soilColor = tileState.soilQuality.fertility >= 50 ? '#4CAF50' : '#FF9800';
+            this.createInfoRow(leftX, currentY, 'Soil:', `${tileState.soilQuality.fertility}% fertile`, soilColor);
+            currentY += lineHeight;
         }
 
-        // Status
+        // Status from hydration
         let statusText = 'Healthy';
         let statusColor = '#4CAF50';
-        if (tileState.isDead) {
+        if (tileState.hydration) {
+            statusText = tileState.hydration.status;
+            if (tileState.hydration.isDead) {
+                statusText = 'Dead';
+                statusColor = '#F44336';
+            } else if (tileState.hydration.isWithering) {
+                statusText = 'Needs Water!';
+                statusColor = '#FF9800';
+            }
+        } else if (tileState.isDead) {
             statusText = 'Dead';
             statusColor = '#F44336';
         } else if (tileState.isWilted) {

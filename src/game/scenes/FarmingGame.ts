@@ -534,11 +534,45 @@ export class FarmingGame extends Scene {
                 state.plantInfo = {
                     id: plot.plant.id,
                     type: plot.plant.type,
+                    typeName: (plot.plant as any).typeName,
                     name: plot.plant.name,
                     stage: plot.plant.stage,
+                    stageName: (plot.plant as any).stageName,
                     plantedAt: plot.plant.plantedAt,
+                    lastWateredAt: (plot.plant as any).lastWateredAt,
+                    waterBalance: (plot.plant as any).waterBalance,
                     waterCount: plot.plant.waterCount
                 };
+
+                // Store hydration data (health/water status)
+                const apiHydration = (plot as any).hydration;
+                state.hydration = apiHydration ? {
+                    hoursToDeath: apiHydration.hoursToDeath,
+                    isDead: apiHydration.isDead,
+                    isWithering: apiHydration.isWithering,
+                    status: apiHydration.status,
+                    message: apiHydration.message,
+                    waterBalance: apiHydration.waterBalance
+                } : undefined;
+
+                // Store growth data
+                const apiGrowth = (plot as any).growth;
+                state.growth = apiGrowth ? {
+                    activeGrowthHours: apiGrowth.activeGrowthHours,
+                    currentStage: apiGrowth.currentStage,
+                    hoursRemaining: apiGrowth.hoursRemaining,
+                    progress: apiGrowth.progress,
+                    totalHoursNeeded: apiGrowth.totalHoursNeeded
+                } : undefined;
+
+                // Store soil quality data
+                const apiSoilQuality = (plot as any).soilQuality;
+                state.soilQuality = apiSoilQuality ? {
+                    fertility: apiSoilQuality.fertility,
+                    hydration: apiSoilQuality.hydration,
+                    status: apiSoilQuality.status
+                } : undefined;
+
                 state.progress = plot.progress ? {
                     percentage: plot.progress.percentage,
                     timeRemaining: plot.progress.timeRemaining,
@@ -552,6 +586,12 @@ export class FarmingGame extends Scene {
                     baseYield: plot.config.baseYield
                 } : undefined;
 
+                // Update plant status from hydration
+                if (state.hydration) {
+                    state.isDead = state.hydration.isDead;
+                    state.isWilted = state.hydration.isWithering;
+                }
+
                 // Remove existing health bar
                 if (state.healthBarBg) {
                     state.healthBarBg.destroy();
@@ -563,28 +603,32 @@ export class FarmingGame extends Scene {
                 }
 
                 // Show plant sprite
-                this.showPlant(x, y, plantType, plantStage);
+                this.showPlant(x, y, plantType, plantStage, state.isDead, state.isWilted);
 
-                // Create health bar
-                this.createHealthBar(x, y, tileKey);
+                // Create health bar (only if not dead)
+                if (!state.isDead) {
+                    this.createHealthBar(x, y, tileKey);
+                }
 
-                // Update health bar progress
+                // Update health bar based on hydration.hoursToDeath (max 72 hours = 100%)
                 const updatedState = this.farmLandStates.get(tileKey);
-                if (updatedState?.healthBarFill && plot.progress) {
-                    const progressPercent = plot.progress.percentage / 100;
-                    const maxWidth = 14;
-                    updatedState.healthBarFill.width = maxWidth * progressPercent;
+                if (updatedState?.healthBarFill && state.hydration) {
+                    const maxHours = 72;
+                    const healthPercent = Math.min(state.hydration.hoursToDeath / maxHours, 1);
+                    const maxWidth = 11; // barWidth(12) - 1
+                    updatedState.healthBarFill.width = Math.max(maxWidth * healthPercent, 1);
 
-                    if (progressPercent > 0.6) {
-                        updatedState.healthBarFill.setFillStyle(0x4ade80);
-                    } else if (progressPercent > 0.3) {
-                        updatedState.healthBarFill.setFillStyle(0xfbbf24);
+                    // Color gradient: green -> yellow -> red
+                    if (healthPercent > 0.6) {
+                        updatedState.healthBarFill.setFillStyle(0x4ade80); // Green
+                    } else if (healthPercent > 0.3) {
+                        updatedState.healthBarFill.setFillStyle(0xfbbf24); // Yellow/Orange
                     } else {
-                        updatedState.healthBarFill.setFillStyle(0xef4444);
+                        updatedState.healthBarFill.setFillStyle(0xef4444); // Red
                     }
                 }
 
-                console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage}`);
+                console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (health: ${state.hydration?.hoursToDeath ?? 'N/A'}h)`);
             } else {
                 this.removePlant(x, y);
                 state.planted = false;
@@ -746,6 +790,19 @@ export class FarmingGame extends Scene {
             
             console.log('Garden API response:', gardenData);
             console.log('Garden data length:', gardenData?.length || 0);
+
+            // Log first plant details to see all available fields
+            if (gardenData && gardenData.length > 0) {
+                const firstPlot = gardenData.find(p => p.plant !== null);
+                if (firstPlot?.plant) {
+                    console.log('=== PLANT OBJECT STRUCTURE ===');
+                    console.log('Plant fields:', Object.keys(firstPlot.plant));
+                    console.log('Full plant object:', JSON.stringify(firstPlot.plant, null, 2));
+                    console.log('Progress fields:', firstPlot.progress ? Object.keys(firstPlot.progress) : 'N/A');
+                    console.log('Full progress object:', JSON.stringify(firstPlot.progress, null, 2));
+                    console.log('==============================');
+                }
+            }
             
             if (!gardenData || gardenData.length === 0) {
                 console.log('No garden data available - all plots remain locked');
@@ -805,11 +862,45 @@ export class FarmingGame extends Scene {
                     state.plantInfo = {
                         id: plot.plant.id,
                         type: plot.plant.type,
+                        typeName: (plot.plant as any).typeName,
                         name: plot.plant.name,
                         stage: plot.plant.stage,
+                        stageName: (plot.plant as any).stageName,
                         plantedAt: plot.plant.plantedAt,
+                        lastWateredAt: (plot.plant as any).lastWateredAt,
+                        waterBalance: (plot.plant as any).waterBalance,
                         waterCount: plot.plant.waterCount
                     };
+
+                    // Store hydration data (health/water status)
+                    const apiHydration = (plot as any).hydration;
+                    state.hydration = apiHydration ? {
+                        hoursToDeath: apiHydration.hoursToDeath,
+                        isDead: apiHydration.isDead,
+                        isWithering: apiHydration.isWithering,
+                        status: apiHydration.status,
+                        message: apiHydration.message,
+                        waterBalance: apiHydration.waterBalance
+                    } : undefined;
+
+                    // Store growth data
+                    const apiGrowth = (plot as any).growth;
+                    state.growth = apiGrowth ? {
+                        activeGrowthHours: apiGrowth.activeGrowthHours,
+                        currentStage: apiGrowth.currentStage,
+                        hoursRemaining: apiGrowth.hoursRemaining,
+                        progress: apiGrowth.progress,
+                        totalHoursNeeded: apiGrowth.totalHoursNeeded
+                    } : undefined;
+
+                    // Store soil quality data
+                    const apiSoilQuality = (plot as any).soilQuality;
+                    state.soilQuality = apiSoilQuality ? {
+                        fertility: apiSoilQuality.fertility,
+                        hydration: apiSoilQuality.hydration,
+                        status: apiSoilQuality.status
+                    } : undefined;
+
                     state.progress = plot.progress ? {
                         percentage: plot.progress.percentage,
                         timeRemaining: plot.progress.timeRemaining,
@@ -823,6 +914,12 @@ export class FarmingGame extends Scene {
                         baseYield: plot.config.baseYield
                     } : undefined;
 
+                    // Update plant status from hydration
+                    if (state.hydration) {
+                        state.isDead = state.hydration.isDead;
+                        state.isWilted = state.hydration.isWithering;
+                    }
+
                     // Remove existing health bar before creating new one
                     if (state.healthBarBg) {
                         state.healthBarBg.destroy();
@@ -834,29 +931,32 @@ export class FarmingGame extends Scene {
                     }
 
                     // Show plant sprite (will remove existing sprite if any)
-                    this.showPlant(x, y, plantType, plantStage);
+                    this.showPlant(x, y, plantType, plantStage, state.isDead, state.isWilted);
 
-                    // Create health bar
-                    this.createHealthBar(x, y, tileKey);
+                    // Create health bar (only if not dead)
+                    if (!state.isDead) {
+                        this.createHealthBar(x, y, tileKey);
+                    }
 
-                    // Update health bar based on progress percentage
-                    // Re-fetch state as createHealthBar may have updated it
+                    // Update health bar based on hydration.hoursToDeath (max 72 hours = 100%)
                     const updatedState = this.farmLandStates.get(tileKey);
-                    if (updatedState?.healthBarFill && plot.progress) {
-                        const progressPercent = plot.progress.percentage / 100;
-                        const maxWidth = 14;
-                        updatedState.healthBarFill.width = maxWidth * progressPercent;
+                    if (updatedState?.healthBarFill && state.hydration) {
+                        const maxHours = 72; // Max hours to death
+                        const healthPercent = Math.min(state.hydration.hoursToDeath / maxHours, 1);
+                        const maxWidth = 11; // barWidth(12) - 1
+                        updatedState.healthBarFill.width = Math.max(maxWidth * healthPercent, 1);
 
-                        if (progressPercent > 0.6) {
-                            updatedState.healthBarFill.setFillStyle(0x4ade80);
-                        } else if (progressPercent > 0.3) {
-                            updatedState.healthBarFill.setFillStyle(0xfbbf24);
+                        // Color gradient: green -> yellow -> red
+                        if (healthPercent > 0.6) {
+                            updatedState.healthBarFill.setFillStyle(0x4ade80); // Green
+                        } else if (healthPercent > 0.3) {
+                            updatedState.healthBarFill.setFillStyle(0xfbbf24); // Yellow/Orange
                         } else {
-                            updatedState.healthBarFill.setFillStyle(0xef4444);
+                            updatedState.healthBarFill.setFillStyle(0xef4444); // Red
                         }
                     }
 
-                    console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (${plot.progress?.percentage ?? 0}%)`);
+                    console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (health: ${state.hydration?.hoursToDeath ?? 'N/A'}h)`);
                 } else {
                     // Empty plot - remove any existing plant sprite and reset state
                     this.removePlant(x, y);
@@ -2369,7 +2469,12 @@ export class FarmingGame extends Scene {
             plant.destroy();
         }
 
-        // Also remove health bar
+        // Also remove health bar (border, bg, fill)
+        const border = this.children.getByName(`healthbar-border-${x}-${y}`);
+        if (border) {
+            border.destroy();
+        }
+
         const tileKey = `${x},${y}`;
         const state = this.farmLandStates.get(tileKey);
         if (state) {
@@ -2388,35 +2493,40 @@ export class FarmingGame extends Scene {
         const state = this.farmLandStates.get(tileKey);
         if (!state) return;
 
-        // Health bar dimensions
-        const barWidth = 14;
+        // Health bar dimensions - with thin border and rounded corners
+        const barWidth = 12;
         const barHeight = 3;
         const barY = y * this.TILE_SIZE - 2; // Above the plant
-        const barX = x * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const barX = x * this.TILE_SIZE + this.TILE_SIZE / 2 - barWidth / 2;
+        const depth = y * this.TILE_SIZE + 100;
+        const cornerRadius = 1;
 
-        // Background (dark gray)
-        state.healthBarBg = this.add.rectangle(
-            barX,
-            barY,
-            barWidth,
-            barHeight,
-            0x333333,
-            0.8
-        );
-        state.healthBarBg.setDepth(y * this.TILE_SIZE + 10);
-        state.healthBarBg.setName(`healthbar-bg-${x}-${y}`);
-        this.uiCamera.ignore(state.healthBarBg);
+        // Create graphics for background with border
+        const bgGraphics = this.add.graphics();
+        bgGraphics.setDepth(depth);
+        bgGraphics.setName(`healthbar-bg-${x}-${y}`);
 
-        // Fill (starts green)
+        // Draw black border (thin stroke)
+        bgGraphics.lineStyle(0.5, 0x000000, 1);
+        bgGraphics.fillStyle(0x333333, 1);
+        bgGraphics.fillRoundedRect(barX, barY - barHeight / 2, barWidth, barHeight, cornerRadius);
+        bgGraphics.strokeRoundedRect(barX, barY - barHeight / 2, barWidth, barHeight, cornerRadius);
+
+        this.uiCamera.ignore(bgGraphics);
+
+        // Store as any since healthBarBg expects Rectangle but we use Graphics
+        state.healthBarBg = bgGraphics as unknown as Phaser.GameObjects.Rectangle;
+
+        // Fill bar (green, will be resized based on health)
         state.healthBarFill = this.add.rectangle(
-            barX,
+            barX + barWidth / 2,
             barY,
-            barWidth - 2,
+            barWidth - 1,
             barHeight - 1,
-            0x00ff00,
+            0x4ade80,
             1
         );
-        state.healthBarFill.setDepth(y * this.TILE_SIZE + 11);
+        state.healthBarFill.setDepth(depth + 1);
         state.healthBarFill.setName(`healthbar-fill-${x}-${y}`);
         this.uiCamera.ignore(state.healthBarFill);
     }
@@ -2436,14 +2546,15 @@ export class FarmingGame extends Scene {
         if (!state || !state.healthBarFill) return;
 
         // Reset to full health (green, full width)
-        const maxWidth = 12;
+        const maxWidth = 11; // barWidth(12) - 1
         state.healthBarFill.setSize(maxWidth, 2);
-        state.healthBarFill.setFillStyle(0x00ff00, 1);
+        state.healthBarFill.setFillStyle(0x4ade80, 1); // Green
 
-        // Reset position
+        // Reset position to match createHealthBar
         const [x, y] = tileKey.split(',').map(Number);
         const barX = x * this.TILE_SIZE + this.TILE_SIZE / 2;
-        state.healthBarFill.setPosition(barX, y * this.TILE_SIZE - 2);
+        const barY = y * this.TILE_SIZE - 2;
+        state.healthBarFill.setPosition(barX, barY);
     }
 
     private updatePlantSprite(x: number, y: number, cropType: PlantType, stage: number, isDead: boolean = false, isWilted: boolean = false) {

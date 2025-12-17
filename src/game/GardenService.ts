@@ -2,11 +2,38 @@
 
 export interface Plant {
     id: string;
-    type: 'ALGAE' | 'MUSHROOM' | 'TREE';
+    type: 'ALGAE' | 'MUSHROOM' | 'TREE' | 'SOCIAL';
+    typeName: string;
     name: string;
     stage: 'DIGGING' | 'SEED' | 'SPROUT' | 'YOUNG' | 'MATURE' | 'FLOWER' | 'FRUIT';
+    stageName: string;
     plantedAt: string;
-    waterCount: number;
+    lastWateredAt: string;
+    waterBalance: number;
+    waterCount?: number; // Legacy field
+}
+
+export interface Hydration {
+    hoursToDeath: number;
+    isDead: boolean;
+    isWithering: boolean;
+    status: 'HEALTHY' | 'WITHERING' | 'DEAD';
+    message: string;
+    waterBalance: number;
+}
+
+export interface Growth {
+    activeGrowthHours: number;
+    currentStage: string;
+    hoursRemaining: number;
+    progress: number;
+    totalHoursNeeded: number;
+}
+
+export interface SoilQuality {
+    fertility: number;
+    hydration: number;
+    status: string;
 }
 
 export interface Progress {
@@ -27,8 +54,11 @@ export interface GardenPlot {
     landId: string;
     plotIndex: number;
     plant: Plant | null;
-    progress: Progress;
-    config: Config;
+    hydration?: Hydration;
+    growth?: Growth;
+    soilQuality?: SoilQuality;
+    progress?: Progress;
+    config?: Config;
 }
 
 export type GardenResponse = GardenPlot[];
