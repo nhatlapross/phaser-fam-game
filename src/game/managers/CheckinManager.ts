@@ -375,6 +375,7 @@ export class CheckinManager extends BaseManager {
             });
 
             // Make next day's box clickable if can check in
+            console.log(`Day ${streakDay}: canCheckin=${canCheckin}, isNextDay=${isNextDay}, isChecked=${isChecked}, nextStreakDay=${nextStreakDay}`);
             if (isNextDay && !isChecked) {
                 dayBox.setInteractive({ useHandCursor: true });
                 dayBox.on('pointerover', () => dayBox.setTint(0xffff88));
@@ -385,8 +386,92 @@ export class CheckinManager extends BaseManager {
             }
         });
 
-        // Streak info
-        const infoY = dayY + 45;
+        // Add a dedicated Check In button if canCheckin is true
+        if (canCheckin) {
+            const nextDay = currentStreak + 1;
+            const btnY = dayY + 45;
+            const checkinBtn = this.scene.add.sprite(modalX, btnY, 'square-buttons', 6);
+            checkinBtn.setDisplaySize(100, 28);
+            checkinBtn.setDepth(5302);
+            checkinBtn.setAlpha(0);
+            checkinBtn.setInteractive({ useHandCursor: true });
+            this.scene.cameras.main.ignore(checkinBtn);
+            this.addElement(checkinBtn);
+
+            const checkinBtnText = this.scene.add.text(modalX, btnY, `Check In Day ${nextDay}`, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            checkinBtnText.setOrigin(0.5);
+            checkinBtnText.setDepth(5303);
+            checkinBtnText.setStroke('#5D4037', 2);
+            checkinBtnText.setAlpha(0);
+            this.scene.cameras.main.ignore(checkinBtnText);
+            this.addElement(checkinBtnText);
+
+            this.scene.tweens.add({
+                targets: [checkinBtn, checkinBtnText],
+                alpha: 1,
+                duration: 150,
+                delay: 250
+            });
+
+            checkinBtn.on('pointerover', () => checkinBtn.setTint(0x88ff88));
+            checkinBtn.on('pointerout', () => checkinBtn.clearTint());
+            checkinBtn.on('pointerdown', () => {
+                // Find the day box for the next day
+                const dayIndex = nextDay - 1;
+                const dayX = startX + dayIndex * (dayBoxSize + daySpacing) + 10;
+                // Get the elements we need - we'll create a simple version
+                checkinBtn.disableInteractive();
+                checkinBtnText.setText('...');
+                this.performCheckinSimple(nextDay, checkinBtn, checkinBtnText, checkinData);
+            });
+        } else if (streakStatus && streakStatus.nextCheckinAt) {
+            // Show "Come back" message with countdown
+            const btnY = dayY + 45;
+            const nextCheckinDate = new Date(streakStatus.nextCheckinAt);
+            const now = new Date();
+            const diffMs = nextCheckinDate.getTime() - now.getTime();
+            
+            let countdownText = '';
+            if (diffMs > 0) {
+                const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                if (hours > 0) {
+                    countdownText = `Come back in ${hours}h ${mins}m`;
+                } else {
+                    countdownText = `Come back in ${mins}m`;
+                }
+            } else {
+                countdownText = 'Check-in available!';
+            }
+
+            const waitText = this.scene.add.text(modalX, btnY, countdownText, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFA726',
+                resolution: 2
+            });
+            waitText.setOrigin(0.5);
+            waitText.setDepth(5302);
+            waitText.setStroke('#5D4037', 2);
+            waitText.setAlpha(0);
+            this.scene.cameras.main.ignore(waitText);
+            this.addElement(waitText);
+
+            this.scene.tweens.add({
+                targets: waitText,
+                alpha: 1,
+                duration: 150,
+                delay: 250
+            });
+        }
+
+        // Streak info - move down if button/message is shown
+        const infoY = (canCheckin || (streakStatus && streakStatus.nextCheckinAt)) ? dayY + 75 : dayY + 45;
         const streakText = this.scene.add.text(modalX, infoY, `Current Streak: ${currentStreak} day${currentStreak !== 1 ? 's' : ''}`, {
             fontSize: '10px',
             fontFamily: 'PixelFont',
@@ -401,6 +486,73 @@ export class CheckinManager extends BaseManager {
         this.addElement(streakText);
 
         this.scene.tweens.add({ targets: streakText, alpha: 1, duration: 150, delay: 200 });
+    }
+
+    private async performCheckinSimple(
+        streakDay: number,
+        btn: Phaser.GameObjects.Sprite,
+        btnText: Phaser.GameObjects.Text,
+        checkinData: CheckinData
+    ): Promise<void> {
+        // Show optimistic feedback
+        this.showCheckinReward('Checking in...', 0x4ade80);
+        this.callbacks.playSuccessSound();
+
+        try {
+            const result = await StreakService.checkin();
+
+            if (result.success) {
+                const successResult = result as {
+                    success: true;
+                    streakDay: number;
+                    currentStreak: number;
+                    rewards: { gold: number; ruby: number; items: string[] };
+                    message: string;
+                };
+
+                // Update local data
+                const today = this.getTodayString();
+                this.saveCheckinData({
+                    checkedDays: [...checkinData.checkedDays, streakDay],
+                    lastCheckin: today,
+                    streak: successResult.currentStreak
+                });
+
+                // Show rewards
+                const rewardParts: string[] = [];
+                if (successResult.rewards.gold > 0) {
+                    rewardParts.push(`+${successResult.rewards.gold} Gold`);
+                }
+                if (successResult.rewards.ruby > 0) {
+                    rewardParts.push(`+${successResult.rewards.ruby} Ruby`);
+                }
+                if (successResult.rewards.items && successResult.rewards.items.length > 0) {
+                    rewardParts.push(...successResult.rewards.items.map(item => `+${item}`));
+                }
+
+                this.showCheckinReward(rewardParts.length > 0 ? rewardParts.join(', ') + '!' : 'Check-in successful!', 0x4ade80);
+
+                // Update button to show success
+                btn.setTint(0x4ade80);
+                btnText.setText('✓ Done');
+
+                // Trigger callbacks
+                this.callbacks.updateToolbar();
+
+                // Clear cache
+                this.cachedStreakStatus = null;
+                this.cachedStreakHistory = null;
+            } else {
+                const errorResult = result as { success: false; message?: string; error?: string };
+                this.showCheckinReward(errorResult.message || errorResult.error || 'Check-in failed!', 0xef4444);
+                btn.setInteractive({ useHandCursor: true });
+                btnText.setText(`Check In Day ${streakDay}`);
+            }
+        } catch (error) {
+            this.showCheckinReward('Network error! Try again', 0xef4444);
+            btn.setInteractive({ useHandCursor: true });
+            btnText.setText(`Check In Day ${streakDay}`);
+        }
     }
 
     private async performCheckin(

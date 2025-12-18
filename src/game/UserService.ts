@@ -11,7 +11,7 @@ interface UserData {
     plantsCount: number;
     network: string;
     balanceGold?: number;
-    balanceRuby?: number;
+    balanceGem?: number;
 }
 
 interface LoginResponse {
@@ -229,7 +229,7 @@ export class UserService {
                     plantsCount: data.lands?.filter((land: any) => land.plant).length || 0,
                     network: data.network,
                     balanceGold: data.balanceGold || 0,
-                    balanceRuby: data.balanceRuby || 0,
+                    balanceGem: data.balanceGem || 0,
                 };
 
                 // Update stored user data
@@ -288,7 +288,7 @@ export class UserService {
                         xp: data.xp ?? currentUser.xp,
                         reputationScore: data.reputationScore ?? currentUser.reputationScore,
                         balanceGold: data.balanceGold ?? currentUser.balanceGold,
-                        balanceRuby: data.balanceRuby ?? currentUser.balanceRuby,
+                        balanceGem: data.balanceGem ?? currentUser.balanceGem,
                     };
                     localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
                     return updatedUser;
