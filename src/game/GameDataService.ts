@@ -23,12 +23,12 @@ export interface UserData {
     plantsCount: number;
     network: string;
     balanceGold?: number;
-    balanceRuby?: number;
+    balanceGem?: number;
 }
 
 export interface CurrencyBalances {
     gold: number;
-    ruby: number;
+    gem: number;
 }
 
 export interface FruitInventoryItem {
@@ -84,7 +84,7 @@ export class GameDataService {
                 seeds: [],
                 fertilizers: null,
                 fruits: [],
-                currencies: { gold: 0, ruby: 0 },
+                currencies: { gold: 0, gem: 0 },
                 missions: null,
                 streak: { status: null, history: null },
                 shop: { goldShop: null, gemShop: null, cashShop: null },
@@ -137,7 +137,7 @@ export class GameDataService {
             fruits: fruitsResult.status === 'fulfilled' ? fruitsResult.value : [],
             currencies: currenciesResult.status === 'fulfilled'
                 ? currenciesResult.value
-                : { gold: 0, ruby: 0 },
+                : { gold: 0, gem: 0 },
             missions: missionsResult.status === 'fulfilled' ? missionsResult.value : null,
             streak: {
                 status: streakStatusResult.status === 'fulfilled' ? streakStatusResult.value : null,
@@ -201,7 +201,7 @@ export class GameDataService {
             fertilizerTypes: gameData.fertilizers?.fertilizers?.length ?? 0,
             fruitSlots: gameData.fruits.length,
             gold: gameData.currencies.gold,
-            ruby: gameData.currencies.ruby,
+            gem: gameData.currencies.gem,
             missions: gameData.missions?.length ?? 0,
             streakStatus: gameData.streak.status ? 'loaded' : 'null',
             streakHistory: gameData.streak.history?.checkins?.length ?? 0,

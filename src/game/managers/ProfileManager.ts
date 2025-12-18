@@ -144,17 +144,17 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(goldText);
         this.profileElements.push(goldText);
 
-        const rubyBalance = user.balanceRuby ?? 0;
-        const rubyText = this.scene.add.text(currencyStartX + 60, currencyY, `💎 ${rubyBalance}`, {
+        const gemBalance = user.balanceGem ?? 0;
+        const gemText = this.scene.add.text(currencyStartX + 60, currencyY, `💎 ${gemBalance}`, {
             fontSize: '9px',
             fontFamily: 'PixelFont',
             color: '#FFD700',
             resolution: 2
         });
-        rubyText.setDepth(5023);
-        rubyText.setStroke('#5D4037', 2);
-        this.scene.cameras.main.ignore(rubyText);
-        this.profileElements.push(rubyText);
+        gemText.setDepth(5023);
+        gemText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(gemText);
+        this.profileElements.push(gemText);
 
         // Click to open modal
         bg.on('pointerdown', () => this.open());

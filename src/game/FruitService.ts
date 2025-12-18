@@ -164,11 +164,11 @@ export class FruitService {
     }
 
     /**
-     * Gets both gold and ruby balances
+     * Gets both gold and gem balances
      */
-    static async getCurrencyBalances(): Promise<{ gold: number; ruby: number }> {
+    static async getCurrencyBalances(): Promise<{ gold: number; gem: number }> {
         const token = UserService.getAccessToken();
-        if (!token) return { gold: 0, ruby: 0 };
+        if (!token) return { gold: 0, gem: 0 };
 
         try {
             const response = await fetch(
@@ -184,16 +184,16 @@ export class FruitService {
             if (response.ok) {
                 const data: InventoryResponse = await response.json();
                 const goldItem = data.inventory.find(item => item.itemType === 'GOLD');
-                const rubyItem = data.inventory.find(item => item.itemType === 'RUBY');
+                const gemItem = data.inventory.find(item => item.itemType === 'GEM');
                 return {
                     gold: goldItem?.amount || 0,
-                    ruby: rubyItem?.amount || 0
+                    gem: gemItem?.amount || 0
                 };
             }
-            return { gold: 0, ruby: 0 };
+            return { gold: 0, gem: 0 };
         } catch (error) {
             console.error("Error fetching currency balances:", error);
-            return { gold: 0, ruby: 0 };
+            return { gold: 0, gem: 0 };
         }
     }
 }
