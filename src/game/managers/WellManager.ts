@@ -135,11 +135,28 @@ export class WellManager extends BaseManager {
     }
 
     /**
+     * Fetch water status from API
+     */
+    private async fetchWaterStatus(): Promise<void> {
+        const status = await ShopService.getWaterStatus();
+        if (status) {
+            if (status.isReady) {
+                this.nextClaimAt = null; // Can claim now
+            } else if (status.nextClaimAt) {
+                this.nextClaimAt = new Date(status.nextClaimAt);
+            }
+        }
+    }
+
+    /**
      * Open the well modal
      */
-    public open(): void {
+    public async open(): Promise<void> {
         if (this.isOpen) return;
         this.isOpen = true;
+
+        // Fetch water status from API
+        await this.fetchWaterStatus();
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
@@ -287,7 +304,33 @@ export class WellManager extends BaseManager {
 
         this.scene.tweens.add({ targets: timerText, alpha: 1, duration: 150, delay: 100 });
 
-        // Update timer display
+        // Claim button
+        const claimBtnY = modalY + 58;
+        const canClaimInitial = this.canClaimWater();
+        const claimBtnBg = this.scene.add.sprite(modalX, claimBtnY, 'square-buttons', canClaimInitial ? 6 : 7);
+        claimBtnBg.setDisplaySize(100, 32);
+        claimBtnBg.setDepth(5302);
+        claimBtnBg.setAlpha(0);
+        if (canClaimInitial) {
+            claimBtnBg.setInteractive({ useHandCursor: true });
+        }
+        this.scene.cameras.main.ignore(claimBtnBg);
+        this.addElement(claimBtnBg);
+
+        const claimBtnText = this.scene.add.text(modalX, claimBtnY, canClaimInitial ? 'Claim' : 'Wait...', {
+            fontSize: '12px',
+            fontFamily: 'PixelFont',
+            color: canClaimInitial ? '#FFFFFF' : '#999999',
+            resolution: 2
+        });
+        claimBtnText.setOrigin(0.5);
+        claimBtnText.setDepth(5303);
+        claimBtnText.setStroke('#5D4037', 2);
+        claimBtnText.setAlpha(0);
+        this.scene.cameras.main.ignore(claimBtnText);
+        this.addElement(claimBtnText);
+
+        // Update timer display and button state
         const updateTimerDisplay = () => {
             const canClaim = this.canClaimWater();
 
@@ -295,6 +338,11 @@ export class WellManager extends BaseManager {
                 statusText.setText('💧 Water Ready!');
                 statusText.setColor('#4CAF50');
                 timerText.setText('Click to collect');
+                // Enable button
+                claimBtnBg.setTexture('square-buttons', 6);
+                claimBtnBg.setInteractive({ useHandCursor: true });
+                claimBtnText.setText('Claim');
+                claimBtnText.setColor('#FFFFFF');
             } else {
                 statusText.setText('⏳ Recharging...');
                 statusText.setColor('#FFA726');
@@ -309,6 +357,11 @@ export class WellManager extends BaseManager {
                 } else {
                     timerText.setText(`Next: ${secs}s`);
                 }
+                // Disable button
+                claimBtnBg.setTexture('square-buttons', 7);
+                claimBtnBg.disableInteractive();
+                claimBtnText.setText('Wait...');
+                claimBtnText.setColor('#999999');
             }
         };
 
@@ -321,29 +374,6 @@ export class WellManager extends BaseManager {
             loop: true
         });
 
-        // Claim button
-        const claimBtnY = modalY + 58;
-        const claimBtnBg = this.scene.add.sprite(modalX, claimBtnY, 'square-buttons', 6);
-        claimBtnBg.setDisplaySize(100, 32);
-        claimBtnBg.setDepth(5302);
-        claimBtnBg.setAlpha(0);
-        claimBtnBg.setInteractive({ useHandCursor: true });
-        this.scene.cameras.main.ignore(claimBtnBg);
-        this.addElement(claimBtnBg);
-
-        const claimBtnText = this.scene.add.text(modalX, claimBtnY, 'Claim All', {
-            fontSize: '12px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
-        });
-        claimBtnText.setOrigin(0.5);
-        claimBtnText.setDepth(5303);
-        claimBtnText.setStroke('#5D4037', 2);
-        claimBtnText.setAlpha(0);
-        this.scene.cameras.main.ignore(claimBtnText);
-        this.addElement(claimBtnText);
-
         this.scene.tweens.add({
             targets: [claimBtnBg, claimBtnText],
             alpha: 1,
@@ -351,7 +381,9 @@ export class WellManager extends BaseManager {
             delay: 150
         });
 
-        claimBtnBg.on('pointerover', () => claimBtnBg.setTint(0x88ff88));
+        claimBtnBg.on('pointerover', () => {
+            if (this.canClaimWater()) claimBtnBg.setTint(0x88ff88);
+        });
         claimBtnBg.on('pointerout', () => claimBtnBg.clearTint());
         claimBtnBg.on('pointerdown', () => {
             if (this.canClaimWater()) {

@@ -161,6 +161,12 @@ export interface FreeWaterResponse {
     nextClaimAt: string;
 }
 
+export interface WaterStatusResponse {
+    isReady: boolean;
+    nextClaimAt: string;
+    lastClaimedAt: string;
+}
+
 // Inventory Types
 export interface InventoryItem {
     id: string;
@@ -437,6 +443,39 @@ export class ShopService {
         } catch (error) {
             console.error("Network error fetching inventory:", error);
             return 0;
+        }
+    }
+
+    /**
+     * Get free water status
+     */
+    static async getWaterStatus(): Promise<WaterStatusResponse | null> {
+        const token = this.getAccessToken();
+        if (!token) {
+            console.log('No access token available for water status');
+            return null;
+        }
+
+        try {
+            const response = await fetch(
+                `${this.API_BASE_URL}/shop/water/status`,
+                {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (response.ok) {
+                return await response.json();
+            } else {
+                console.error("Error fetching water status:", response.statusText);
+                return null;
+            }
+        } catch (error) {
+            console.error("Network error fetching water status:", error);
+            return null;
         }
     }
 
