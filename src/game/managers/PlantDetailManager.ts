@@ -16,14 +16,14 @@ interface PlantDetailCallbacks {
     onRemove?: (landId: string) => void;
 }
 
-// Stage names
+// Stage names matching backend
 const STAGE_NAMES: Record<number, string> = {
+    [PLANT_STAGES.DIGGING]: 'Digging',
     [PLANT_STAGES.SEED]: 'Seed',
     [PLANT_STAGES.SPROUT]: 'Sprout',
-    [PLANT_STAGES.YOUNG]: 'Young',
-    [PLANT_STAGES.MATURE]: 'Mature',
-    [PLANT_STAGES.FLOWER]: 'Flower',
-    [PLANT_STAGES.FRUIT]: 'Fruit'
+    [PLANT_STAGES.GROWING]: 'Growing',
+    [PLANT_STAGES.BLOOM]: 'Bloom',
+    [PLANT_STAGES.MATURE]: 'Mature'
 };
 
 /**
@@ -73,7 +73,7 @@ export class PlantDetailManager extends BaseManager {
 
         // Add button space if harvest available
         const stage = tileState.plantStage;
-        const buttonSpace = (!tileState.isDead && stage === PLANT_STAGES.FRUIT) ? 50 : 20;
+        const buttonSpace = (!tileState.isDead && stage === PLANT_STAGES.MATURE) ? 50 : 20;
 
         return baseHeight + (infoRows * lineHeight) + buttonSpace;
     }
@@ -145,19 +145,22 @@ export class PlantDetailManager extends BaseManager {
 
     /**
      * Get current stage image key
+     * Stages: DIGGING(0), SEED(1), SPROUT(2), GROWING(3), BLOOM(4), MATURE(5)
      */
     private getPlantImageKey(cropType: PlantType, stage: number, isDead: boolean): string {
         const cropDef = CROP_DEFINITIONS[cropType];
 
         if (isDead) {
             return cropDef.deathImage;
-        } else if (stage === PLANT_STAGES.FRUIT) {
+        } else if (stage === PLANT_STAGES.MATURE) {
             return cropDef.fruitImage;
-        } else if (stage === PLANT_STAGES.SEED) {
+        } else if (stage === PLANT_STAGES.DIGGING || stage === PLANT_STAGES.SEED) {
             return cropDef.seedImage;
         } else {
-            // Stage 1-4 maps to growthImages[0-3]
-            return cropDef.growthImages[stage - 1] || cropDef.growthImages[0];
+            // SPROUT(2), GROWING(3), BLOOM(4) map to growthImages[0-4]
+            // stage 2 -> index 0, stage 3 -> index 1, stage 4 -> index 2
+            const imageIndex = Math.min(stage - 2, cropDef.growthImages.length - 1);
+            return cropDef.growthImages[imageIndex] || cropDef.growthImages[0];
         }
     }
 
@@ -231,8 +234,8 @@ export class PlantDetailManager extends BaseManager {
             plantImage.setTint(0xccaa66);
         }
 
-        // Stage name below image
-        const stageText = this.scene.add.text(modalX, modalTop + 125, `Stage: ${stageName} (${stage}/5)`, {
+        // Stage name below image (display as 1-indexed: stage+1 out of 6)
+        const stageText = this.scene.add.text(modalX, modalTop + 125, `Stage: ${stageName} (${stage + 1}/6)`, {
             fontSize: '11px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -330,8 +333,8 @@ export class PlantDetailManager extends BaseManager {
         }
         this.createInfoRow(leftX, currentY, 'Status:', statusText, statusColor);
 
-        // Harvest button (only show if at fruit stage and not dead)
-        if (!tileState.isDead && stage === PLANT_STAGES.FRUIT) {
+        // Harvest button (only show if at mature stage and not dead)
+        if (!tileState.isDead && stage === PLANT_STAGES.MATURE) {
             const btnY = modalY + modalHeight / 2 - 40;
             this.createActionButton(
                 modalX,

@@ -2212,7 +2212,7 @@ export class FarmingGame extends Scene {
                 console.log('Plant at', tileKey, 'has been restored from wilted state!');
             }
 
-            const maxStage = PLANT_STAGES.FRUIT;
+            const maxStage = PLANT_STAGES.MATURE;
 
             if (state.plantStage < maxStage) {
                 // Fertilizer grows plant by 2 stages (but not beyond max)
@@ -2255,7 +2255,7 @@ export class FarmingGame extends Scene {
                 return;
             }
 
-            if (state.plantStage >= PLANT_STAGES.FRUIT) {
+            if (state.plantStage >= PLANT_STAGES.MATURE) {
                 // Check if chest has space
                 if (this.isChestFull()) {
                     console.log('Cannot harvest! Chest is full.');
@@ -2300,7 +2300,7 @@ export class FarmingGame extends Scene {
                     console.warn('No plantId available for harvesting - plant may not be synced with backend');
                 }
             } else {
-                console.log('Plant not ready to harvest at', tileKey, `(Stage ${state.plantStage}/${PLANT_STAGES.FRUIT})`);
+                console.log('Plant not ready to harvest at', tileKey, `(Stage ${state.plantStage}/${PLANT_STAGES.MATURE})`);
             }
         }
     }
@@ -2407,13 +2407,14 @@ export class FarmingGame extends Scene {
 
         if (isDead) {
             imageKey = cropDef.deathImage;
-        } else if (stage === PLANT_STAGES.SEED) {
-            imageKey = cropDef.seedImage; // Seed stage
-        } else if (stage === PLANT_STAGES.FRUIT) {
-            imageKey = cropDef.fruitImage; // Ready to harvest (fruit stage)
-        } else if (stage > 0 && stage <= cropDef.growthImages.length) {
-            // Stages 1-4: Sprout, Young, Mature, Flower
-            imageKey = cropDef.growthImages[stage - 1];
+        } else if (stage === PLANT_STAGES.DIGGING || stage === PLANT_STAGES.SEED) {
+            imageKey = cropDef.seedImage; // Digging/Seed stage
+        } else if (stage === PLANT_STAGES.MATURE) {
+            imageKey = cropDef.fruitImage; // Ready to harvest (mature stage)
+        } else if (stage >= PLANT_STAGES.SPROUT && stage <= PLANT_STAGES.BLOOM) {
+            // Stages SPROUT(2), GROWING(3), BLOOM(4) map to growthImages[0-4]
+            const imageIndex = Math.min(stage - PLANT_STAGES.SPROUT, cropDef.growthImages.length - 1);
+            imageKey = cropDef.growthImages[imageIndex];
         } else {
             imageKey = cropDef.growthImages[cropDef.growthImages.length - 1];
         }
