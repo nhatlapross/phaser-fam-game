@@ -6,20 +6,20 @@ export type PlantType = 'algae' | 'mushroom' | 'tree';
 // Fertilizer types
 export type FertilizerType = 'common' | 'rare' | 'epic' | 'legendary';
 
-// Plant stages according to proposal:
-// 0: Seed (Hạt)
-// 1: Sprout (Mầm)
-// 2: Young Plant (Cây non)
-// 3: Mature (Trưởng thành)
-// 4: Flower (Hoa) - After this stage, plant cannot die
-// 5: Fruit (Quả) - Ready to harvest
+// Plant stages according to backend:
+// 0: Digging - Initial phase after planting
+// 1: Seed (Hạt) - Starting point of growth
+// 2: Sprout (Mầm) - First signs of growth
+// 3: Growing (Cây) - Vegetative growth phase
+// 4: Bloom (Hoa) - Flowering/maturing phase
+// 5: Mature (Quả/Chín) - Final stage, ready to harvest
 export const PLANT_STAGES = {
-    SEED: 0,
-    SPROUT: 1,
-    YOUNG: 2,
-    MATURE: 3,
-    FLOWER: 4,
-    FRUIT: 5
+    DIGGING: 0,
+    SEED: 1,
+    SPROUT: 2,
+    GROWING: 3,
+    BLOOM: 4,
+    MATURE: 5
 } as const;
 
 // Death timer: 72 hours in real time = 72 * 60 * 60 * 1000 ms
