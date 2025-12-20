@@ -11,6 +11,7 @@ import {
     CashShopItem
 } from '../ShopService';
 import { GameDataService } from '../GameDataService';
+import { useGameState } from '../hooks/useGameState';
 
 interface ShopCallbacks {
     getPlayerGold: () => number;
@@ -21,9 +22,8 @@ interface ShopCallbacks {
     getChestInventory: () => ChestSlot[];
     setChestInventory: (inventory: ChestSlot[]) => void;
     getToolbarItems: () => { name: string; count?: number }[];
-    updateToolbar: () => void;
-    refreshProfileUI: () => void;
     playSuccessSound: () => void;
+    // Note: UI refresh is now handled by GameDataService.refreshAndUpdateUI()
 }
 
 /**
@@ -185,10 +185,11 @@ export class ShopManager extends BaseManager {
 
 
     private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
-        // Balance display
-        const goldBalance = this.goldShopData?.user.balanceGold ?? 0;
-        const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
-        
+        // Balance display - READ FROM GLOBAL STATE (single source of truth)
+        const gameState = useGameState(this.scene);
+        const goldBalance = gameState.getGold();
+        const gemBalance = gameState.getGem();
+
         this.balanceText = this.scene.add.text(modalX, modalY - modalHeight / 2 + 48, `💰 ${goldBalance}    💎 ${gemBalance}`, {
             fontSize: '10px',
             fontFamily: 'PixelFont',
@@ -454,37 +455,43 @@ export class ShopManager extends BaseManager {
     private async handleGoldPurchase(item: GoldShopItem): Promise<void> {
         console.log('Purchasing gold item:', item.key);
 
+        // Get global game state (single source of truth)
+        const gameState = useGameState(this.scene);
+
         // === OPTIMISTIC UPDATE ===
-        const previousGoldBalance = this.goldShopData?.user.balanceGold ?? 0;
+        const previousGoldBalance = gameState.getGold();
         const optimisticNewBalance = previousGoldBalance - item.priceGold;
 
         // 1. Show success immediately
         this.showMessage(`Purchased ${item.name}!`, '#4CAF50');
         this.callbacks.playSuccessSound();
 
-        // 2. Update balance display immediately
+        // 2. Update GLOBAL STATE immediately (this will trigger UI refresh)
+        gameState.setGold(optimisticNewBalance);
+
+        // 3. Also update local shop data for consistency
         if (this.goldShopData) {
             this.goldShopData.user.balanceGold = optimisticNewBalance;
         }
         if (this.balanceText) {
-            const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
+            const gemBalance = gameState.getGem();
             this.balanceText.setText(`💰 ${optimisticNewBalance}    💎 ${gemBalance}`);
         }
-
-        // 3. Refresh profile UI immediately
-        this.callbacks.refreshProfileUI();
 
         // === BACKGROUND API CALL ===
         try {
             const result = await ShopService.purchaseGoldItem(item.key);
 
             if (result && result.success) {
-                // Update with actual balance from API
+                // Update GLOBAL STATE with actual balance from API
+                gameState.setGold(result.balanceGold);
+
+                // Also update local shop data
                 if (this.goldShopData) {
                     this.goldShopData.user.balanceGold = result.balanceGold;
                 }
                 if (this.balanceText) {
-                    const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
+                    const gemBalance = gameState.getGem();
                     this.balanceText.setText(`💰 ${result.balanceGold}    💎 ${gemBalance}`);
                 }
 
@@ -492,26 +499,26 @@ export class ShopManager extends BaseManager {
                 this.fetchShopData(true);
             } else {
                 // === ROLLBACK on failure ===
+                gameState.setGold(previousGoldBalance);
                 if (this.goldShopData) {
                     this.goldShopData.user.balanceGold = previousGoldBalance;
                 }
                 if (this.balanceText) {
-                    const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
+                    const gemBalance = gameState.getGem();
                     this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${gemBalance}`);
                 }
-                this.callbacks.refreshProfileUI();
                 this.showMessage('Purchase failed! Refunded.', '#F44336');
             }
         } catch (error) {
             // === ROLLBACK on network error ===
+            gameState.setGold(previousGoldBalance);
             if (this.goldShopData) {
                 this.goldShopData.user.balanceGold = previousGoldBalance;
             }
             if (this.balanceText) {
-                const gemBalance = this.gemShopData?.user.balanceGem ?? 0;
+                const gemBalance = gameState.getGem();
                 this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${gemBalance}`);
             }
-            this.callbacks.refreshProfileUI();
             this.showMessage('Network error! Refunded.', '#F44336');
         }
     }
@@ -519,16 +526,22 @@ export class ShopManager extends BaseManager {
     private async handleGemPurchase(item: GemShopItem): Promise<void> {
         console.log('Purchasing gem item:', item.key);
 
+        // Get global game state (single source of truth)
+        const gameState = useGameState(this.scene);
+
         // === OPTIMISTIC UPDATE ===
-        const previousGemBalance = this.gemShopData?.user.balanceGem ?? 0;
-        const previousGoldBalance = this.goldShopData?.user.balanceGold ?? 0;
+        const previousGemBalance = gameState.getGem();
+        const previousGoldBalance = gameState.getGold();
         const optimisticGemBalance = previousGemBalance - item.priceGem;
 
         // 1. Show success immediately
         this.showMessage(`Purchased ${item.name}!`, '#4CAF50');
         this.callbacks.playSuccessSound();
 
-        // 2. Update balance display immediately
+        // 2. Update GLOBAL STATE immediately (this will trigger UI refresh)
+        gameState.setGem(optimisticGemBalance);
+
+        // 3. Also update local shop data for consistency
         if (this.gemShopData) {
             this.gemShopData.user.balanceGem = optimisticGemBalance;
         }
@@ -536,15 +549,15 @@ export class ShopManager extends BaseManager {
             this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${optimisticGemBalance}`);
         }
 
-        // 3. Refresh profile UI immediately
-        this.callbacks.refreshProfileUI();
-
         // === BACKGROUND API CALL ===
         try {
             const result = await ShopService.purchaseGemItem(item.key, 1);
 
             if (result && result.success) {
-                // Update with actual balances from API
+                // Update GLOBAL STATE with actual balances from API
+                gameState.setCurrency(result.balanceGold, result.balanceGem);
+
+                // Also update local shop data
                 if (this.gemShopData) {
                     this.gemShopData.user.balanceGem = result.balanceGem;
                 }
@@ -559,24 +572,24 @@ export class ShopManager extends BaseManager {
                 this.fetchShopData(true);
             } else {
                 // === ROLLBACK on failure ===
+                gameState.setCurrency(previousGoldBalance, previousGemBalance);
                 if (this.gemShopData) {
                     this.gemShopData.user.balanceGem = previousGemBalance;
                 }
                 if (this.balanceText) {
                     this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${previousGemBalance}`);
                 }
-                this.callbacks.refreshProfileUI();
                 this.showMessage('Purchase failed! Refunded.', '#F44336');
             }
         } catch (error) {
             // === ROLLBACK on network error ===
+            gameState.setCurrency(previousGoldBalance, previousGemBalance);
             if (this.gemShopData) {
                 this.gemShopData.user.balanceGem = previousGemBalance;
             }
             if (this.balanceText) {
                 this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${previousGemBalance}`);
             }
-            this.callbacks.refreshProfileUI();
             this.showMessage('Network error! Refunded.', '#F44336');
         }
     }
@@ -600,7 +613,7 @@ export class ShopManager extends BaseManager {
         //         const goldBalance = this.goldShopData?.user.balanceGold ?? 0;
         //         this.balanceText.setText(`💰 ${goldBalance}    💎 ${result.balanceGem}`);
         //     }
-        //     this.callbacks.refreshProfileUI();
+        //     GameDataService.refreshAndUpdateUI();
         //     await this.fetchShopData();
         // }
     }

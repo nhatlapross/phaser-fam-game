@@ -1,12 +1,14 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
 import { ShopService } from '../ShopService';
+import { GameDataService } from '../GameDataService';
+import { useGameState } from '../hooks/useGameState';
 
 interface WellCallbacks {
     getWaterCount: () => number;
     addWater: (amount: number) => void;
-    updateToolbar: () => void;
     playSuccessSound: () => void;
+    // Note: UI refresh is now handled by GameDataService.refreshAndUpdateUI()
 }
 
 /**
@@ -21,6 +23,7 @@ export class WellManager extends BaseManager {
     private updateTimer?: Phaser.Time.TimerEvent;
     private nextClaimAt: Date | null = null;
     private isClaimingWater: boolean = false;
+    private hasFetchedStatus: boolean = false; // Track if we've fetched from API
 
     constructor(scene: Phaser.Scene, callbacks: WellCallbacks, tileSize: number) {
         super(scene);
@@ -138,25 +141,39 @@ export class WellManager extends BaseManager {
      * Fetch water status from API
      */
     private async fetchWaterStatus(): Promise<void> {
-        const status = await ShopService.getWaterStatus();
-        if (status) {
-            if (status.isReady) {
-                this.nextClaimAt = null; // Can claim now
-            } else if (status.nextClaimAt) {
-                this.nextClaimAt = new Date(status.nextClaimAt);
+        try {
+            const status = await ShopService.getWaterStatus();
+            if (status) {
+                if (status.isReady) {
+                    this.nextClaimAt = null; // Can claim now
+                } else if (status.nextClaimAt) {
+                    this.nextClaimAt = new Date(status.nextClaimAt);
+                }
             }
+            this.hasFetchedStatus = true; // Mark as fetched
+        } catch (error) {
+            console.error('Error fetching water status:', error);
+            this.hasFetchedStatus = true; // Still mark as fetched to avoid infinite loading
         }
+    }
+
+    /**
+     * Pre-fetch water status during game initialization
+     * Call this when wallet connects to have data ready when modal opens
+     */
+    public prefetchWaterStatus(): void {
+        this.fetchWaterStatus();
     }
 
     /**
      * Open the well modal
      */
-    public async open(): Promise<void> {
+    public open(): void {
         if (this.isOpen) return;
         this.isOpen = true;
 
-        // Fetch water status from API
-        await this.fetchWaterStatus();
+        // Show modal immediately with cached/default state
+        // API will update in background
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
@@ -215,6 +232,9 @@ export class WellManager extends BaseManager {
     }
 
     private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
+        // Use class-level flag to track if we've fetched from API
+        // This prevents showing "Claim" when we haven't fetched yet
+
         // Close button
         const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 30, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
         closeBtnBg.setDisplaySize(24, 24);
@@ -330,9 +350,29 @@ export class WellManager extends BaseManager {
         this.scene.cameras.main.ignore(claimBtnText);
         this.addElement(claimBtnText);
 
+        // Track previous countdown state to detect when it reaches 0
+        let wasWaiting = !this.canClaimWater();
+        let isRefreshing = false;
+
         // Update timer display and button state
         const updateTimerDisplay = () => {
+            // Guard: check if modal is still open and elements exist
+            if (!this.isOpen || !statusText.active || !timerText.active) {
+                return;
+            }
+
             const canClaim = this.canClaimWater();
+
+            // Detect countdown completion: was waiting, now can claim
+            if (wasWaiting && canClaim && !isRefreshing) {
+                isRefreshing = true;
+                // Countdown reached 0 - verify with API
+                this.fetchWaterStatus().then(() => {
+                    isRefreshing = false;
+                    updateTimerDisplay(); // Update UI with fresh data
+                });
+            }
+            wasWaiting = !canClaim;
 
             if (canClaim) {
                 statusText.setText('💧 Water Ready!');
@@ -365,6 +405,8 @@ export class WellManager extends BaseManager {
             }
         };
 
+        // Show cached state immediately - data is pre-fetched on game load
+        // Only refresh after user actions (claim water)
         updateTimerDisplay();
 
         // Update timer every second
@@ -416,14 +458,15 @@ export class WellManager extends BaseManager {
         if (this.isClaimingWater) return;
         this.isClaimingWater = true;
 
+        // Get global game state (single source of truth)
+        const gameState = useGameState(this.scene);
+
         // === OPTIMISTIC UPDATE: Update UI immediately ===
         const optimisticAmount = 1; // Default water amount
-        const previousWaterCount = this.callbacks.getWaterCount();
 
-        // 1. Show success immediately
-        this.callbacks.addWater(optimisticAmount);
+        // 1. Show success immediately - update GLOBAL STATE
+        gameState.addWater(optimisticAmount);
         this.callbacks.playSuccessSound();
-        this.callbacks.updateToolbar();
         this.showClaimReward(`+${optimisticAmount} Water!`);
 
         // 2. Update UI to recharging state
@@ -449,8 +492,7 @@ export class WellManager extends BaseManager {
                 // Adjust water if different from optimistic
                 if (actualAmount !== optimisticAmount) {
                     const diff = actualAmount - optimisticAmount;
-                    this.callbacks.addWater(diff);
-                    this.callbacks.updateToolbar();
+                    gameState.addWater(diff);
                 }
 
                 // Update with actual next claim time
@@ -459,8 +501,7 @@ export class WellManager extends BaseManager {
                 }
             } else {
                 // === ROLLBACK on failure ===
-                this.callbacks.addWater(-optimisticAmount); // Remove added water
-                this.callbacks.updateToolbar();
+                gameState.addWater(-optimisticAmount); // Remove added water
 
                 // Show error
                 const errorMsg = result?.message || 'Failed! Please try again';
@@ -484,8 +525,7 @@ export class WellManager extends BaseManager {
             }
         } catch (error) {
             // === ROLLBACK on network error ===
-            this.callbacks.addWater(-optimisticAmount);
-            this.callbacks.updateToolbar();
+            gameState.addWater(-optimisticAmount);
             this.showClaimReward('Network error! Try again');
 
             statusText.setText('💧 Water Ready!');

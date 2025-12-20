@@ -2,12 +2,12 @@ import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
 import { CheckinData, GAME_CONSTANTS } from '../types/GameTypes';
 import { StreakService, StreakStatusResponse, StreakHistoryResponse } from '../StreakService';
+import { GameDataService } from '../GameDataService';
+import { useGameState } from '../hooks/useGameState';
 
 interface CheckinCallbacks {
-    onRewardWater: () => void;
-    onRewardMushroomSeed: () => void;
-    updateToolbar: () => void;
     playSuccessSound: () => void;
+    // Note: Data refresh is now handled by GameDataService.refreshAndUpdateUI()
 }
 
 /**
@@ -381,7 +381,7 @@ export class CheckinManager extends BaseManager {
                 dayBox.on('pointerover', () => dayBox.setTint(0xffff88));
                 dayBox.on('pointerout', () => dayBox.clearTint());
                 dayBox.on('pointerdown', () => {
-                    this.performCheckin(streakDay, dayBox, quantityText, checkinData, index);
+                    this.performCheckin(streakDay, dayBox, quantityText, checkinData);
                 });
             }
         });
@@ -522,9 +522,15 @@ export class CheckinManager extends BaseManager {
                 const rewardParts: string[] = [];
                 if (successResult.rewards.gold > 0) {
                     rewardParts.push(`+${successResult.rewards.gold} Gold`);
+                    // Update GLOBAL STATE immediately (single source of truth)
+                    const gameState = useGameState(this.scene);
+                    gameState.addGold(successResult.rewards.gold);
                 }
                 if (successResult.rewards.ruby > 0) {
                     rewardParts.push(`+${successResult.rewards.ruby} Ruby`);
+                    // Update GLOBAL STATE for gems (ruby = gem)
+                    const gameState = useGameState(this.scene);
+                    gameState.addGem(successResult.rewards.ruby);
                 }
                 if (successResult.rewards.items && successResult.rewards.items.length > 0) {
                     rewardParts.push(...successResult.rewards.items.map(item => `+${item}`));
@@ -536,10 +542,10 @@ export class CheckinManager extends BaseManager {
                 btn.setTint(0x4ade80);
                 btnText.setText('✓ Done');
 
-                // Trigger callbacks
-                this.callbacks.updateToolbar();
+                // Also refresh data from API (runs in background, will sync with actual values)
+                GameDataService.refreshAndUpdateUI();
 
-                // Clear cache
+                // Clear local cache
                 this.cachedStreakStatus = null;
                 this.cachedStreakHistory = null;
             } else {
@@ -559,8 +565,7 @@ export class CheckinManager extends BaseManager {
         dayIndex: number,
         dayBox: Phaser.GameObjects.Sprite,
         quantityText: Phaser.GameObjects.Text,
-        checkinData: CheckinData,
-        rewardIndex: number
+        checkinData: CheckinData
     ): Promise<void> {
         // Disable button immediately to prevent double clicks
         dayBox.disableInteractive();
@@ -634,11 +639,16 @@ export class CheckinManager extends BaseManager {
 
                 // Show actual rewards (update the floating message)
                 const rewardParts: string[] = [];
+                const gameState = useGameState(this.scene);
                 if (successResult.rewards.gold > 0) {
                     rewardParts.push(`+${successResult.rewards.gold} Gold`);
+                    // Update GLOBAL STATE immediately
+                    gameState.addGold(successResult.rewards.gold);
                 }
                 if (successResult.rewards.ruby > 0) {
                     rewardParts.push(`+${successResult.rewards.ruby} Ruby`);
+                    // Update GLOBAL STATE for gems
+                    gameState.addGem(successResult.rewards.ruby);
                 }
                 if (successResult.rewards.items.length > 0) {
                     rewardParts.push(...successResult.rewards.items.map(item => `+${item}`));
@@ -648,14 +658,8 @@ export class CheckinManager extends BaseManager {
                     this.showCheckinReward(rewardParts.join(', ') + '!', 0x4ade80);
                 }
 
-                // Trigger callbacks for compatibility
-                this.callbacks.onRewardWater();
-                if (rewardIndex === 6) {
-                    this.callbacks.onRewardMushroomSeed();
-                }
-
-                // Update toolbar
-                this.callbacks.updateToolbar();
+                // Also refresh from API to sync with server (runs in background)
+                GameDataService.refreshAndUpdateUI();
             } else {
                 // === ROLLBACK on failure ===
                 const errorResult = result as { success: false; message: string };

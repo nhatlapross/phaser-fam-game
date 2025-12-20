@@ -3,13 +3,14 @@ import { BaseManager } from './BaseManager';
 import { PlantType, FertilizerType, GAME_CONSTANTS } from '../types/GameTypes';
 import { MissionService, Mission } from '../MissionService';
 import { RedeemService } from '../RedeemService';
+import { GameDataService } from '../GameDataService';
 
 interface MailboxCallbacks {
     getSeedCounts: () => Record<PlantType, number>;
     getFertilizerCounts: () => Record<FertilizerType, number>;
-    updateToolbar: () => void;
     showToastMessage: (text: string, color: number) => void;
     playSuccessSound: () => void;
+    // Note: UI refresh is now handled by GameDataService.refreshAndUpdateUI()
 }
 
 /**
@@ -313,7 +314,7 @@ export class MailboxManager extends BaseManager {
         let isDragging = false;
         let lastPointerY = 0;
 
-        const showMissionsContent = async () => {
+        const showMissionsContent = () => {
             contentElements.forEach(el => el.destroy());
             contentElements.length = 0;
             scrollOffset = 0;
@@ -321,35 +322,9 @@ export class MailboxManager extends BaseManager {
             missionsTabBg.setTexture('square-buttons', 6);
             redeemTabBg.setTexture('square-buttons', 7);
 
-            let missions: Mission[] | null = null;
-            const now = Date.now();
-
-            if (this.cachedMissions && (now - this.missionsCacheTime) < GAME_CONSTANTS.MISSIONS_CACHE_DURATION) {
-                missions = this.cachedMissions;
-            } else {
-                const loadingText = this.scene.add.text(modalX, contentY, 'Loading missions...', {
-                    fontSize: '10px',
-                    fontFamily: 'PixelFont',
-                    color: '#FFFFFF',
-                    resolution: 2
-                });
-                loadingText.setOrigin(0.5);
-                loadingText.setDepth(5302);
-                loadingText.setStroke('#5D4037', 2);
-                this.scene.cameras.main.ignore(loadingText);
-                this.addElement(loadingText);
-                contentElements.push(loadingText);
-
-                missions = await MissionService.getMissions();
-
-                if (missions) {
-                    this.cachedMissions = missions;
-                    this.missionsCacheTime = now;
-                }
-
-                loadingText.destroy();
-                contentElements.length = 0;
-            }
+            // Use cached data directly - no background refresh
+            // Cache is loaded on game start and updated only after user actions
+            const missions: Mission[] | null = this.cachedMissions;
 
             if (!missions || missions.length === 0) {
                 const noMissionsText = this.scene.add.text(modalX, contentY, 'No missions available', {
@@ -1048,7 +1023,8 @@ export class MailboxManager extends BaseManager {
                 this.callbacks.showToastMessage('Reward claimed!', 0x22c55e);
                 this.closeMissionDetails();
                 this.refreshCache();
-                this.callbacks.updateToolbar();
+                // Refresh all data and UI via GameDataService
+                GameDataService.refreshAndUpdateUI();
                 // Refresh missions list
                 this.close();
                 this.open();

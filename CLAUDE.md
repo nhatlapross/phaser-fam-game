@@ -19,6 +19,9 @@ src/game/
 │   ├── MapManager.ts           # Map generation and tiles
 │   ├── FarmingManager.ts       # Plant/water/harvest logic
 │   └── ControlsManager.ts      # Keyboard and mobile controls
+├── hooks/
+│   ├── index.ts                # Export all hooks
+│   └── useGameState.ts         # Global game state (phaser-hooks)
 ├── types/
 │   └── GameTypes.ts            # Shared types, interfaces, constants
 └── ui/                         # Reusable UI components (future)
@@ -167,6 +170,279 @@ import {
 6. Update index.ts exports
 7. Update FarmingGame.ts to use new manager
 
+## Global State Management (phaser-hooks)
+
+The game uses `phaser-hooks` library for centralized state management. The global state is the **SINGLE SOURCE OF TRUTH** for all game data.
+
+### Using Global Game State
+
+```typescript
+import { useGameState } from '../hooks/useGameState';
+
+// In any manager or scene:
+const gameState = useGameState(this.scene);
+
+// Read values
+const gold = gameState.getGold();
+const gems = gameState.getGem();
+const seeds = gameState.getSeeds();
+
+// Update values (triggers UI refresh automatically)
+gameState.setGold(100);
+gameState.addGold(50);
+gameState.spendGold(25); // Returns false if insufficient
+gameState.setCurrency(gold, gem); // Update both at once
+```
+
+### State Structure
+
+```typescript
+interface GameState {
+    currency: { gold: number; gem: number };
+    seeds: { algae: number; mushroom: number; tree: number };
+    fertilizers: { common: number; rare: number; epic: number; legendary: number };
+    fruits: FruitSlot[];
+    waterCount: number;
+    user: UserProfile | null;
+    isInitialized: boolean;
+    lastUpdated: number;
+}
+```
+
+### Key Principles
+
+1. **ALWAYS read from gameState** - Don't use local variables or UserService for gold/gems
+2. **Update gameState on actions** - When user buys, earns, or spends, update gameState immediately
+3. **UI auto-updates** - FarmingGame listens to state changes and refreshes UI automatically
+4. **Same key = same state** - Calling `useGameState(scene)` anywhere returns the same instance
+
+### Example: Shop Purchase with Global State
+
+```typescript
+private async handlePurchase(item: ShopItem): Promise<void> {
+    const gameState = useGameState(this.scene);
+    const previousGold = gameState.getGold();
+
+    // 1. Optimistic update - instant feedback
+    gameState.setGold(previousGold - item.price);
+    this.showToast('Purchased!');
+
+    // 2. Background API call
+    try {
+        const result = await ShopService.buy(item);
+        if (result.success) {
+            // Sync with actual server value
+            gameState.setGold(result.balanceGold);
+        } else {
+            // Rollback on failure
+            gameState.setGold(previousGold);
+            this.showToast('Failed!');
+        }
+    } catch {
+        // Rollback on error
+        gameState.setGold(previousGold);
+        this.showToast('Network error!');
+    }
+}
+```
+
+### State vs GameDataService
+
+- **useGameState** - In-memory state for instant UI updates (single source of truth)
+- **GameDataService** - API cache for data fetching and persistence
+
+After API refresh, sync the state:
+```typescript
+// In FarmingGame.refreshAllUI():
+const cachedData = GameDataService.getCachedData();
+if (cachedData) {
+    gameState.setCurrency(cachedData.currencies.gold, cachedData.currencies.gem);
+}
+```
+
+## API & Data Refresh Best Practices
+
+### GameDataService Pattern
+
+Use `GameDataService` for centralized data management:
+
+```typescript
+import { GameDataService } from '../GameDataService';
+
+// After any action that changes data (purchase, check-in, claim reward):
+GameDataService.refreshAndUpdateUI();  // Refresh data + auto update UI
+
+// For specific refresh needs:
+GameDataService.refreshProfileAndUpdateUI();   // Profile + currencies
+GameDataService.refreshInventoryAndUpdateUI(); // Seeds, fertilizers, fruits
+```
+
+### Optimistic UI Updates
+
+For responsive UX, update UI immediately before API call:
+
+```typescript
+// 1. Store previous values for rollback
+const previousValue = this.getValue();
+
+// 2. Update UI immediately (optimistic)
+this.setValue(newValue);
+this.playSound();
+this.showToast('Success!');
+
+// 3. Call API in background
+SomeService.doAction().then(result => {
+    if (!result.success) {
+        // 4. Rollback on failure
+        this.setValue(previousValue);
+        this.showToast('Failed!');
+    } else {
+        // 5. Sync with actual server data
+        GameDataService.refreshAndUpdateUI();
+    }
+}).catch(error => {
+    // Rollback on network error
+    this.setValue(previousValue);
+    this.showToast('Network error!');
+});
+```
+
+### Data Caching Strategy
+
+**Principle: Load once, update on action**
+
+1. **Pre-fetch ALL data during game loading** (via GameDataService.fetchAllGameData)
+2. **Modals use cached data directly** - no API calls when opening
+3. **Only refresh cache after user actions** (checkin, buy, claim, etc.)
+
+```typescript
+// ❌ DON'T: Fetch data when modal opens
+public open() {
+    await this.fetchData();  // Causes lag!
+    this.showModal();
+}
+
+// ✅ DO: Use pre-loaded cache
+public open() {
+    const data = this.cachedData;  // Instant!
+    this.showModal(data);
+}
+
+// ✅ DO: Refresh only after user action
+private async onPurchase() {
+    await ShopService.buy(item);
+    GameDataService.refreshAndUpdateUI();  // Update cache after action
+}
+```
+
+### Countdown Completion Handling
+
+When a countdown timer reaches 0, call API to verify and refresh:
+
+```typescript
+let wasWaiting = !this.canDoAction();
+let isRefreshing = false;
+
+const updateTimerDisplay = () => {
+    const canDoAction = this.canDoAction();
+
+    // Detect countdown completion: was waiting → now ready
+    if (wasWaiting && canDoAction && !isRefreshing) {
+        isRefreshing = true;
+        // Verify with API when countdown reaches 0
+        this.fetchStatus().then(() => {
+            isRefreshing = false;
+            updateTimerDisplay(); // Update UI with fresh data
+        });
+    }
+    wasWaiting = !canDoAction;
+
+    // ... rest of UI update
+};
+```
+
+Use this for:
+- Water well refill (every 4 hours)
+- Check-in daily reset
+- Any other timed actions
+
+### Smart Garden Refresh
+
+For plant growth timing, use smart refresh instead of fixed polling:
+
+```typescript
+// Instead of fixed 30-second polling:
+this.time.addEvent({
+    delay: 60000, // Check every 60 seconds
+    callback: () => this.smartGardenRefresh(),
+    loop: true
+});
+
+private smartGardenRefresh(): void {
+    let needsRefresh = false;
+
+    this.farmLandStates.forEach((state) => {
+        if (!state.planted || state.isDead) return;
+
+        // Check if growth timer has completed
+        if (state.growth?.hoursRemaining !== undefined) {
+            const hoursElapsed = (Date.now() - state.lastRefreshTime) / (1000 * 60 * 60);
+            const currentHoursRemaining = state.growth.hoursRemaining - hoursElapsed;
+            if (currentHoursRemaining <= 0) needsRefresh = true;
+        }
+
+        // Also refresh if plant health is critical
+        if (state.hydration?.hoursToDeath <= 1) needsRefresh = true;
+    });
+
+    if (needsRefresh) {
+        this.loadGardenData();
+    }
+}
+```
+
+Key points:
+- Store `lastRefreshTime` when data is loaded
+- Calculate elapsed time to determine if stage change expected
+- Only call API when actually needed
+
+### Guard Clauses for Async UI Updates
+
+Always check if UI elements still exist before updating:
+
+```typescript
+const updateDisplay = () => {
+    // Guard: check if modal is still open and elements exist
+    if (!this.isOpen || !textElement.active) {
+        return;
+    }
+    textElement.setText('Updated!');
+};
+```
+
+### Manager Callbacks - Simplified Pattern
+
+Keep callbacks minimal, use GameDataService for data refresh:
+
+```typescript
+interface XxxCallbacks {
+    playSuccessSound: () => void;
+    showToastMessage: (text: string, color: number) => void;
+    // Note: UI refresh is handled by GameDataService.refreshAndUpdateUI()
+}
+```
+
+### Common Refresh Patterns
+
+| Action | Refresh Method |
+|--------|----------------|
+| Check-in | `refreshAndUpdateUI()` |
+| Shop purchase | `refreshAndUpdateUI()` |
+| Factory exchange | `refreshAndUpdateUI()` |
+| Claim reward | `refreshAndUpdateUI()` |
+| Water plant | `refreshAfterGardenAction()` |
+| Harvest | `refreshAfterGardenAction()` |
+
 ## Testing Integration
 
 After creating/modifying a manager:
@@ -174,3 +450,5 @@ After creating/modifying a manager:
 2. Test the specific feature in browser
 3. Verify no console errors
 4. Check camera ignore is working (UI stays fixed)
+5. Test optimistic UI updates (network lag simulation)
+6. Verify rollback works on API failure

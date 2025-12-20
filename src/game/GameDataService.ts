@@ -333,4 +333,125 @@ export class GameDataService {
         }
         return shopData;
     }
+
+    static async refreshStreak(): Promise<StreakData> {
+        const [status, history] = await Promise.all([
+            StreakService.getStatus(),
+            StreakService.getHistory(7)
+        ]);
+        const streakData: StreakData = { status, history };
+        if (cachedGameData) {
+            cachedGameData.streak = streakData;
+        }
+        return streakData;
+    }
+
+    // ============================================
+    // Convenience methods for common refresh patterns
+    // ============================================
+
+    /**
+     * Refresh inventory data (seeds, fertilizers, fruits)
+     * Use after: planting, using fertilizer, harvesting
+     */
+    static async refreshInventory(): Promise<void> {
+        await Promise.all([
+            this.refreshSeeds(),
+            this.refreshFertilizers(),
+            this.refreshFruits()
+        ]);
+    }
+
+    /**
+     * Refresh profile and currencies
+     * Use after: check-in, shop purchase, rewards
+     */
+    static async refreshProfileAndCurrencies(): Promise<void> {
+        await Promise.all([
+            this.refreshUserProfile(),
+            this.refreshCurrencies()
+        ]);
+    }
+
+    /**
+     * Refresh all data commonly changed after an action
+     * Use after: check-in, shop purchase, factory exchange
+     */
+    static async refreshAfterAction(): Promise<void> {
+        await Promise.all([
+            this.refreshUserProfile(),
+            this.refreshCurrencies(),
+            this.refreshSeeds(),
+            this.refreshFertilizers(),
+            this.refreshFruits()
+        ]);
+    }
+
+    /**
+     * Refresh garden data
+     * Use after: planting, watering, harvesting, fertilizing
+     */
+    static async refreshAfterGardenAction(): Promise<void> {
+        await Promise.all([
+            this.refreshGarden(),
+            this.refreshSeeds(),
+            this.refreshFertilizers(),
+            this.refreshFruits()
+        ]);
+    }
+
+    // ============================================
+    // Event-based UI update system
+    // ============================================
+
+    private static uiUpdateCallback: (() => void) | null = null;
+
+    /**
+     * Register a callback to be called after any refresh
+     * FarmingGame should call this to auto-update UI
+     */
+    static setUIUpdateCallback(callback: () => void): void {
+        this.uiUpdateCallback = callback;
+    }
+
+    /**
+     * Clear the UI update callback
+     */
+    static clearUIUpdateCallback(): void {
+        this.uiUpdateCallback = null;
+    }
+
+    /**
+     * Trigger UI update callback if registered
+     */
+    private static triggerUIUpdate(): void {
+        if (this.uiUpdateCallback) {
+            this.uiUpdateCallback();
+        }
+    }
+
+    /**
+     * Refresh after action and trigger UI update
+     * This is the main method managers should call
+     */
+    static async refreshAndUpdateUI(): Promise<void> {
+        await this.refreshAfterAction();
+        this.triggerUIUpdate();
+    }
+
+    /**
+     * Refresh profile/currencies and trigger UI update
+     */
+    static async refreshProfileAndUpdateUI(): Promise<void> {
+        await this.refreshProfileAndCurrencies();
+        this.triggerUIUpdate();
+    }
+
+    /**
+     * Refresh inventory and trigger UI update
+     */
+    static async refreshInventoryAndUpdateUI(): Promise<void> {
+        await this.refreshInventory();
+        this.triggerUIUpdate();
+    }
 }

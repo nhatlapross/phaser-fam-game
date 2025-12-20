@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
 import { UserService } from '../UserService';
 import { EventBus } from '../EventBus';
+import { useGameState } from '../hooks/useGameState';
 
 interface ProfileCallbacks {
     onLogout: () => void;
@@ -128,11 +129,15 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(scoreText);
         this.profileElements.push(scoreText);
 
-        // Currency row
+        // Currency row - READ FROM GLOBAL GAME STATE (single source of truth)
         const currencyY = panelY + panelHeight / 2 - 22;
         const currencyStartX = panelX - panelWidth / 2 + 25;
 
-        const goldBalance = user.balanceGold ?? 0;
+        // Get currency from global game state instead of user object
+        const gameState = useGameState(this.scene);
+        const goldBalance = gameState.getGold();
+        const gemBalance = gameState.getGem();
+
         const goldText = this.scene.add.text(currencyStartX, currencyY, `💰 ${goldBalance}`, {
             fontSize: '9px',
             fontFamily: 'PixelFont',
@@ -144,7 +149,6 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(goldText);
         this.profileElements.push(goldText);
 
-        const gemBalance = user.balanceGem ?? 0;
         const gemText = this.scene.add.text(currencyStartX + 60, currencyY, `💎 ${gemBalance}`, {
             fontSize: '9px',
             fontFamily: 'PixelFont',

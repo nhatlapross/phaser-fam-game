@@ -9,6 +9,9 @@ import { FruitService } from '../FruitService';
 import { GameDataService } from '../GameDataService';
 import { ShopService } from '../ShopService';
 
+// Import game state hook
+import { useGameState, GameStateHook } from '../hooks/useGameState';
+
 // Import managers
 import {
     CheckinManager,
@@ -143,11 +146,30 @@ export class FarmingGame extends Scene {
     private wellManager!: WellManager;
     private plantDetailManager!: PlantDetailManager;
 
+    // Global game state (single source of truth)
+    private gameState!: GameStateHook;
+
     constructor() {
         super('FarmingGame');
     }
 
     create() {
+        // Initialize global game state FIRST (before anything else)
+        this.gameState = useGameState(this);
+
+        // IMPORTANT: Reset state to initial values to clear any stale data from registry
+        // This ensures fresh state on game start (phaser-hooks persists in Phaser registry)
+        this.gameState.set({
+            currency: { gold: 0, gem: 0 },
+            seeds: { algae: 0, mushroom: 0, tree: 0 },
+            fertilizers: { common: 0, rare: 0, epic: 0, legendary: 0 },
+            fruits: [],
+            waterCount: 0,
+            user: null,
+            isInitialized: false,
+            lastUpdated: Date.now(),
+        });
+
         // Create water animation first
         this.createWaterAnimation();
 
@@ -214,13 +236,12 @@ export class FarmingGame extends Scene {
             loop: true
         });
 
-        // Periodic garden data refresh from backend (every 30 seconds)
-        // This ensures plant stages and health are synced with the backend
+        // Smart garden refresh: check if any plant is about to change stage
+        // Refresh every 60 seconds, but also refresh immediately when a plant timer completes
         this.time.addEvent({
-            delay: 30000, // Refresh every 30 seconds
+            delay: 60000, // Check every 60 seconds
             callback: () => {
-                console.log('[Periodic Refresh] Syncing garden data from backend...');
-                this.loadGardenData();
+                this.smartGardenRefresh();
             },
             callbackScope: this,
             loop: true
@@ -233,6 +254,22 @@ export class FarmingGame extends Scene {
 
         // Load data from cache (pre-loaded by GameLoader) or fetch if not available
         this.loadGameDataFromCache();
+
+        // Register UI update callback with GameDataService
+        // This will be called automatically when any refresh method completes
+        GameDataService.setUIUpdateCallback(() => this.refreshAllUI());
+
+        // Listen for game state changes to auto-update UI
+        // Use a flag to prevent infinite loops when refreshAllUI syncs state
+        let isRefreshingUI = false;
+        this.gameState.on('change', () => {
+            if (isRefreshingUI) return; // Prevent recursive calls
+            isRefreshingUI = true;
+            // Only update UI displays, don't sync state again
+            this.createUserProfileUI();
+            this.updateToolbar();
+            isRefreshingUI = false;
+        });
 
         // Handle screen resize
         this.scale.on('resize', this.onResize, this);
@@ -258,19 +295,13 @@ export class FarmingGame extends Scene {
      */
     private initializeManagers(): void {
         // CheckinManager
+        // Data refresh is handled by GameDataService.refreshAndUpdateUI()
         this.checkinManager = new CheckinManager(this, {
-            onRewardWater: () => {
-                const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
-                if (wateringCan) wateringCan.count = (wateringCan.count || 0) + 1;
-            },
-            onRewardMushroomSeed: () => {
-                this.seedCounts.mushroom++;
-            },
-            updateToolbar: () => this.updateToolbar(),
             playSuccessSound: () => this.soundManager.playSuccessSound()
         });
 
         // ShopManager
+        // UI refresh is handled by GameDataService.refreshAndUpdateUI()
         this.shopManager = new ShopManager(this, {
             getPlayerGold: () => this.playerGold,
             setPlayerGold: (value) => { this.playerGold = value; },
@@ -280,16 +311,14 @@ export class FarmingGame extends Scene {
             getChestInventory: () => this.chestInventory,
             setChestInventory: (inv) => { this.chestInventory = inv; },
             getToolbarItems: () => this.toolbarItems,
-            updateToolbar: () => this.updateToolbar(),
-            refreshProfileUI: () => this.createUserProfileUI(),
             playSuccessSound: () => this.soundManager.playSuccessSound()
         });
 
         // FactoryManager (Phygital Exchange)
+        // UI refresh is handled by GameDataService.refreshAndUpdateUI()
         this.factoryManager = new FactoryManager(this, {
             getChestInventory: () => this.chestInventory,
             getPlayer: () => this.player,
-            updateToolbar: () => this.updateToolbar(),
             closeSeedSelector: () => this.closeSeedSelector(),
             closeChestPanel: () => this.closeChestPanel(),
             showToastMessage: (text, color) => this.showToastMessage(text, color),
@@ -297,10 +326,10 @@ export class FarmingGame extends Scene {
         }, this.TILE_SIZE);
 
         // MailboxManager
+        // UI refresh is handled by GameDataService.refreshAndUpdateUI()
         this.mailboxManager = new MailboxManager(this, {
             getSeedCounts: () => this.seedCounts,
             getFertilizerCounts: () => this.fertilizerCounts,
-            updateToolbar: () => this.updateToolbar(),
             showToastMessage: (text, color) => this.showToastMessage(text, color),
             playSuccessSound: () => this.soundManager.playSuccessSound()
         }, this.TILE_SIZE);
@@ -348,6 +377,7 @@ export class FarmingGame extends Scene {
         this.soundManager = new SoundManager(this);
 
         // WellManager
+        // UI refresh is handled by GameDataService.refreshAndUpdateUI()
         this.wellManager = new WellManager(this, {
             getWaterCount: () => {
                 const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
@@ -357,7 +387,6 @@ export class FarmingGame extends Scene {
                 const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
                 if (wateringCan) wateringCan.count = (wateringCan.count || 0) + amount;
             },
-            updateToolbar: () => this.updateToolbar(),
             playSuccessSound: () => this.soundManager.playSuccessSound()
         }, this.TILE_SIZE);
 
@@ -457,6 +486,30 @@ export class FarmingGame extends Scene {
             if (cachedData.streak) {
                 this.checkinManager.setStreakFromCache(cachedData.streak.status, cachedData.streak.history);
             }
+
+            // Initialize global game state with cached data (SINGLE SOURCE OF TRUTH)
+            // NOTE: Use user.balanceGold/Gem as primary source (more accurate than inventory API)
+            this.gameState.initialize({
+                currency: {
+                    gold: cachedData.user?.balanceGold ?? cachedData.currencies?.gold ?? 0,
+                    gem: cachedData.user?.balanceGem ?? cachedData.currencies?.gem ?? 0,
+                },
+                seeds: this.seedCounts,
+                fertilizers: this.fertilizerCounts,
+                fruits: cachedData.fruits || [],
+                waterCount: this.toolbarItems[1]?.count ?? 0,
+                user: cachedData.user ? {
+                    id: cachedData.user.id,
+                    address: cachedData.user.address,
+                    username: cachedData.user.username,
+                    avatar: cachedData.user.avatar,
+                    xp: cachedData.user.xp,
+                    reputationScore: cachedData.user.reputationScore,
+                    landsCount: cachedData.user.landsCount,
+                    plantsCount: cachedData.user.plantsCount,
+                } : null,
+            });
+            console.log('Global game state initialized:', this.gameState.get());
 
             // Update UI
             this.updateToolbar();
@@ -564,6 +617,9 @@ export class FarmingGame extends Scene {
                     progress: apiGrowth.progress,
                     totalHoursNeeded: apiGrowth.totalHoursNeeded
                 } : undefined;
+
+                // Store refresh timestamp for smart refresh calculation
+                state.lastRefreshTime = Date.now();
 
                 // Store soil quality data
                 const apiSoilQuality = (plot as any).soilQuality;
@@ -781,6 +837,46 @@ export class FarmingGame extends Scene {
     }
 
     /**
+     * Smart garden refresh - only refresh if plants need updating
+     * Checks if any plant's growth timer has completed (stage change expected)
+     */
+    private smartGardenRefresh(): void {
+        let needsRefresh = false;
+        const now = Date.now();
+
+        this.farmLandStates.forEach((state) => {
+            if (!state.planted || !state.cropType) return;
+            if (state.isDead) return;
+
+            // Check if plant growth timer has completed
+            if (state.growth && state.growth.hoursRemaining !== undefined) {
+                // Calculate when this plant's stage change was expected
+                // If hoursRemaining was stored with the last refresh time, check if it's now <= 0
+                const lastRefreshTime = state.lastRefreshTime || now;
+                const hoursElapsed = (now - lastRefreshTime) / (1000 * 60 * 60);
+                const currentHoursRemaining = state.growth.hoursRemaining - hoursElapsed;
+
+                if (currentHoursRemaining <= 0) {
+                    console.log('[Smart Refresh] Plant stage change expected, refreshing...');
+                    needsRefresh = true;
+                }
+            }
+
+            // Also refresh if plant is withering (health critical)
+            if (state.hydration && state.hydration.hoursToDeath <= 1) {
+                console.log('[Smart Refresh] Plant health critical, refreshing...');
+                needsRefresh = true;
+            }
+        });
+
+        if (needsRefresh) {
+            this.loadGardenData();
+        } else {
+            console.log('[Smart Refresh] No refresh needed, all plants up to date');
+        }
+    }
+
+    /**
      * Loads garden data from API and restores planted crops + unlocked plots
      */
     private async loadGardenData() {
@@ -892,6 +988,9 @@ export class FarmingGame extends Scene {
                         progress: apiGrowth.progress,
                         totalHoursNeeded: apiGrowth.totalHoursNeeded
                     } : undefined;
+
+                    // Store refresh timestamp for smart refresh calculation
+                    state.lastRefreshTime = Date.now();
 
                     // Store soil quality data
                     const apiSoilQuality = (plot as any).soilQuality;
@@ -1754,6 +1853,9 @@ export class FarmingGame extends Scene {
         this.fetchFruitInventory();
         this.fetchWaterInventory();
 
+        // Pre-fetch water well status so modal opens instantly
+        this.wellManager?.prefetchWaterStatus();
+
         // Load garden data (planted crops)
         this.loadGardenData();
 
@@ -1772,6 +1874,35 @@ export class FarmingGame extends Scene {
 
     private createUserProfileUI() {
         this.profileManager.createProfileUI();
+    }
+
+    /**
+     * Refresh all UI elements after data changes
+     * Called by GameDataService when data is refreshed
+     */
+    private refreshAllUI(): void {
+        // Sync global state with latest API data (if available)
+        const cachedData = GameDataService.getCachedData();
+        if (cachedData && this.gameState.isReady()) {
+            // Update currency from API cache - use user.balanceGold as primary source
+            const apiGold = cachedData.user?.balanceGold ?? cachedData.currencies?.gold ?? 0;
+            const apiGem = cachedData.user?.balanceGem ?? cachedData.currencies?.gem ?? 0;
+
+            // Only update if different to avoid triggering unnecessary state changes
+            const currentState = this.gameState.get();
+            if (currentState.currency.gold !== apiGold || currentState.currency.gem !== apiGem) {
+                this.gameState.setCurrency(apiGold, apiGem);
+                // Don't return early - still need to update UI
+            }
+        }
+
+        // Update profile display (gold, gems, etc.)
+        this.createUserProfileUI();
+
+        // Update toolbar (seeds, water, fertilizers, etc.)
+        this.updateToolbar();
+
+        console.log('UI refreshed');
     }
 
     // Delegate methods for other managers:
@@ -2142,40 +2273,56 @@ export class FarmingGame extends Scene {
                 return;
             }
 
-            // Call API first to check if watering is allowed
-            const result = await GardenService.waterPlant(state.plantId);
-            
-            if (!result.success) {
-                // Show error message to user
-                this.showToastMessage(result.message || 'Cannot water now', 0xef4444);
-                return;
-            }
+            // === OPTIMISTIC UI UPDATE ===
+            // Update UI immediately for responsive feel, then verify with API
 
-            // API succeeded - update local state
+            // Store previous values for potential rollback
+            const previousWaterCount = wateringCan.count;
+            const previousLastCareTime = state.lastCareTime;
+            const wasWilted = state.isWilted;
+
+            // Immediately update local state
             state.lastCareTime = Date.now();
             this.resetHealthBar(tileKey);
+            wateringCan.count--;
 
-            // Play water sound effect
-            this.soundManager.playWaterSound();
-
-            // Play water sound effect
-            this.soundManager.playWaterSound();
-
-            // If plant was wilted, restore it
+            // If plant was wilted, restore it optimistically
             if (state.isWilted) {
                 state.isWilted = false;
-                console.log('Plant at', tileKey, 'has been restored from wilted state!');
             }
 
-            // Don't change plant stage immediately - let the API refresh handle it
-            // The backend will update the stage when appropriate
-            wateringCan.count--;
+            // Play water sound effect immediately
+            this.soundManager.playWaterSound();
+
+            // Update toolbar immediately
             this.updateToolbar();
             console.log('Watered plant at', tileKey, '- Water left:', wateringCan.count);
             this.showToastMessage('Watered!', 0x4ade80);
-            
-            // Trigger a garden data refresh to get updated stage from backend
-            this.loadGardenData();
+
+            // Call API in background (don't await for initial feedback)
+            const plantId = state.plantId;
+            GardenService.waterPlant(plantId).then(result => {
+                if (!result.success) {
+                    // API failed - rollback optimistic update
+                    console.warn('Water API failed, rolling back:', result.message);
+                    wateringCan.count = previousWaterCount;
+                    state.lastCareTime = previousLastCareTime;
+                    state.isWilted = wasWilted;
+                    this.updateToolbar();
+                    this.showToastMessage(result.message || 'Water failed!', 0xef4444);
+                } else {
+                    // API succeeded - refresh garden data to get updated stage
+                    this.loadGardenData();
+                }
+            }).catch(error => {
+                // Network error - rollback
+                console.error('Water API error:', error);
+                wateringCan.count = previousWaterCount;
+                state.lastCareTime = previousLastCareTime;
+                state.isWilted = wasWilted;
+                this.updateToolbar();
+                this.showToastMessage('Network error!', 0xef4444);
+            });
         }
     }
 

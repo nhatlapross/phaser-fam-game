@@ -1,15 +1,16 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
 import { PlantType, ChestSlot, EXCHANGE_REWARDS, ExchangeReward, CROP_DEFINITIONS } from '../types/GameTypes';
+import { GameDataService } from '../GameDataService';
 
 interface FactoryCallbacks {
     getChestInventory: () => ChestSlot[];
     getPlayer: () => Phaser.Physics.Arcade.Sprite;
-    updateToolbar: () => void;
     closeSeedSelector: () => void;
     closeChestPanel: () => void;
     showToastMessage: (text: string, color: number) => void;
     playSuccessSound: () => void;
+    // Note: UI refresh is now handled by GameDataService.refreshAndUpdateUI()
 }
 
 /**
@@ -832,7 +833,8 @@ export class FactoryManager extends BaseManager {
         const algaeSuccess = removeFromChest('algae', reward.sporeCost);
 
         if (treeSuccess && mushroomSuccess && algaeSuccess) {
-            this.callbacks.updateToolbar();
+            // Refresh all data and UI via GameDataService
+            GameDataService.refreshAndUpdateUI();
             this.closeConfirmModal();
             this.close();
 

@@ -106,6 +106,7 @@ export interface TileState {
     soilQuality?: SoilQuality; // Soil quality info from API
     progress?: PlantProgress; // Progress info from API (legacy)
     config?: PlantConfig; // Config info from API
+    lastRefreshTime?: number; // Timestamp when this tile's data was last refreshed
 }
 
 // Crop definition for plant assets
