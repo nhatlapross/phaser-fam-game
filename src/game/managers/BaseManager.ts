@@ -21,6 +21,14 @@ export abstract class BaseManager {
     }
 
     /**
+     * Check if the scene is still active and has valid cameras
+     * Use this before creating UI elements in async callbacks
+     */
+    protected isSceneActive(): boolean {
+        return !!(this.scene && this.scene.cameras && this.scene.cameras.main);
+    }
+
+    /**
      * Destroy all UI elements managed by this manager
      */
     protected destroyElements(): void {

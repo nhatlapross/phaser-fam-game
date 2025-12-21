@@ -3,7 +3,7 @@ import { EventBus } from '../EventBus';
 import { UserService } from '../UserService'; // Import UserService
 
 export class Login extends Scene {
-    private titleText!: Phaser.GameObjects.Text;
+    private gameName!: Phaser.GameObjects.Image;
     private subtitleText!: Phaser.GameObjects.Text;
     private fromLogout: boolean = false;
     private ignoreWalletEvents: boolean = false;
@@ -21,32 +21,36 @@ export class Login extends Scene {
         const centerX = this.scale.width / 2;
         const centerY = this.scale.height / 2;
 
-        // Background gradient effect
-        this.cameras.main.setBackgroundColor('#1a1a2e');
+        // Beautiful farm background
+        const bg = this.add.image(centerX, centerY, 'start-background');
+        bg.setDisplaySize(this.scale.width, this.scale.height);
 
-        // Add decorative elements
-        this.createBackground();
+        // Game name logo
+        this.gameName = this.add.image(centerX, centerY - 70, 'game-name');
+        this.gameName.setScale(0.85);
 
-        // Title
-        this.titleText = this.add.text(centerX, centerY - 150, 'FARMING GAME', {
-            fontSize: '48px',
-            fontFamily: 'Arial Black',
-            color: '#4ade80',
-            stroke: '#166534',
-            strokeThickness: 6,
+        // Add floating animation to game name
+        this.tweens.add({
+            targets: this.gameName,
+            y: centerY - 80,
+            duration: 2000,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: -1
         });
-        this.titleText.setOrigin(0.5);
 
-        // Subtitle
-        this.subtitleText = this.add.text(centerX, centerY - 90, 'Grow, Harvest, Prosper', {
-            fontSize: '20px',
+        // Subtitle - positioned above where React button will appear
+        this.subtitleText = this.add.text(centerX, centerY + 20, 'Grow, Harvest, Prosper', {
+            fontSize: '12px',
             fontFamily: 'Arial',
-            color: '#86efac',
+            color: '#FFFFFF',
+            resolution: 2
         });
         this.subtitleText.setOrigin(0.5);
+        this.subtitleText.setStroke('#5D4037', 3);
 
-        // Connect Wallet Button
-        this.createConnectButton(centerX, centerY + 50);
+        // Connect Wallet Button is rendered by React (positioned at centerY + 100)
+        this.createConnectButton(centerX, centerY + 100);
 
         // Listen for wallet connection
         EventBus.on('wallet-connected', this.onWalletConnected, this);
@@ -77,26 +81,8 @@ export class Login extends Scene {
     }
 
     private createBackground() {
-        // Add some floating particles/decorations
-        for (let i = 0; i < 20; i++) {
-            const x = Phaser.Math.Between(50, this.scale.width - 50);
-            const y = Phaser.Math.Between(50, this.scale.height - 50);
-            const size = Phaser.Math.Between(2, 6);
-            const alpha = Phaser.Math.FloatBetween(0.1, 0.4);
-
-            const particle = this.add.circle(x, y, size, 0x4ade80, alpha);
-
-            // Animate particles
-            this.tweens.add({
-                targets: particle,
-                y: y - 20,
-                alpha: alpha * 0.5,
-                duration: Phaser.Math.Between(2000, 4000),
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut',
-            });
-        }
+        // Background is now handled by the start-background image in create()
+        // This method is kept for compatibility
     }
 
     private createConnectButton(_x: number, _y: number) {
@@ -137,7 +123,7 @@ export class Login extends Scene {
 
     private _showRegistrationForm(address: string) {
         // Hide Phaser UI elements that might conflict with the React form
-        this.titleText.setVisible(false);
+        this.gameName.setVisible(false);
         this.subtitleText.setVisible(false);
         // Emitting event for React to show registration form
         EventBus.emit('show-registration-form', address);
@@ -146,7 +132,7 @@ export class Login extends Scene {
     private onRegistrationComplete(data: { address: string, username: string }) {
         console.log('Login: Registration complete for:', data.username, data.address);
         // Show Phaser UI elements again
-        this.titleText.setVisible(true);
+        this.gameName.setVisible(true);
         this.subtitleText.setVisible(true);
         this.transitionToGame(data.address);
     }
@@ -157,11 +143,13 @@ export class Login extends Scene {
         const centerY = this.scale.height / 2;
 
         const connectedText = this.add.text(centerX, centerY + 130, `Connected: ${address.slice(0, 6)}...${address.slice(-4)}`, {
-            fontSize: '16px',
+            fontSize: '12px',
             fontFamily: 'Arial',
-            color: '#4ade80',
+            color: '#FFFFFF',
+            resolution: 2
         });
         connectedText.setOrigin(0.5);
+        connectedText.setStroke('#5D4037', 2);
 
         // Transition to GameLoader (which will load API data before entering FarmingGame)
         this.time.delayedCall(1000, () => {

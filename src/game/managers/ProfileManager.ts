@@ -33,6 +33,11 @@ export class ProfileManager extends BaseManager {
      * Create the profile UI in top-right corner
      */
     public createProfileUI(): void {
+        // Safety check - ensure scene is still active
+        if (!this.isSceneActive()) {
+            return;
+        }
+
         this.destroyProfileElements();
         this.avatarImage = null;
         this.loadedAvatarUrl = null;

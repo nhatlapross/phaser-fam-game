@@ -9,21 +9,53 @@ export class Preloader extends Scene
 
     init ()
     {
-        //  We loaded this image in our Boot Scene, so we can display it here
-        this.add.image(512, 384, 'background');
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
 
-        //  A simple progress bar. This is the outline of the bar.
-        this.add.rectangle(512, 384, 468, 32).setStrokeStyle(1, 0xffffff);
+        //  Beautiful background from Boot scene
+        const bg = this.add.image(centerX, centerY, 'start-background');
+        bg.setDisplaySize(this.cameras.main.width, this.cameras.main.height);
 
-        //  This is the progress bar itself. It will increase in size from the left based on the % of progress.
-        const bar = this.add.rectangle(512-230, 384, 4, 28, 0xffffff);
+        //  Game name logo at top
+        const gameName = this.add.image(centerX, centerY - 80, 'game-name');
+        gameName.setScale(0.8);
+
+        //  Loading text
+        const loadingText = this.add.text(centerX, centerY + 60, 'Loading...', {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            color: '#FFFFFF',
+            resolution: 2
+        }).setOrigin(0.5);
+        loadingText.setStroke('#5D4037', 3);
+
+        //  Progress bar background (wood style)
+        const barWidth = 200;
+        const barBg = this.add.rectangle(centerX, centerY + 90, barWidth, 16, 0x5D4037);
+        barBg.setStrokeStyle(2, 0x3E2723);
+
+        //  Progress bar fill - origin left center
+        const barFill = this.add.rectangle(centerX - barWidth / 2 + 3, centerY + 90, 4, 10, 0x8BC34A);
+        barFill.setOrigin(0, 0.5);
+
+        //  Progress percentage text
+        const percentText = this.add.text(centerX, centerY + 90, '0%', {
+            fontSize: '9px',
+            fontFamily: 'Arial',
+            color: '#FFFFFF',
+            resolution: 2
+        }).setOrigin(0.5);
+        percentText.setStroke('#3E2723', 2);
 
         //  Use the 'progress' event emitted by the LoaderPlugin to update the loading bar
         this.load.on('progress', (progress: number) => {
+            //  Update the progress bar (barWidth - 6 padding)
+            barFill.width = Math.max(4, (barWidth - 6) * progress);
+            percentText.setText(`${Math.floor(progress * 100)}%`);
+        });
 
-            //  Update the progress bar (our bar is 464px wide, so 100% = 464px)
-            bar.width = 4 + (460 * progress);
-
+        this.load.on('complete', () => {
+            loadingText.setText('Ready!');
         });
     }
 

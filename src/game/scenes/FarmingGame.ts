@@ -365,7 +365,8 @@ export class FarmingGame extends Scene {
         // ProfileManager
         this.profileManager = new ProfileManager(this, {
             onLogout: () => {
-                EventBus.emit('logout');
+                // Navigate back to Login screen with fromLogout flag
+                this.scene.start('Login', { fromLogout: true });
             },
             onWalletConnected: (_address) => {
                 // Wallet address handled by ProfileManager
@@ -1139,10 +1140,15 @@ export class FarmingGame extends Scene {
     private async fetchUserProfile() {
         try {
             const userData = await UserService.getUserProfile();
-            
+
+            // Safety check - ensure scene is still active after async call
+            if (!this.scene || !this.cameras || !this.cameras.main) {
+                return;
+            }
+
             if (userData) {
                 console.log('User profile updated:', userData);
-                
+
                 // Refresh UI to show updated balances
                 this.createUserProfileUI();
             } else {
@@ -1876,6 +1882,10 @@ export class FarmingGame extends Scene {
     }
 
     private updateToolbar() {
+        // Safety check - ensure scene is still active
+        if (!this.scene || !this.cameras || !this.cameras.main) {
+            return;
+        }
         this.toolbarManager.createToolbar();
     }
 

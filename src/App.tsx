@@ -112,7 +112,7 @@ const RegistrationForm = ({ address, onRegisterSuccess, onCancel }: { address: s
 
 function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
-    const [currentScene, setCurrentScene] = useState<string>('Login');
+    const [currentScene, setCurrentScene] = useState<string>('');
     const [showRegistrationForm, setShowRegistrationForm] = useState(false);
     const [registrationAddress, setRegistrationAddress] = useState('');
 
@@ -206,29 +206,40 @@ function App() {
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
                     zIndex: 9999,
-                    marginTop: '50px'
+                    marginTop: '100px'
                 }}>
                     <button
                         onClick={() => open()}
                         style={{
-                            padding: '16px 32px',
-                            borderRadius: '12px',
-                            border: 'none',
-                            backgroundColor: '#4ade80',
-                            color: '#1a1a2e',
-                            fontSize: '18px',
+                            padding: '12px 40px',
+                            borderRadius: '4px',
+                            border: '3px solid #3E2723',
+                            backgroundColor: '#6D4C41',
+                            color: '#FFFFFF',
+                            fontSize: '16px',
                             fontWeight: 'bold',
                             cursor: 'pointer',
-                            boxShadow: '0 4px 14px rgba(74, 222, 128, 0.4)',
-                            transition: 'all 0.2s ease-in-out'
+                            boxShadow: '0 4px 0 #3E2723, 0 6px 10px rgba(0,0,0,0.3)',
+                            transition: 'all 0.1s ease-in-out',
+                            textShadow: '1px 1px 2px #3E2723',
+                            fontFamily: 'Arial, sans-serif',
+                            letterSpacing: '1px'
                         }}
                         onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = '#22c55e';
+                            e.currentTarget.style.backgroundColor = '#8D6E63';
                             e.currentTarget.style.transform = 'scale(1.05)';
                         }}
                         onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = '#4ade80';
+                            e.currentTarget.style.backgroundColor = '#6D4C41';
                             e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                        onMouseDown={(e) => {
+                            e.currentTarget.style.boxShadow = '0 2px 0 #3E2723, 0 3px 5px rgba(0,0,0,0.3)';
+                            e.currentTarget.style.transform = 'translateY(2px)';
+                        }}
+                        onMouseUp={(e) => {
+                            e.currentTarget.style.boxShadow = '0 4px 0 #3E2723, 0 6px 10px rgba(0,0,0,0.3)';
+                            e.currentTarget.style.transform = 'scale(1.05)';
                         }}
                     >
                         Connect Wallet

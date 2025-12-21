@@ -18,32 +18,42 @@ export class GameLoader extends Scene {
         const centerX = this.scale.width / 2;
         const centerY = this.scale.height / 2;
 
-        // Background
-        this.cameras.main.setBackgroundColor('#1a1a2e');
+        // Beautiful farm background
+        const bg = this.add.image(centerX, centerY, 'start-background');
+        bg.setDisplaySize(this.scale.width, this.scale.height);
+
+        // Game name logo
+        const gameName = this.add.image(centerX, centerY - 80, 'game-name');
+        gameName.setScale(0.8);
 
         // Loading title
-        this.loadingText = this.add.text(centerX, centerY - 80, 'Loading Game Data...', {
-            fontSize: '28px',
+        this.loadingText = this.add.text(centerX, centerY + 40, 'Loading Game Data...', {
+            fontSize: '14px',
             fontFamily: 'Arial',
-            color: '#4ade80',
+            color: '#FFFFFF',
+            resolution: 2
         });
         this.loadingText.setOrigin(0.5);
+        this.loadingText.setStroke('#5D4037', 3);
 
-        // Progress bar background
-        this.progressBarBg = this.add.rectangle(centerX, centerY, 400, 24, 0x333333);
-        this.progressBarBg.setStrokeStyle(2, 0x4ade80);
+        // Progress bar background (wood style)
+        const barWidth = 200;
+        this.progressBarBg = this.add.rectangle(centerX, centerY + 70, barWidth, 16, 0x5D4037);
+        this.progressBarBg.setStrokeStyle(2, 0x3E2723);
 
         // Progress bar fill
-        this.progressBar = this.add.rectangle(centerX - 196, centerY, 4, 18, 0x4ade80);
+        this.progressBar = this.add.rectangle(centerX - barWidth / 2 + 3, centerY + 70, 4, 10, 0x8BC34A);
         this.progressBar.setOrigin(0, 0.5);
 
         // Status text
-        this.statusText = this.add.text(centerX, centerY + 50, 'Connecting to server...', {
-            fontSize: '14px',
+        this.statusText = this.add.text(centerX, centerY + 100, 'Connecting to server...', {
+            fontSize: '10px',
             fontFamily: 'Arial',
-            color: '#86efac',
+            color: '#FFFFFF',
+            resolution: 2
         });
         this.statusText.setOrigin(0.5);
+        this.statusText.setStroke('#5D4037', 2);
 
         // Start loading data
         this.loadGameData();
@@ -87,8 +97,8 @@ export class GameLoader extends Scene {
     }
 
     private updateProgress(progress: number) {
-        // Update progress bar width (max 392px for full width)
-        const width = Math.max(4, (392 * progress) / 100);
+        // Update progress bar width (barWidth 200 - 6 padding = 194 max)
+        const width = Math.max(4, (194 * progress) / 100);
         this.progressBar.width = width;
 
         // Update status text based on progress

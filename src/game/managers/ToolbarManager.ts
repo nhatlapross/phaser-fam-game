@@ -64,6 +64,11 @@ export class ToolbarManager extends BaseManager {
     // ========== Public Methods ==========
 
     public createToolbar(): void {
+        // Safety check - ensure scene is still active
+        if (!this.isSceneActive()) {
+            return;
+        }
+
         const { SLOT_SIZE, SLOT_SPACING } = this;
         const toolbarItems = this.callbacks.getToolbarItems();
         const numSlots = toolbarItems.length;
