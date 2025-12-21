@@ -140,8 +140,9 @@ export class MailboxManager extends BaseManager {
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
-        const modalWidth = 300;
-        const modalHeight = 280;
+        // Responsive modal size - max 300px or 90% of screen width
+        const modalWidth = Math.min(300, screenWidth * 0.9);
+        const modalHeight = Math.min(280, screenHeight * 0.8);
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
 
@@ -213,13 +214,14 @@ export class MailboxManager extends BaseManager {
         this.addElement(title);
         this.scene.tweens.add({ targets: title, alpha: 1, duration: 150 });
 
-        // Tab buttons
+        // Tab buttons - responsive sizing
         const tabY = modalY - modalHeight / 2 + 65;
-        const tabWidth = 90;
-        const tabHeight = 26;
+        const tabWidth = Math.min(90, modalWidth * 0.32);
+        const tabHeight = 24;
+        const tabSpacing = Math.min(55, modalWidth * 0.2);
 
         // Missions tab
-        const missionsTabBg = this.scene.add.sprite(modalX - 55, tabY, 'square-buttons', 6);
+        const missionsTabBg = this.scene.add.sprite(modalX - tabSpacing, tabY, 'square-buttons', 6);
         missionsTabBg.setDisplaySize(tabWidth, tabHeight);
         missionsTabBg.setDepth(5302);
         missionsTabBg.setAlpha(0);
@@ -227,8 +229,8 @@ export class MailboxManager extends BaseManager {
         this.scene.cameras.main.ignore(missionsTabBg);
         this.addElement(missionsTabBg);
 
-        const missionsTabText = this.scene.add.text(modalX - 55, tabY, 'Missions', {
-            fontSize: '10px',
+        const missionsTabText = this.scene.add.text(modalX - tabSpacing, tabY, 'Missions', {
+            fontSize: '9px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2
@@ -241,7 +243,7 @@ export class MailboxManager extends BaseManager {
         this.addElement(missionsTabText);
 
         // Redeem tab
-        const redeemTabBg = this.scene.add.sprite(modalX + 55, tabY, 'square-buttons', 7);
+        const redeemTabBg = this.scene.add.sprite(modalX + tabSpacing, tabY, 'square-buttons', 7);
         redeemTabBg.setDisplaySize(tabWidth, tabHeight);
         redeemTabBg.setDepth(5302);
         redeemTabBg.setAlpha(0);
@@ -249,8 +251,8 @@ export class MailboxManager extends BaseManager {
         this.scene.cameras.main.ignore(redeemTabBg);
         this.addElement(redeemTabBg);
 
-        const redeemTabText = this.scene.add.text(modalX + 55, tabY, 'Redeem', {
-            fontSize: '10px',
+        const redeemTabText = this.scene.add.text(modalX + tabSpacing, tabY, 'Redeem', {
+            fontSize: '9px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2
@@ -543,42 +545,60 @@ export class MailboxManager extends BaseManager {
             this.addElement(codeLabel);
             contentElements.push(codeLabel);
 
-            // HTML input
+            // HTML input - positioned relative to game canvas and modal
             this.redeemInput = document.createElement('input');
             this.redeemInput.type = 'text';
             this.redeemInput.placeholder = 'Enter code here...';
-            this.redeemInput.maxLength = 100;
+            this.redeemInput.maxLength = 150;
+
+            // Get game canvas position for accurate placement
+            const canvas = this.scene.game.canvas;
+            const canvasRect = canvas.getBoundingClientRect();
+            const scaleX = canvasRect.width / this.scene.scale.width;
+            const scaleY = canvasRect.height / this.scene.scale.height;
+
+            // Calculate input size based on modal width (not canvas)
+            const scaledModalWidth = modalWidth * scaleX;
+            const inputWidth = Math.min(180, scaledModalWidth * 2);
+
+            // Position at modal center
+            const inputLeft = canvasRect.left + (modalX * scaleX);
+            const inputTop = canvasRect.top + ((contentY - 20) * scaleY);
+
             this.redeemInput.style.cssText = `
                 position: fixed;
-                left: 50%;
-                top: 50%;
-                transform: translate(-70%, -10px);
-                width: 160px;
-                padding: 8px 12px;
-                font-size: 12px;
+                left: ${inputLeft}px;
+                top: ${inputTop}px;
+                transform: translateX(-55%);
+                width: ${inputWidth}px;
+                padding: 5px 8px;
+                font-size: 10px;
                 font-family: 'PixelFont', monospace;
-                border: 3px solid #5D4037;
-                border-radius: 8px;
+                border: 2px solid #5D4037;
+                border-radius: 5px;
                 background-color: #FFF8E1;
                 color: #5D4037;
                 outline: none;
                 text-align: center;
                 z-index: 10001;
+                box-sizing: border-box;
             `;
             document.body.appendChild(this.redeemInput);
             this.redeemInput.focus();
 
-            // QR button
-            const qrBtnBg = this.scene.add.sprite(modalX + 95, contentY - 20, 'square-buttons', 6);
-            qrBtnBg.setDisplaySize(40, 32);
+            // QR button - responsive positioning
+            const qrBtnX = modalX + modalWidth / 2 - 60; // Position near right edge of modal
+            const qrBtnY = contentY - 15;
+            const qrBtnBg = this.scene.add.sprite(qrBtnX, qrBtnY, 'square-buttons', 6);
+            qrBtnBg.setDisplaySize(36, 28);
             qrBtnBg.setDepth(5302);
             qrBtnBg.setInteractive({ useHandCursor: true });
             this.scene.cameras.main.ignore(qrBtnBg);
             this.addElement(qrBtnBg);
             contentElements.push(qrBtnBg);
 
-            const qrText = this.scene.add.text(modalX + 95, contentY - 20, 'QR', {
-                fontSize: '10px',
+            const qrText = this.scene.add.text(qrBtnX, qrBtnY, 'QR', {
+                fontSize: '9px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
                 resolution: 2
@@ -594,17 +614,18 @@ export class MailboxManager extends BaseManager {
             qrBtnBg.on('pointerover', () => qrBtnBg.setTint(0xcccccc));
             qrBtnBg.on('pointerout', () => qrBtnBg.clearTint());
 
-            // Redeem button (extended width to near QR button)
-            const redeemBtnBg = this.scene.add.sprite(modalX + 10, contentY + 40, 'square-buttons', 6);
-            redeemBtnBg.setDisplaySize(145, 32);
+            // Redeem button - responsive width based on modal
+            const redeemBtnWidth = Math.min(145, modalWidth * 0.5);
+            const redeemBtnBg = this.scene.add.sprite(modalX, contentY + 40, 'square-buttons', 6);
+            redeemBtnBg.setDisplaySize(redeemBtnWidth, 30);
             redeemBtnBg.setDepth(5302);
             redeemBtnBg.setInteractive({ useHandCursor: true });
             this.scene.cameras.main.ignore(redeemBtnBg);
             this.addElement(redeemBtnBg);
             contentElements.push(redeemBtnBg);
 
-            const redeemBtnText = this.scene.add.text(modalX + 10, contentY + 40, 'Redeem', {
-                fontSize: '11px',
+            const redeemBtnText = this.scene.add.text(modalX, contentY + 40, 'Redeem', {
+                fontSize: '10px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
                 resolution: 2
@@ -878,26 +899,36 @@ export class MailboxManager extends BaseManager {
                 this.scene.cameras.main.ignore(inputLabel);
                 this.missionDetailElements.push(inputLabel);
 
-                // Create HTML input for social link
+                // Create HTML input for social link - responsive positioning
                 this.socialLinkInput = document.createElement('input');
                 this.socialLinkInput.type = 'text';
                 this.socialLinkInput.placeholder = 'Paste your link here...';
+
+                // Get game canvas position for accurate placement
+                const socialCanvas = this.scene.game.canvas;
+                const socialCanvasRect = socialCanvas.getBoundingClientRect();
+                const socialInputWidth = Math.min(200, socialCanvasRect.width * 0.55); // Max 200px or 55% of canvas
+                const socialInputLeft = socialCanvasRect.left + socialCanvasRect.width / 2;
+                const socialInputTop = socialCanvasRect.top + socialCanvasRect.height / 2 + 35;
+
                 this.socialLinkInput.style.cssText = `
                     position: fixed;
-                    left: 50%;
-                    top: 50%;
-                    transform: translate(-50%, 35px);
-                    width: 200px;
-                    padding: 8px 12px;
-                    font-size: 11px;
+                    left: ${socialInputLeft}px;
+                    top: ${socialInputTop}px;
+                    transform: translateX(-50%);
+                    width: ${socialInputWidth}px;
+                    max-width: calc(100vw - 80px);
+                    padding: 6px 10px;
+                    font-size: 10px;
                     font-family: 'PixelFont', monospace;
-                    border: 3px solid #5D4037;
-                    border-radius: 8px;
+                    border: 2px solid #5D4037;
+                    border-radius: 6px;
                     background-color: #FFF8E1;
                     color: #5D4037;
                     outline: none;
                     text-align: center;
                     z-index: 10001;
+                    box-sizing: border-box;
                 `;
                 document.body.appendChild(this.socialLinkInput);
                 this.socialLinkInput.focus();

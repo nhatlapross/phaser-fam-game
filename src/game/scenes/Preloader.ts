@@ -91,6 +91,7 @@ export class Preloader extends Scene
         this.load.image('icon-watercan', 'icons/waterCan.png');
         this.load.image('icon-fertilizer', 'icons/ShitPlan.png');
         this.load.image('icon-digest', 'icons/digest.png');
+        this.load.image('icon-bug-glove', 'icons/bug-glove.png');
 
         // UI Big Play Button (2 cols x 2 rows = 4 frames, 96x32 each)
         this.load.spritesheet('ui-big-play-button', 'ui/UI Big Play Button.png', {
@@ -157,6 +158,12 @@ export class Preloader extends Scene
         this.load.image('factory-2', 'objects/factory/factory_2.png');
         this.load.image('factory-3', 'objects/factory/factory_3.png');
         this.load.image('factory-4', 'objects/factory/factory_4.png');
+
+        // Warehouse spritesheet (2 frames: 0=closed, 1=open)
+        this.load.spritesheet('warehouse', 'objects/ware-house/ware-house.png', {
+            frameWidth: 120,
+            frameHeight: 135
+        });
 
         // Default avatar for user profile
         this.load.image('default-avatar', 'characters/avatar.png');

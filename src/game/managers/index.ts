@@ -3,6 +3,7 @@ export { BaseManager } from './BaseManager';
 export { CheckinManager } from './CheckinManager';
 export { ShopManager } from './ShopManager';
 export { FactoryManager } from './FactoryManager';
+export { WarehouseManager } from './WarehouseManager';
 export { MailboxManager } from './MailboxManager';
 export { ProfileManager } from './ProfileManager';
 export { ToolbarManager } from './ToolbarManager';

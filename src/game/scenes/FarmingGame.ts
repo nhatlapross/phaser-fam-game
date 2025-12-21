@@ -17,6 +17,7 @@ import {
     CheckinManager,
     ShopManager,
     FactoryManager,
+    WarehouseManager,
     MailboxManager,
     ProfileManager,
     ToolbarManager,
@@ -33,6 +34,7 @@ import {
     CROP_DEFINITIONS,
     DEATH_TIMER_MS
 } from '../managers';
+import { InventoryService, InventoryItem } from '../InventoryService';
 
 export class FarmingGame extends Scene {
     private player!: Phaser.Physics.Arcade.Sprite;
@@ -82,14 +84,23 @@ export class FarmingGame extends Scene {
         { type: 'tool', name: 'chest' },
     ];
 
-    // Chest inventory system
-    private readonly CHEST_SLOTS = 12; // 3 columns x 4 rows
+    // Chest inventory system (Backpack - items carried)
+    private readonly CHEST_SLOTS = 6; // 2 columns x 3 rows (reduced from 12)
     private readonly MAX_PER_SLOT = 50; // Max 50 fruits per slot
     private chestInventory: { type: PlantType; count: number }[] = []; // Each slot: {type, count}
     private chestOpen: boolean = false;
 
-    // Factory system (managed by FactoryManager)
+    // Backpack items from API (used by warehouse)
+    private backpackItems: InventoryItem[] = [];
+
+    // Selected item for transfer between chest and warehouse
+    private selectedItem: { itemType: string; amount: number; source: 'backpack' | 'storage' } | null = null;
+
+    // Factory system (managed by FactoryManager) - temporarily disabled
     private factoryModalOpen: boolean = false;
+
+    // Warehouse system (managed by WarehouseManager)
+    private warehouseModalOpen: boolean = false;
 
     // UI
     private uiCamera!: Phaser.Cameras.Scene2D.Camera;
@@ -138,6 +149,7 @@ export class FarmingGame extends Scene {
     private checkinManager!: CheckinManager;
     private shopManager!: ShopManager;
     private factoryManager!: FactoryManager;
+    private warehouseManager!: WarehouseManager;
     private mailboxManager!: MailboxManager;
     private profileManager!: ProfileManager;
     private toolbarManager!: ToolbarManager;
@@ -179,8 +191,10 @@ export class FarmingGame extends Scene {
         // Initialize all managers
         this.initializeManagers();
 
-        // Create factory using manager
-        this.factoryManager.createFactory();
+        // Create warehouse using manager (replaces factory temporarily)
+        this.warehouseManager.createWarehouse();
+        // Factory temporarily disabled - uncomment to re-enable
+        // this.factoryManager.createFactory();
 
         // Create check-in sign using manager
         this.checkinManager.createCheckinSign(this.TILE_SIZE);
@@ -314,7 +328,7 @@ export class FarmingGame extends Scene {
             playSuccessSound: () => this.soundManager.playSuccessSound()
         });
 
-        // FactoryManager (Phygital Exchange)
+        // FactoryManager (Phygital Exchange) - temporarily disabled
         // UI refresh is handled by GameDataService.refreshAndUpdateUI()
         this.factoryManager = new FactoryManager(this, {
             getChestInventory: () => this.chestInventory,
@@ -323,6 +337,20 @@ export class FarmingGame extends Scene {
             closeChestPanel: () => this.closeChestPanel(),
             showToastMessage: (text, color) => this.showToastMessage(text, color),
             playSuccessSound: () => this.soundManager.playSuccessSound()
+        }, this.TILE_SIZE);
+
+        // WarehouseManager (Storage system - replaces factory temporarily)
+        this.warehouseManager = new WarehouseManager(this, {
+            getBackpackItems: () => this.backpackItems,
+            showToastMessage: (text, color) => this.showToastMessage(text, color),
+            playSuccessSound: () => this.soundManager.playSuccessSound(),
+            refreshInventory: async () => {
+                await this.loadBackpackData();
+                this.toolbarManager.updateToolbar();
+            },
+            updateToolbar: () => this.toolbarManager.updateToolbar(),
+            getSelectedItem: () => this.selectedItem,
+            setSelectedItem: (item) => { this.selectedItem = item; }
         }, this.TILE_SIZE);
 
         // MailboxManager
@@ -358,7 +386,9 @@ export class FarmingGame extends Scene {
             setSelectedSeedIndex: (index) => { this.selectedSeedIndex = index; },
             setSelectedFertilizerIndex: (index) => { this.selectedFertilizerIndex = index; },
             setChestOpen: (open) => { this.chestOpen = open; },
-            onSeedOptionClicked: () => { this.seedOptionJustClicked = true; }
+            onSeedOptionClicked: () => { this.seedOptionJustClicked = true; },
+            showToastMessage: (text, color) => this.showToastMessage(text, color),
+            playSuccessSound: () => this.soundManager.playSuccessSound()
         });
 
         // PlotManager
@@ -516,6 +546,8 @@ export class FarmingGame extends Scene {
             this.createUserProfileUI();
 
             console.log('All game data loaded from cache');
+            // Also load backpack data for warehouse
+            this.loadBackpackData();
         } else {
             console.log('Cache not available, fetching from API...');
             // Fallback to fetching from API
@@ -525,6 +557,7 @@ export class FarmingGame extends Scene {
             this.fetchWaterInventory();
             this.loadGardenData();
             this.fetchUserProfile();
+            this.loadBackpackData();
             // Preload missions (will be cached by MailboxManager)
             this.mailboxManager.preloadMissions();
         }
@@ -1082,6 +1115,21 @@ export class FarmingGame extends Scene {
             overlay.destroy();
             this.lockedPlotOverlays.delete(tileKey);
             console.log(`Unlocked plot at ${tileKey}`);
+        }
+    }
+
+    /**
+     * Load backpack items from API for warehouse system
+     */
+    private async loadBackpackData(): Promise<void> {
+        try {
+            const backpackResponse = await InventoryService.getBackpack();
+            if (backpackResponse) {
+                this.backpackItems = backpackResponse.backpack;
+                console.log('Backpack data loaded:', this.backpackItems);
+            }
+        } catch (error) {
+            console.error('Error loading backpack data:', error);
         }
     }
 

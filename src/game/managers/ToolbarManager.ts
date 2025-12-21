@@ -7,9 +7,10 @@ import {
     ChestSlot,
     PLANT_TYPES,
     FERTILIZER_TYPES,
-    CROP_DEFINITIONS,
-    GAME_CONSTANTS
+    CROP_DEFINITIONS
 } from '../types/GameTypes';
+import { GameDataService } from '../GameDataService';
+import { InventoryService, InventoryItem } from '../InventoryService';
 
 // Toolbar Manager Callbacks
 export interface ToolbarManagerCallbacks {
@@ -31,6 +32,8 @@ export interface ToolbarManagerCallbacks {
 
     // Actions
     onSeedOptionClicked: () => void;
+    showToastMessage: (text: string, color: number) => void;
+    playSuccessSound: () => void;
 }
 
 export class ToolbarManager extends BaseManager {
@@ -46,6 +49,8 @@ export class ToolbarManager extends BaseManager {
     // State
     private seedSelectorOpen: boolean = false;
     private fertilizerSelectorOpen: boolean = false;
+    private selectedChestItemIndex: number = -1;
+    private chestSlotBgs: Phaser.GameObjects.Rectangle[] = [];
 
     // Constants
     private readonly SLOT_SIZE = 48;
@@ -206,8 +211,6 @@ export class ToolbarManager extends BaseManager {
     // ========== Private Methods ==========
 
     private renderSlotContent(item: ToolbarItem, slotX: number, slotY: number, _index: number): void {
-        const { SLOT_SIZE } = this;
-
         if (item.type === 'seed') {
             this.renderSeedSlot(slotX, slotY);
         } else if (item.name === 'chest') {
@@ -581,116 +584,111 @@ export class ToolbarManager extends BaseManager {
         this.closeChestPanel();
         this.callbacks.setChestOpen(true);
         this.updateToolbar();
+        this.selectedChestItemIndex = -1;
+        this.chestSlotBgs = [];
 
-        const { SLOT_SIZE, SLOT_SPACING } = this;
         const screenWidth = this.scene.scale.width;
-        const screenHeight = this.scene.scale.height;
 
-        // Get chest slot position for animation origin
-        const toolbarItems = this.callbacks.getToolbarItems();
-        const numSlots = toolbarItems.length;
-        const totalToolbarWidth = (SLOT_SIZE + SLOT_SPACING) * numSlots - SLOT_SPACING;
-        const toolbarStartX = (screenWidth - totalToolbarWidth) / 2;
-        const chestSlotIndex = toolbarItems.findIndex(item => item.name === 'chest');
-        const chestSlotX = toolbarStartX + chestSlotIndex * (SLOT_SIZE + SLOT_SPACING) + SLOT_SIZE / 2;
-        const chestSlotY = screenHeight - SLOT_SIZE - 20 + SLOT_SIZE / 2;
+        // Panel positioned on right side, below profile card area
+        // 2x3 grid = 6 slots
+        const gridSlotSize = 40;
+        const gridSlotSpacing = 5;
+        const gridCols = 2;
+        const gridRows = 3;
+        const panelPadding = 8;
 
-        // Panel dimensions
-        const panelWidth = 190;
-        const panelHeight = 250;
-        const panelX = screenWidth / 2;
-        const panelY = screenHeight / 2 - 30;
+        const gridWidth = gridCols * gridSlotSize + (gridCols - 1) * gridSlotSpacing;
+        const gridHeight = gridRows * gridSlotSize + (gridRows - 1) * gridSlotSpacing;
+        const panelWidth = gridWidth + panelPadding * 2;
+        const panelHeight = gridHeight + panelPadding * 2 + 60; // Extra space for capacity + button
+
+        // Position on right side, below profile card
+        const panelX = screenWidth - panelWidth / 2 - 10;
+        const panelY = 218; // Moved down to not cover profile card
 
         // Background panel
-        const panelBg = this.scene.add.sprite(panelX, panelY, 'settings-panel', 1);
-        panelBg.setDisplaySize(panelWidth, panelHeight);
+        const panelBg = this.scene.add.rectangle(panelX, panelY, panelWidth, panelHeight, 0x5D4037);
+        panelBg.setStrokeStyle(2, 0x3E2723);
         panelBg.setDepth(5200);
-        panelBg.setInteractive();
-        panelBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
-            event.stopPropagation();
-        });
+        panelBg.setAlpha(0);
         this.scene.cameras.main.ignore(panelBg);
         this.chestPanelElements.push(panelBg);
 
-        // Animation: scale from chest position
-        panelBg.setScale(0);
-        panelBg.setPosition(chestSlotX, chestSlotY);
+        // Fade in animation
         this.scene.tweens.add({
             targets: panelBg,
-            x: panelX,
-            y: panelY,
-            scaleX: panelWidth / 125,
-            scaleY: panelHeight / 140,
-            duration: 200,
-            ease: 'Back.easeOut'
+            alpha: 0.95,
+            duration: 150,
+            ease: 'Quad.easeOut'
         });
 
-        // Grid layout: 3 columns x 4 rows = 12 slots
-        const gridSlotSize = 44;
-        const gridSlotSpacing = 6;
-        const gridWidth = 3 * gridSlotSize + 2 * gridSlotSpacing;
-        const gridHeight = 4 * gridSlotSize + 3 * gridSlotSpacing;
+        // Grid starting position
         const gridStartX = panelX - gridWidth / 2 + gridSlotSize / 2;
-        const gridStartY = panelY - gridHeight / 2 + gridSlotSize / 2;
+        const gridStartY = panelY - gridHeight / 2 + gridSlotSize / 2 - 10;
 
-        const chestInventory = this.callbacks.getChestInventory();
+        // Use backpack data from cached inventory (new system)
+        const cachedData = GameDataService.getCachedData();
+        const backpackItems: InventoryItem[] = cachedData?.inventory?.backpack?.backpack ?? [];
 
-        // Delay grid elements to appear after panel animation
-        this.scene.time.delayedCall(150, () => {
-            for (let row = 0; row < 4; row++) {
-                for (let col = 0; col < 3; col++) {
-                    const slotIndex = row * 3 + col;
+        // Create 2x3 grid (6 slots)
+        this.scene.time.delayedCall(50, () => {
+            for (let row = 0; row < gridRows; row++) {
+                for (let col = 0; col < gridCols; col++) {
+                    const slotIndex = row * gridCols + col;
                     const slotX = gridStartX + col * (gridSlotSize + gridSlotSpacing);
                     const slotY = gridStartY + row * (gridSlotSize + gridSlotSpacing);
 
                     // Slot background
-                    const slotBg = this.scene.add.sprite(slotX, slotY, 'square-buttons', 6);
-                    slotBg.setDisplaySize(gridSlotSize, gridSlotSize);
+                    const slotBg = this.scene.add.rectangle(slotX, slotY, gridSlotSize, gridSlotSize, 0xD4C4A8);
+                    slotBg.setStrokeStyle(2, 0x8B7355);
                     slotBg.setDepth(5203);
                     slotBg.setAlpha(0);
+                    slotBg.setInteractive({ useHandCursor: true });
                     this.scene.cameras.main.ignore(slotBg);
                     this.chestPanelElements.push(slotBg);
+                    this.chestSlotBgs.push(slotBg);
 
                     // Fade in animation
                     this.scene.tweens.add({
                         targets: slotBg,
                         alpha: 1,
-                        duration: 100,
-                        delay: slotIndex * 20
+                        duration: 80,
+                        delay: slotIndex * 15
                     });
 
-                    // Check if this slot has items
-                    const slotData = chestInventory[slotIndex];
-                    if (slotData && slotData.count > 0) {
-                        const cropDef = CROP_DEFINITIONS[slotData.type];
-                        const fruitIcon = this.scene.add.image(slotX, slotY, cropDef.fruitImage);
-                        fruitIcon.setDisplaySize(gridSlotSize - 10, gridSlotSize - 10);
-                        fruitIcon.setDepth(5204);
-                        fruitIcon.setAlpha(0);
-                        this.scene.cameras.main.ignore(fruitIcon);
-                        this.chestPanelElements.push(fruitIcon);
+                    // Check if this slot has items from backpack
+                    const item = backpackItems[slotIndex];
+                    if (item && item.amount > 0) {
+                        const iconKey = InventoryService.getItemIcon(item.itemType);
+                        const itemIcon = this.scene.add.image(slotX, slotY - 2, iconKey);
+                        itemIcon.setDisplaySize(gridSlotSize - 12, gridSlotSize - 12);
+                        itemIcon.setDepth(5204);
+                        itemIcon.setAlpha(0);
+                        this.scene.cameras.main.ignore(itemIcon);
+                        this.chestPanelElements.push(itemIcon);
 
                         this.scene.tweens.add({
-                            targets: fruitIcon,
+                            targets: itemIcon,
                             alpha: 1,
-                            duration: 100,
-                            delay: slotIndex * 20
+                            duration: 80,
+                            delay: slotIndex * 15
                         });
 
-                        // Show count
+                        // Show count badge
                         const countText = this.scene.add.text(
-                            slotX + gridSlotSize / 2 - 4,
-                            slotY + gridSlotSize / 2 - 4,
-                            slotData.count.toString(),
+                            slotX + gridSlotSize / 2 - 3,
+                            slotY + gridSlotSize / 2 - 3,
+                            item.amount.toString(),
                             {
-                                fontSize: '12px',
+                                fontSize: '10px',
+                                fontFamily: 'PixelFont',
                                 color: '#ffffff',
-                                backgroundColor: '#000000cc',
-                                padding: { x: 3, y: 1 }
+                                resolution: 2
                             }
                         );
                         countText.setOrigin(1, 1);
                         countText.setDepth(5205);
+                        countText.setStroke('#5D4037', 2);
                         countText.setAlpha(0);
                         this.scene.cameras.main.ignore(countText);
                         this.chestPanelElements.push(countText);
@@ -698,42 +696,158 @@ export class ToolbarManager extends BaseManager {
                         this.scene.tweens.add({
                             targets: countText,
                             alpha: 1,
-                            duration: 100,
-                            delay: slotIndex * 20
+                            duration: 80,
+                            delay: slotIndex * 15
+                        });
+
+                        // Click handler for slot selection
+                        slotBg.on('pointerdown', () => this.onChestSlotClick(slotIndex, item));
+                        slotBg.on('pointerover', () => {
+                            if (this.selectedChestItemIndex !== slotIndex) {
+                                slotBg.setFillStyle(0xE8DCC8);
+                            }
+                        });
+                        slotBg.on('pointerout', () => {
+                            if (this.selectedChestItemIndex !== slotIndex) {
+                                slotBg.setFillStyle(0xD4C4A8);
+                            }
                         });
                     }
                 }
             }
 
-            // Capacity indicator at bottom
-            const totalItems = this.getTotalChestItems();
-            const maxCapacity = GAME_CONSTANTS.CHEST_SLOTS * GAME_CONSTANTS.MAX_PER_SLOT;
-            const capacityText = this.scene.add.text(
-                panelX,
-                panelY + panelHeight / 2 - 23,
-                `${totalItems} / ${maxCapacity}`,
-                {
-                    fontSize: '11px',
-                    color: totalItems >= maxCapacity ? '#ff0000' : '#5D4037'
-                }
-            );
-            capacityText.setOrigin(0.5);
-            capacityText.setDepth(5201);
-            capacityText.setAlpha(0);
-            this.scene.cameras.main.ignore(capacityText);
-            this.chestPanelElements.push(capacityText);
+            // Capacity indicator
+            // const backpackCapacity = cachedData?.inventory?.backpack?.capacity;
+            // const usedSlots = backpackCapacity?.used ?? backpackItems.length;
+            // const totalSlots = backpackCapacity?.total ?? 20;
+            // const capacityText = this.scene.add.text(
+            //     panelX,
+            //     panelY + panelHeight / 2 - 45,
+            //     `${usedSlots}/${totalSlots}`,
+            //     {
+            //         fontSize: '9px',
+            //         fontFamily: 'PixelFont',
+            //         color: usedSlots >= totalSlots ? '#FF5252' : '#FFFFFF',
+            //         resolution: 2
+            //     }
+            // );
+            // capacityText.setOrigin(0.5);
+            // capacityText.setDepth(5201);
+            // capacityText.setAlpha(0);
+            // this.scene.cameras.main.ignore(capacityText);
+            // this.chestPanelElements.push(capacityText);
 
-            this.scene.tweens.add({
-                targets: capacityText,
-                alpha: 1,
-                duration: 150
+            // this.scene.tweens.add({
+            //     targets: capacityText,
+            //     alpha: 1,
+            //     duration: 100
+            // });
+
+            // "Move to Warehouse" button
+            const moveBtn = this.scene.add.rectangle(panelX, panelY + panelHeight / 2 - 18, panelWidth - 16, 24, 0x8B7355);
+            moveBtn.setStrokeStyle(2, 0x5D4037);
+            moveBtn.setDepth(5202);
+            moveBtn.setAlpha(0.5);
+            moveBtn.setInteractive({ useHandCursor: true });
+            this.scene.cameras.main.ignore(moveBtn);
+            this.chestPanelElements.push(moveBtn);
+
+            const moveBtnText = this.scene.add.text(panelX, panelY + panelHeight / 2 - 18, '→ Warehouse', {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
             });
+            moveBtnText.setOrigin(0.5);
+            moveBtnText.setDepth(5203);
+            moveBtnText.setStroke('#5D4037', 1);
+            this.scene.cameras.main.ignore(moveBtnText);
+            this.chestPanelElements.push(moveBtnText);
+
+            moveBtn.on('pointerdown', () => this.moveSelectedToWarehouse(backpackItems));
+            moveBtn.on('pointerover', () => {
+                if (this.selectedChestItemIndex >= 0) {
+                    moveBtn.setFillStyle(0xA08060);
+                }
+            });
+            moveBtn.on('pointerout', () => moveBtn.setFillStyle(0x8B7355));
         });
     }
 
     private getTotalChestItems(): number {
-        const chestInventory = this.callbacks.getChestInventory();
-        return chestInventory.reduce((total, slot) => total + (slot?.count || 0), 0);
+        const cachedData = GameDataService.getCachedData();
+        const backpackItems = cachedData?.inventory?.backpack?.backpack ?? [];
+        return backpackItems.reduce((total, item) => total + (item?.amount || 0), 0);
+    }
+
+    private onChestSlotClick(slotIndex: number, _item: InventoryItem): void {
+        // Deselect previous slot
+        if (this.selectedChestItemIndex >= 0 && this.selectedChestItemIndex < this.chestSlotBgs.length) {
+            const prevSlot = this.chestSlotBgs[this.selectedChestItemIndex];
+            if (prevSlot && prevSlot.active) {
+                prevSlot.setFillStyle(0xD4C4A8);
+                prevSlot.setStrokeStyle(2, 0x8B7355);
+            }
+        }
+
+        // Toggle selection
+        if (this.selectedChestItemIndex === slotIndex) {
+            this.selectedChestItemIndex = -1;
+            return;
+        }
+
+        // Select new slot
+        this.selectedChestItemIndex = slotIndex;
+        const slotBg = this.chestSlotBgs[slotIndex];
+        if (slotBg && slotBg.active) {
+            slotBg.setFillStyle(0xFFD700); // Gold highlight
+            slotBg.setStrokeStyle(2, 0xB8860B);
+        }
+    }
+
+    private moveSelectedToWarehouse(backpackItems: InventoryItem[]): void {
+        // Check if an item is selected
+        if (this.selectedChestItemIndex < 0) {
+            this.callbacks.showToastMessage('Select an item first!', 0xFF5252);
+            return;
+        }
+
+        const selectedItem = backpackItems[this.selectedChestItemIndex];
+        if (!selectedItem || selectedItem.amount <= 0) {
+            this.callbacks.showToastMessage('Invalid item!', 0xFF5252);
+            return;
+        }
+
+        // 1. OPTIMISTIC UI - Update BOTH caches immediately
+        GameDataService.removeFromBackpackCache(selectedItem.itemType, selectedItem.amount);
+        GameDataService.addToStorageCache(selectedItem.itemType, selectedItem.amount);
+
+        // 2. Instant feedback
+        this.callbacks.playSuccessSound();
+        this.callbacks.showToastMessage('Moved to warehouse!', 0x4CAF50);
+        this.selectedChestItemIndex = -1;
+        this.closeChestPanel();
+        // Toolbar will auto-update via closeChestPanel -> updateToolbar with new cache values
+
+        // 3. Background API call
+        InventoryService.moveToStorage(selectedItem.itemType, selectedItem.amount)
+            .then(async (result) => {
+                if (result && result.success) {
+                    // Sync with server data
+                    await GameDataService.refreshBackpack();
+                    await GameDataService.refreshStorage();
+                } else {
+                    // Rollback cache on failure
+                    await GameDataService.refreshBackpack();
+                    this.callbacks.showToastMessage(result?.message || 'Sync failed', 0xFF5252);
+                }
+            })
+            .catch(async (error) => {
+                console.error('Error moving to warehouse:', error);
+                // Rollback cache on error
+                await GameDataService.refreshBackpack();
+                this.callbacks.showToastMessage('Sync error!', 0xFF5252);
+            });
     }
 
     private selectToolbarSlot(index: number): void {

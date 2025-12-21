@@ -221,8 +221,9 @@ export const GAME_CONSTANTS = {
     MAP_HEIGHT: 50,
     TOTAL_FARM_PLOTS: 16,
     INITIAL_OWNED_PLOTS: 2,
-    CHEST_SLOTS: 12,
+    CHEST_SLOTS: 6,      // Chest/Backpack slots (reduced from 12)
     MAX_PER_SLOT: 50,
+    WAREHOUSE_SLOTS: 16, // Storage warehouse slots
     FRUITS_PER_FERTILIZER: 3,
     MISSIONS_CACHE_DURATION: 60000, // 1 minute
     CHECKIN_STORAGE_KEY: 'fam_game_checkin_data'

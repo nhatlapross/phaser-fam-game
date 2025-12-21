@@ -9,6 +9,7 @@ import { FruitService } from './FruitService';
 import { MissionService, Mission } from './MissionService';
 import { StreakService, StreakStatusResponse, StreakHistoryResponse } from './StreakService';
 import { ShopService, GoldShopResponse, GemShopResponse, CashShopResponse } from './ShopService';
+import { InventoryService, StorageResponse, BackpackResponse } from './InventoryService';
 import { PlantType } from './types/GameTypes';
 
 // Types for pre-loaded data
@@ -47,6 +48,11 @@ export interface ShopData {
     cashShop: CashShopResponse | null;
 }
 
+export interface InventoryData {
+    storage: StorageResponse | null;
+    backpack: BackpackResponse | null;
+}
+
 export interface GameData {
     user: UserData | null;
     garden: GardenResponse;
@@ -57,6 +63,7 @@ export interface GameData {
     missions: Mission[] | null;
     streak: StreakData;
     shop: ShopData;
+    inventory: InventoryData;
     loadedAt: number;
 }
 
@@ -88,6 +95,7 @@ export class GameDataService {
                 missions: null,
                 streak: { status: null, history: null },
                 shop: { goldShop: null, gemShop: null, cashShop: null },
+                inventory: { storage: null, backpack: null },
                 loadedAt: Date.now()
             };
             cachedGameData = emptyData;
@@ -110,7 +118,9 @@ export class GameDataService {
             streakHistoryResult,
             goldShopResult,
             gemShopResult,
-            cashShopResult
+            cashShopResult,
+            storageResult,
+            backpackResult
         ] = await Promise.allSettled([
             UserService.getUserProfile(),
             GardenService.getGarden(),
@@ -123,7 +133,9 @@ export class GameDataService {
             StreakService.getHistory(7),
             ShopService.getGoldShop(),
             ShopService.getGemShop(),
-            ShopService.getCashShop()
+            ShopService.getCashShop(),
+            InventoryService.getStorage(),
+            InventoryService.getBackpack()
         ]);
 
         onProgress?.(80);
@@ -147,6 +159,10 @@ export class GameDataService {
                 goldShop: goldShopResult.status === 'fulfilled' ? goldShopResult.value : null,
                 gemShop: gemShopResult.status === 'fulfilled' ? gemShopResult.value : null,
                 cashShop: cashShopResult.status === 'fulfilled' ? cashShopResult.value : null
+            },
+            inventory: {
+                storage: storageResult.status === 'fulfilled' ? storageResult.value : null,
+                backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null
             },
             loadedAt: Date.now()
         };
@@ -188,6 +204,12 @@ export class GameDataService {
         if (cashShopResult.status === 'rejected') {
             console.error('Failed to fetch cash shop:', cashShopResult.reason);
         }
+        if (storageResult.status === 'rejected') {
+            console.error('Failed to fetch storage:', storageResult.reason);
+        }
+        if (backpackResult.status === 'rejected') {
+            console.error('Failed to fetch backpack:', backpackResult.reason);
+        }
 
         onProgress?.(100);
 
@@ -207,7 +229,9 @@ export class GameDataService {
             streakHistory: gameData.streak.history?.checkins?.length ?? 0,
             goldShopItems: gameData.shop.goldShop?.items?.length ?? 0,
             gemShopItems: gameData.shop.gemShop?.items?.length ?? 0,
-            cashShopItems: gameData.shop.cashShop?.items?.length ?? 0
+            cashShopItems: gameData.shop.cashShop?.items?.length ?? 0,
+            storageItems: gameData.inventory.storage?.storage?.length ?? 0,
+            backpackItems: gameData.inventory.backpack?.backpack?.length ?? 0
         });
 
         return gameData;
@@ -344,6 +368,175 @@ export class GameDataService {
             cachedGameData.streak = streakData;
         }
         return streakData;
+    }
+
+    static async refreshStorage(): Promise<StorageResponse | null> {
+        const storage = await InventoryService.getStorage();
+        if (cachedGameData) {
+            cachedGameData.inventory.storage = storage;
+        }
+        return storage;
+    }
+
+    static async refreshBackpack(): Promise<BackpackResponse | null> {
+        const backpack = await InventoryService.getBackpack();
+        if (cachedGameData) {
+            cachedGameData.inventory.backpack = backpack;
+        }
+        return backpack;
+    }
+
+    static async refreshWarehouseInventory(): Promise<InventoryData> {
+        const [storage, backpack] = await Promise.all([
+            InventoryService.getStorage(),
+            InventoryService.getBackpack()
+        ]);
+        const inventoryData: InventoryData = { storage, backpack };
+        if (cachedGameData) {
+            cachedGameData.inventory = inventoryData;
+        }
+        return inventoryData;
+    }
+
+    // ============================================
+    // Optimistic cache updates (instant UI feedback)
+    // ============================================
+
+    /**
+     * Optimistically remove item from backpack cache (before API call)
+     * Used for instant UI updates when moving items to warehouse
+     */
+    static removeFromBackpackCache(itemType: string, amount: number): void {
+        if (!cachedGameData?.inventory?.backpack?.backpack) return;
+
+        const backpack = cachedGameData.inventory.backpack.backpack;
+        const itemIndex = backpack.findIndex(item => item.itemType === itemType);
+
+        if (itemIndex >= 0) {
+            const item = backpack[itemIndex];
+            if (item.amount <= amount) {
+                // Remove item entirely
+                backpack.splice(itemIndex, 1);
+            } else {
+                // Decrease amount
+                item.amount -= amount;
+            }
+            // Update capacity
+            if (cachedGameData.inventory.backpack.capacity) {
+                cachedGameData.inventory.backpack.capacity.used -= amount;
+                cachedGameData.inventory.backpack.capacity.available += amount;
+            }
+        }
+    }
+
+    /**
+     * Optimistically remove item from storage cache (before API call)
+     * Used for instant UI updates when moving items to backpack
+     */
+    static removeFromStorageCache(itemType: string, amount: number): void {
+        if (!cachedGameData?.inventory?.storage?.storage) return;
+
+        const storage = cachedGameData.inventory.storage.storage;
+        const itemIndex = storage.findIndex(item => item.itemType === itemType);
+
+        if (itemIndex >= 0) {
+            const item = storage[itemIndex];
+            if (item.amount <= amount) {
+                // Remove item entirely
+                storage.splice(itemIndex, 1);
+            } else {
+                // Decrease amount
+                item.amount -= amount;
+            }
+            // Update summary
+            if (cachedGameData.inventory.storage.summary) {
+                cachedGameData.inventory.storage.summary.totalItems -= amount;
+                if (storage[itemIndex]?.amount === 0 || !storage.find(i => i.itemType === itemType)) {
+                    cachedGameData.inventory.storage.summary.totalTypes -= 1;
+                }
+            }
+        }
+    }
+
+    /**
+     * Optimistically add item to backpack cache (before API call)
+     * Used for instant UI updates when moving items from warehouse to chest
+     */
+    static addToBackpackCache(itemType: string, amount: number): void {
+        if (!cachedGameData?.inventory?.backpack) return;
+
+        // Initialize backpack array if needed
+        if (!cachedGameData.inventory.backpack.backpack) {
+            cachedGameData.inventory.backpack.backpack = [];
+        }
+
+        const backpack = cachedGameData.inventory.backpack.backpack;
+        const existingItem = backpack.find(item => item.itemType === itemType);
+
+        if (existingItem) {
+            // Increase existing item amount
+            existingItem.amount += amount;
+        } else {
+            // Add new item to backpack
+            backpack.push({
+                id: `temp-${Date.now()}`,
+                itemType: itemType,
+                amount: amount,
+                location: 'BACKPACK',
+                name: itemType,
+                rarity: 'common',
+                category: 'item',
+                icon: ''
+            });
+        }
+
+        // Update capacity
+        if (cachedGameData.inventory.backpack.capacity) {
+            cachedGameData.inventory.backpack.capacity.used += amount;
+            cachedGameData.inventory.backpack.capacity.available -= amount;
+        }
+    }
+
+    /**
+     * Optimistically add item to storage cache (before API call)
+     * Used for instant UI updates when moving items from chest to warehouse
+     */
+    static addToStorageCache(itemType: string, amount: number): void {
+        if (!cachedGameData?.inventory?.storage) return;
+
+        // Initialize storage array if needed
+        if (!cachedGameData.inventory.storage.storage) {
+            cachedGameData.inventory.storage.storage = [];
+        }
+
+        const storage = cachedGameData.inventory.storage.storage;
+        const existingItem = storage.find(item => item.itemType === itemType);
+
+        if (existingItem) {
+            // Increase existing item amount
+            existingItem.amount += amount;
+        } else {
+            // Add new item to storage
+            storage.push({
+                id: `temp-${Date.now()}`,
+                itemType: itemType,
+                amount: amount,
+                location: 'STORAGE',
+                name: itemType,
+                rarity: 'common',
+                category: 'item',
+                icon: ''
+            });
+            // Update types count
+            if (cachedGameData.inventory.storage.summary) {
+                cachedGameData.inventory.storage.summary.totalTypes += 1;
+            }
+        }
+
+        // Update summary
+        if (cachedGameData.inventory.storage.summary) {
+            cachedGameData.inventory.storage.summary.totalItems += amount;
+        }
     }
 
     // ============================================
