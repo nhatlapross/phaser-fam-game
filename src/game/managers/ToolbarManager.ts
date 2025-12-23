@@ -781,8 +781,9 @@ export class ToolbarManager extends BaseManager {
 
     private getTotalChestItems(): number {
         const cachedData = GameDataService.getCachedData();
-        const backpackItems = cachedData?.inventory?.backpack?.backpack ?? [];
-        return backpackItems.reduce((total, item) => total + (item?.amount || 0), 0);
+        // Use storage/warehouse data (where harvested items go)
+        const storageItems = cachedData?.inventory?.storage?.storage ?? [];
+        return storageItems.reduce((sum, item) => sum + (item?.amount || 0), 0);
     }
 
     private onChestSlotClick(slotIndex: number, _item: InventoryItem): void {

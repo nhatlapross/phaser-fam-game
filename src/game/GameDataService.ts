@@ -589,8 +589,10 @@ export class GameDataService {
             this.refreshGarden(),
             this.refreshSeeds(),
             this.refreshFertilizers(),
-            this.refreshFruits()
+            this.refreshFruits(),
+            this.refreshStorage()
         ]);
+        this.triggerUIUpdate();
     }
 
     // ============================================
