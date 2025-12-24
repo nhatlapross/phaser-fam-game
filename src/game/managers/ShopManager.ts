@@ -324,12 +324,20 @@ export class ShopManager extends BaseManager {
             cashTabBg.setTexture('square-buttons', 7);
 
             if (this.gemShopData && this.gemShopData.items.length > 0) {
-                const items = this.gemShopData.items.slice(0, 5);
+                // Filter out land slots - they are purchased via PlotManager
+                const items = this.gemShopData.items
+                    .filter(item => !item.key.startsWith('LAND_SLOT_'))
+                    .slice(0, 5);
                 items.forEach((item, index) => {
                     const itemY = contentStartY + index * itemHeight;
+                    // For land slots, check both affordable and available
+                    const canBuy = item.affordable && (item.available !== false);
                     this.createShopItem(modalX, itemY, item.icon, item.name, item.description,
-                        `💎${item.priceGem}`, item.affordable, () => this.handleGemPurchase(item));
+                        `💎${item.priceGem}`, canBuy, () => this.handleGemPurchase(item));
                 });
+                if (items.length === 0) {
+                    this.showLoadingOrEmpty('No items available');
+                }
             } else {
                 this.showLoadingOrEmpty('No items available');
             }
@@ -568,7 +576,10 @@ export class ShopManager extends BaseManager {
                     this.balanceText.setText(`💰 ${result.balanceGold}    💎 ${result.balanceGem}`);
                 }
 
-                // Refresh shop data in background (don't await)
+                // Refresh all data (including garden for land slot purchases)
+                GameDataService.refreshAndUpdateUI();
+                
+                // Refresh shop data to update availability
                 this.fetchShopData(true);
             } else {
                 // === ROLLBACK on failure ===
@@ -579,7 +590,7 @@ export class ShopManager extends BaseManager {
                 if (this.balanceText) {
                     this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${previousGemBalance}`);
                 }
-                this.showMessage('Purchase failed! Refunded.', '#F44336');
+                this.showMessage(result?.message || 'Purchase failed! Refunded.', '#F44336');
             }
         } catch (error) {
             // === ROLLBACK on network error ===

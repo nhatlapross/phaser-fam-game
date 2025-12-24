@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
+import { ShopService, GemShopItem } from '../ShopService';
+import { GameDataService } from '../GameDataService';
 
 // Plot Manager Callbacks
 export interface PlotManagerCallbacks {
@@ -44,15 +46,43 @@ export class PlotManager extends BaseManager {
 
         this.isModalOpen = true;
 
+        // Use cached gem shop data (pre-loaded during game init)
+        const cachedData = GameDataService.getCachedData();
+        const gemShopData = cachedData?.shop?.gemShop;
+
+        if (!gemShopData) {
+            this.callbacks.showFloatingMessage('Shop data not loaded', tileX, tileY);
+            this.isModalOpen = false;
+            return;
+        }
+
+        // Find the land slot item for this plot
+        const itemKey = `LAND_SLOT_${plotIndex + 1}`;
+        const plotItem = gemShopData.items.find(item => item.key === itemKey);
+
+        if (!plotItem) {
+            this.callbacks.showFloatingMessage('Plot not available', tileX, tileY);
+            this.isModalOpen = false;
+            return;
+        }
+
+        // Show modal with plot info from cache
+        this.showPlotModal(tileX, tileY, plotIndex, plotItem, gemShopData.user.balanceGem);
+    }
+
+    private showPlotModal(
+        tileX: number,
+        tileY: number,
+        plotIndex: number,
+        plotItem: GemShopItem,
+        userBalanceGem: number
+    ): void {
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
-        const modalWidth = 220;
-        const modalHeight = 160;
+        const modalWidth = 240;
+        const modalHeight = 180;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
-
-        // Cost calculation: (plotIndex + 1) * 100 gems
-        const cost = (plotIndex + 1) * 100;
 
         // Overlay
         const overlay = this.scene.add.rectangle(
@@ -90,7 +120,7 @@ export class PlotManager extends BaseManager {
         });
 
         this.scene.time.delayedCall(100, () => {
-            this.createModalContent(modalX, modalY, plotIndex, cost, tileX, tileY, overlay);
+            this.createModalContent(modalX, modalY, plotIndex, plotItem, userBalanceGem, tileX, tileY, overlay);
         });
     }
 
@@ -110,16 +140,18 @@ export class PlotManager extends BaseManager {
         modalX: number,
         modalY: number,
         plotIndex: number,
-        cost: number,
+        plotItem: GemShopItem,
+        userBalanceGem: number,
         tileX: number,
         tileY: number,
         overlay: Phaser.GameObjects.Rectangle
     ): void {
-        const playerGems = this.callbacks.getPlayerGems();
-        const hasEnough = playerGems >= cost;
+        const cost = plotItem.priceGem;
+        const isAvailable = plotItem.available !== false;
+        const canAfford = plotItem.affordable && userBalanceGem >= cost;
 
         // Title
-        const title = this.scene.add.text(modalX, modalY - 50, 'Buy Plot', {
+        const title = this.scene.add.text(modalX, modalY - 60, plotItem.name, {
             fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -131,54 +163,80 @@ export class PlotManager extends BaseManager {
         this.scene.cameras.main.ignore(title);
         this.modalElements.push(title);
 
-        // Plot number
-        const plotText = this.scene.add.text(modalX, modalY - 25, `Plot #${plotIndex + 1}`, {
-            fontSize: '11px',
+        // Icon
+        const iconText = this.scene.add.text(modalX, modalY - 35, plotItem.icon, {
+            fontSize: '20px',
+            resolution: 2
+        });
+        iconText.setOrigin(0.5);
+        iconText.setDepth(5402);
+        this.scene.cameras.main.ignore(iconText);
+        this.modalElements.push(iconText);
+
+        // Description
+        const descText = this.scene.add.text(modalX, modalY - 10, plotItem.description, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#CCCCCC',
+            resolution: 2,
+            wordWrap: { width: 200 }
+        });
+        descText.setOrigin(0.5);
+        descText.setDepth(5402);
+        this.scene.cameras.main.ignore(descText);
+        this.modalElements.push(descText);
+
+        // Price
+        const priceText = this.scene.add.text(modalX, modalY + 15, `Price: ${cost} 💎`, {
+            fontSize: '12px',
             fontFamily: 'PixelFont',
             color: '#FFD700',
             resolution: 2
         });
-        plotText.setOrigin(0.5);
-        plotText.setDepth(5402);
-        this.scene.cameras.main.ignore(plotText);
-        this.modalElements.push(plotText);
+        priceText.setOrigin(0.5);
+        priceText.setDepth(5402);
+        this.scene.cameras.main.ignore(priceText);
+        this.modalElements.push(priceText);
 
-        // Cost
-        const costText = this.scene.add.text(modalX, modalY, `Price: ${cost} gem`, {
-            fontSize: '12px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
-        });
-        costText.setOrigin(0.5);
-        costText.setDepth(5402);
-        this.scene.cameras.main.ignore(costText);
-        this.modalElements.push(costText);
-
-        // Current gems
-        const gemsText = this.scene.add.text(modalX, modalY + 20, `You have: ${playerGems} gem`, {
+        // User balance
+        const balanceText = this.scene.add.text(modalX, modalY + 35, `You have: ${userBalanceGem} 💎`, {
             fontSize: '10px',
             fontFamily: 'PixelFont',
-            color: hasEnough ? '#4ade80' : '#ef4444',
+            color: canAfford ? '#4ade80' : '#ef4444',
             resolution: 2
         });
-        gemsText.setOrigin(0.5);
-        gemsText.setDepth(5402);
-        this.scene.cameras.main.ignore(gemsText);
-        this.modalElements.push(gemsText);
+        balanceText.setOrigin(0.5);
+        balanceText.setDepth(5402);
+        this.scene.cameras.main.ignore(balanceText);
+        this.modalElements.push(balanceText);
 
-        // Buy button
-        const buyBtnBg = this.scene.add.sprite(modalX - 40, modalY + 50, 'square-buttons', hasEnough ? 6 : 7);
+        // Availability status
+        if (!isAvailable) {
+            const statusText = this.scene.add.text(modalX, modalY + 50, 'Already Purchased', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#4ade80',
+                resolution: 2
+            });
+            statusText.setOrigin(0.5);
+            statusText.setDepth(5402);
+            this.scene.cameras.main.ignore(statusText);
+            this.modalElements.push(statusText);
+        }
+
+        // Buy button (disabled if not available or can't afford)
+        const canBuy = isAvailable && canAfford;
+        const buyBtnBg = this.scene.add.sprite(modalX - 40, modalY + 70, 'square-buttons', canBuy ? 6 : 7);
         buyBtnBg.setDisplaySize(70, 28);
         buyBtnBg.setDepth(5402);
-        buyBtnBg.setInteractive({ useHandCursor: hasEnough });
+        buyBtnBg.setInteractive({ useHandCursor: canBuy });
         this.scene.cameras.main.ignore(buyBtnBg);
         this.modalElements.push(buyBtnBg);
 
-        const buyBtnText = this.scene.add.text(modalX - 40, modalY + 50, 'Buy', {
+        const buyBtnText = this.scene.add.text(modalX - 40, modalY + 70, 'Buy', {
             fontSize: '10px',
             fontFamily: 'PixelFont',
-            color: hasEnough ? '#FFFFFF' : '#999999',
+            color: canBuy ? '#FFFFFF' : '#999999',
             resolution: 2
         });
         buyBtnText.setOrigin(0.5);
@@ -186,23 +244,23 @@ export class PlotManager extends BaseManager {
         this.scene.cameras.main.ignore(buyBtnText);
         this.modalElements.push(buyBtnText);
 
-        if (hasEnough) {
+        if (canBuy) {
             buyBtnBg.on('pointerover', () => buyBtnBg.setTint(0xcccccc));
             buyBtnBg.on('pointerout', () => buyBtnBg.clearTint());
             buyBtnBg.on('pointerdown', () => {
-                this.purchasePlot(tileX, tileY, plotIndex, cost);
+                this.purchasePlot(tileX, tileY, plotIndex, plotItem);
             });
         }
 
         // Cancel button
-        const cancelBtnBg = this.scene.add.sprite(modalX + 40, modalY + 50, 'square-buttons', 7);
+        const cancelBtnBg = this.scene.add.sprite(modalX + 40, modalY + 70, 'square-buttons', 7);
         cancelBtnBg.setDisplaySize(70, 28);
         cancelBtnBg.setDepth(5402);
         cancelBtnBg.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(cancelBtnBg);
         this.modalElements.push(cancelBtnBg);
 
-        const cancelBtnText = this.scene.add.text(modalX + 40, modalY + 50, 'Cancel', {
+        const cancelBtnText = this.scene.add.text(modalX + 40, modalY + 70, 'Cancel', {
             fontSize: '10px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -225,12 +283,16 @@ export class PlotManager extends BaseManager {
         });
     }
 
-    private purchasePlot(tileX: number, tileY: number, plotIndex: number, cost: number): void {
-        const playerGems = this.callbacks.getPlayerGems();
+    private async purchasePlot(tileX: number, tileY: number, plotIndex: number, plotItem: GemShopItem): Promise<void> {
         const ownedPlotsCount = this.callbacks.getOwnedPlotsCount();
+        const playerGems = this.callbacks.getPlayerGems();
 
-        // Deduct gems
-        this.callbacks.setPlayerGems(playerGems - cost);
+        // Store previous values for rollback
+        const previousOwnedPlots = ownedPlotsCount;
+        const previousGems = playerGems;
+
+        // 1. OPTIMISTIC UPDATE - Deduct gems and unlock plot immediately
+        this.callbacks.setPlayerGems(playerGems - plotItem.priceGem);
         this.callbacks.setOwnedPlotsCount(ownedPlotsCount + 1);
 
         // Update state
@@ -249,7 +311,7 @@ export class PlotManager extends BaseManager {
             lockedPlotOverlays.delete(key);
         }
 
-        // Update UI (refresh profile to show updated gems)
+        // Update UI
         this.callbacks.refreshProfileUI();
 
         // Close modal
@@ -258,7 +320,42 @@ export class PlotManager extends BaseManager {
         // Show success message
         this.callbacks.showFloatingMessage('Plot purchased!', tileX, tileY);
 
-        console.log('Purchased plot', plotIndex + 1, '- Gems left:', this.callbacks.getPlayerGems());
+        console.log('Purchased plot', plotIndex + 1);
+
+        // 2. CALL API - Purchase land slot via gem shop
+        try {
+            const result = await ShopService.purchaseGemItem(plotItem.key, 1);
+            
+            if (!result || !result.success) {
+                // 3. ROLLBACK on failure
+                this.callbacks.setPlayerGems(previousGems);
+                this.callbacks.setOwnedPlotsCount(previousOwnedPlots);
+                
+                // Re-lock the plot
+                if (state) {
+                    state.locked = true;
+                }
+                
+                this.callbacks.refreshProfileUI();
+                this.callbacks.showFloatingMessage(result?.message || 'Purchase failed!', tileX, tileY);
+                console.error('Failed to purchase plot:', result?.message);
+            } else {
+                // 4. SYNC with server data
+                await GameDataService.refreshAndUpdateUI();
+            }
+        } catch (error) {
+            // ROLLBACK on network error
+            this.callbacks.setPlayerGems(previousGems);
+            this.callbacks.setOwnedPlotsCount(previousOwnedPlots);
+            
+            if (state) {
+                state.locked = true;
+            }
+            
+            this.callbacks.refreshProfileUI();
+            this.callbacks.showFloatingMessage('Network error!', tileX, tileY);
+            console.error('Network error purchasing plot:', error);
+        }
     }
 
     // ========== Cleanup ==========

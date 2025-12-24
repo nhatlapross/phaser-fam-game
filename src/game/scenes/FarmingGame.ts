@@ -1952,6 +1952,22 @@ export class FarmingGame extends Scene {
                 this.gameState.setCurrency(apiGold, apiGem);
                 // Don't return early - still need to update UI
             }
+
+            // Sync chest inventory (fruits) from cached data
+            if (cachedData.fruits) {
+                this.chestInventory = [];
+                for (const item of cachedData.fruits) {
+                    if (item.count > 0) {
+                        let remaining = item.count;
+                        while (remaining > 0 && this.chestInventory.length < this.CHEST_SLOTS) {
+                            const slotCount = Math.min(remaining, this.MAX_PER_SLOT);
+                            this.chestInventory.push({ type: item.type, count: slotCount });
+                            remaining -= slotCount;
+                        }
+                    }
+                }
+                console.log('Chest inventory synced from cache:', this.chestInventory);
+            }
         }
 
         // Update profile display (gold, gems, etc.)
@@ -2496,11 +2512,17 @@ export class FarmingGame extends Scene {
                     console.log('Harvested healthy', harvestedType, 'crop at', tileKey, '- Added to chest');
                 }
 
-                // Call API to harvest plant on backend (async, don't wait for response)
+                // Call API to harvest plant on backend
                 if (plantId) {
-                    GardenService.harvestPlant(plantId).catch(error => {
+                    try {
+                        const success = await GardenService.harvestPlant(plantId);
+                        if (success) {
+                            // Refresh inventory data after successful harvest
+                            await GameDataService.refreshAfterGardenAction();
+                        }
+                    } catch (error) {
                         console.error('Failed to harvest plant in database:', error);
-                    });
+                    }
                 } else {
                     console.warn('No plantId available for harvesting - plant may not be synced with backend');
                 }
