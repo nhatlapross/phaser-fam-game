@@ -39,12 +39,16 @@ export interface GemShopItem {
     priceGem: number;
     icon: string;
     affordable: boolean;
+    available?: boolean;
     reward?: {
         itemType?: string;
         amount?: number;
         effect?: string;
         gold?: number;
+        landSlot?: number;
     };
+    currentLandSlots?: number;
+    maxLandSlot?: number;
 }
 
 export interface GemShopResponse {
