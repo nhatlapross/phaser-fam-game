@@ -781,9 +781,9 @@ export class ToolbarManager extends BaseManager {
 
     private getTotalChestItems(): number {
         const cachedData = GameDataService.getCachedData();
-        // Use storage/warehouse data (where harvested items go)
-        const storageItems = cachedData?.inventory?.storage?.storage ?? [];
-        return storageItems.reduce((sum, item) => sum + (item?.amount || 0), 0);
+        // Use backpack data (items carried by player, shown in chest UI)
+        const backpackItems = cachedData?.inventory?.backpack?.backpack ?? [];
+        return backpackItems.reduce((sum, item) => sum + (item?.amount || 0), 0);
     }
 
     private onChestSlotClick(slotIndex: number, _item: InventoryItem): void {

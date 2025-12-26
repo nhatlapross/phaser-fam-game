@@ -37,6 +37,7 @@
         "phaser-hooks": "^0.7.0",
         "react": "19.0.1",
         "react-dom": "19.0.1",
+        "socket.io-client": "^4.8.3",
         "viem": "^2.40.3",
         "wagmi": "^2.19.5"
     },

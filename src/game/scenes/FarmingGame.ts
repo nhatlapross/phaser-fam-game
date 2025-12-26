@@ -8,9 +8,10 @@ import { GardenService } from '../GardenService';
 import { FruitService } from '../FruitService';
 import { GameDataService } from '../GameDataService';
 import { ShopService } from '../ShopService';
+import { getSocketService, SocketService } from '../SocketService';
 
 // Import game state hook
-import { useGameState, GameStateHook } from '../hooks/useGameState';
+import { useGameState, GameStateHook, PlantUpdateHandler } from '../hooks';
 
 // Import managers
 import {
@@ -158,6 +159,10 @@ export class FarmingGame extends Scene {
     private wellManager!: WellManager;
     private plantDetailManager!: PlantDetailManager;
 
+    // ========== SOCKET & REAL-TIME ==========
+    private socketService!: SocketService;
+    private plantUpdateHandler!: PlantUpdateHandler;
+
     // Global game state (single source of truth)
     private gameState!: GameStateHook;
 
@@ -290,6 +295,9 @@ export class FarmingGame extends Scene {
 
         // Start playing theme music
         this.soundManager.playRandomTheme();
+
+        // Initialize WebSocket connection for real-time updates
+        this.initializeSocketConnection();
 
         EventBus.emit('current-scene-ready', this);
     }
@@ -435,6 +443,190 @@ export class FarmingGame extends Scene {
                 // Find tile by landId and remove plant
                 this.removePlantByLandId(landId);
             }
+        });
+    }
+
+    /**
+     * Initialize WebSocket connection and plant update handler
+     */
+    private initializeSocketConnection(): void {
+        // Get socket service singleton
+        this.socketService = getSocketService();
+
+        // Initialize plant update handler with callbacks
+        this.plantUpdateHandler = new PlantUpdateHandler(this, {
+            getFarmLandStates: () => this.farmLandStates,
+            showPlant: (x: number, y: number, plantType: PlantType, stage: number, isDead: boolean, isWilted: boolean) => {
+                this.showPlant(x, y, plantType, stage, isDead, isWilted);
+            },
+            updateHealthBar: (tileKey: string, hoursToDeath: number, maxHours: number = 72) => {
+                this.updateHealthBarFromSocket(tileKey, hoursToDeath, maxHours);
+            },
+            showWaterSplashEffect: (x: number, y: number) => {
+                this.showWaterSplashEffect(x, y);
+            },
+            showGrowthEffect: (x: number, y: number) => {
+                this.showGrowthEffect(x, y);
+            },
+            showWitherEffect: (x: number, y: number) => {
+                this.showWitherEffect(x, y);
+            },
+            showToastMessage: (text: string, color: number) => {
+                this.showToastMessage(text, color);
+            },
+        });
+
+        // Start listening for plant updates
+        this.plantUpdateHandler.startListening();
+
+        // Connect to socket server
+        this.socketService.connect();
+
+        // Listen for socket connection events
+        EventBus.on('socket:connected', this.onSocketConnected, this);
+        EventBus.on('socket:disconnected', this.onSocketDisconnected, this);
+
+        console.log('[FarmingGame] Socket connection initialized');
+    }
+
+    /**
+     * Handle socket connected event
+     */
+    private onSocketConnected(): void {
+        console.log('[FarmingGame] Socket connected - real-time updates enabled');
+        // Debug: Log connection state
+        this.socketService.debugConnectionState();
+        this.showToastMessage('🔗 Connected', 0x4ade80);
+    }
+
+    /**
+     * Handle socket disconnected event
+     */
+    private onSocketDisconnected(reason: string): void {
+        console.log('[FarmingGame] Socket disconnected:', reason);
+        // Don't show toast for intentional disconnects
+        if (reason !== 'io client disconnect') {
+            this.showToastMessage('⚠️ Connection lost', 0xfbbf24);
+        }
+    }
+
+    /**
+     * Update health bar from socket data
+     */
+    private updateHealthBarFromSocket(tileKey: string, hoursToDeath: number, maxHours: number = 72): void {
+        const state = this.farmLandStates.get(tileKey);
+        if (!state?.healthBarFill) return;
+
+        const healthPercent = Math.min(hoursToDeath / maxHours, 1);
+        const maxWidth = 11; // barWidth(12) - 1
+        state.healthBarFill.width = Math.max(maxWidth * healthPercent, 1);
+
+        // Color gradient: green -> yellow -> red
+        if (healthPercent > 0.6) {
+            state.healthBarFill.setFillStyle(0x4ade80); // Green
+        } else if (healthPercent > 0.3) {
+            state.healthBarFill.setFillStyle(0xfbbf24); // Yellow/Orange
+        } else {
+            state.healthBarFill.setFillStyle(0xef4444); // Red
+        }
+    }
+
+    /**
+     * Show water splash effect on a tile
+     */
+    private showWaterSplashEffect(tileX: number, tileY: number): void {
+        const worldX = tileX * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const worldY = tileY * this.TILE_SIZE + this.TILE_SIZE / 2;
+
+        // Create water droplets
+        for (let i = 0; i < 5; i++) {
+            const droplet = this.add.circle(
+                worldX + Phaser.Math.Between(-6, 6),
+                worldY - 8,
+                2,
+                0x2196F3,
+                0.8
+            );
+            droplet.setDepth(5000);
+            this.uiCamera.ignore(droplet);
+
+            this.tweens.add({
+                targets: droplet,
+                y: worldY + 4,
+                alpha: 0,
+                scale: 0.5,
+                duration: 400,
+                delay: i * 50,
+                ease: 'Quad.easeOut',
+                onComplete: () => droplet.destroy()
+            });
+        }
+
+        // Play water sound
+        this.soundManager.playWaterSound?.();
+    }
+
+    /**
+     * Show growth/level up effect on a tile
+     */
+    private showGrowthEffect(tileX: number, tileY: number): void {
+        const worldX = tileX * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const worldY = tileY * this.TILE_SIZE + this.TILE_SIZE / 2;
+
+        // Create sparkle particles
+        const colors = [0x4ade80, 0xfbbf24, 0x60a5fa];
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const sparkle = this.add.circle(
+                worldX,
+                worldY,
+                2,
+                colors[i % colors.length],
+                1
+            );
+            sparkle.setDepth(5000);
+            this.uiCamera.ignore(sparkle);
+
+            this.tweens.add({
+                targets: sparkle,
+                x: worldX + Math.cos(angle) * 12,
+                y: worldY + Math.sin(angle) * 12,
+                alpha: 0,
+                scale: 0,
+                duration: 500,
+                ease: 'Quad.easeOut',
+                onComplete: () => sparkle.destroy()
+            });
+        }
+
+        // Play success sound
+        this.soundManager.playSuccessSound();
+    }
+
+    /**
+     * Show wither warning effect on a tile
+     */
+    private showWitherEffect(tileX: number, tileY: number): void {
+        const worldX = tileX * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const worldY = tileY * this.TILE_SIZE - 4;
+
+        // Create warning icon
+        const warning = this.add.text(worldX, worldY, '⚠️', {
+            fontSize: '12px',
+        });
+        warning.setOrigin(0.5);
+        warning.setDepth(5000);
+        this.uiCamera.ignore(warning);
+
+        // Pulse and fade animation
+        this.tweens.add({
+            targets: warning,
+            y: worldY - 8,
+            alpha: 0,
+            scale: 1.5,
+            duration: 1000,
+            ease: 'Quad.easeOut',
+            onComplete: () => warning.destroy()
         });
     }
 
@@ -2631,20 +2823,47 @@ export class FarmingGame extends Scene {
 
         const cropDef = CROP_DEFINITIONS[cropType];
         let imageKey: string;
+        let stageDescription: string;
 
         if (isDead) {
             imageKey = cropDef.deathImage;
-        } else if (stage === PLANT_STAGES.DIGGING || stage === PLANT_STAGES.SEED) {
-            imageKey = cropDef.seedImage; // Digging/Seed stage
+            stageDescription = 'DEAD';
         } else if (stage === PLANT_STAGES.MATURE) {
             imageKey = cropDef.fruitImage; // Ready to harvest (mature stage)
-        } else if (stage >= PLANT_STAGES.SPROUT && stage <= PLANT_STAGES.BLOOM) {
-            // Stages SPROUT(2), GROWING(3), BLOOM(4) map to growthImages[0-4]
-            const imageIndex = Math.min(stage - PLANT_STAGES.SPROUT, cropDef.growthImages.length - 1);
+            stageDescription = 'MATURE (5)';
+        } else if (stage >= PLANT_STAGES.DIGGING && stage <= PLANT_STAGES.BLOOM) {
+            // DIGGING(0), SEED(1), SPROUT(2) -> plant-1
+            // GROWING(3) -> plant-2
+            // BLOOM(4) -> plant-3
+            let imageIndex: number;
+            if (stage <= PLANT_STAGES.SPROUT) {
+                // DIGGING, SEED, SPROUT all use plant-1
+                imageIndex = 0;
+            } else {
+                // GROWING(3) -> index 1 (plant-2), BLOOM(4) -> index 2 (plant-3)
+                imageIndex = stage - PLANT_STAGES.SPROUT;
+            }
+            imageIndex = Math.min(imageIndex, cropDef.growthImages.length - 1);
             imageKey = cropDef.growthImages[imageIndex];
+            
+            const stageNames: Record<number, string> = {
+                [PLANT_STAGES.DIGGING]: 'DIGGING (0)',
+                [PLANT_STAGES.SEED]: 'SEED (1)',
+                [PLANT_STAGES.SPROUT]: 'SPROUT (2)',
+                [PLANT_STAGES.GROWING]: 'GROWING (3)',
+                [PLANT_STAGES.BLOOM]: 'BLOOM (4)',
+            };
+            stageDescription = stageNames[stage] || `STAGE ${stage}`;
         } else {
             imageKey = cropDef.growthImages[cropDef.growthImages.length - 1];
+            stageDescription = `UNKNOWN (${stage})`;
         }
+
+        // DEBUG: Log stage to image mapping
+        console.log(`🌱 [showPlant] ${cropType.toUpperCase()} at (${x},${y})`);
+        console.log(`   Stage: ${stageDescription}`);
+        console.log(`   Image: ${imageKey}`);
+        console.log(`   isDead: ${isDead}, isWilted: ${isWilted}`);
 
         // Plant size (scale down from 157x153 to fit tile)
         const plantSize = 16;
@@ -2970,6 +3189,16 @@ export class FarmingGame extends Scene {
     }
 
     shutdown() {
+        // Cleanup socket connection and event listeners
+        if (this.plantUpdateHandler) {
+            this.plantUpdateHandler.destroy();
+        }
+        if (this.socketService) {
+            this.socketService.disconnect();
+        }
+        EventBus.off('socket:connected', this.onSocketConnected, this);
+        EventBus.off('socket:disconnected', this.onSocketDisconnected, this);
+
         EventBus.off('wallet-connected', this.onWalletConnected, this);
         this.scale.off('resize', this.onResize, this);
     }
