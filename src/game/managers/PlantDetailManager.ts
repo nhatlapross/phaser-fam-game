@@ -146,6 +146,10 @@ export class PlantDetailManager extends BaseManager {
     /**
      * Get current stage image key
      * Stages: DIGGING(0), SEED(1), SPROUT(2), GROWING(3), BLOOM(4), MATURE(5)
+     * DIGGING, SEED, SPROUT -> plant-1
+     * GROWING -> plant-2
+     * BLOOM -> plant-3
+     * MATURE -> fruit
      */
     private getPlantImageKey(cropType: PlantType, stage: number, isDead: boolean): string {
         const cropDef = CROP_DEFINITIONS[cropType];
@@ -154,13 +158,20 @@ export class PlantDetailManager extends BaseManager {
             return cropDef.deathImage;
         } else if (stage === PLANT_STAGES.MATURE) {
             return cropDef.fruitImage;
-        } else if (stage === PLANT_STAGES.DIGGING || stage === PLANT_STAGES.SEED) {
-            return cropDef.seedImage;
-        } else {
-            // SPROUT(2), GROWING(3), BLOOM(4) map to growthImages[0-4]
-            // stage 2 -> index 0, stage 3 -> index 1, stage 4 -> index 2
-            const imageIndex = Math.min(stage - 2, cropDef.growthImages.length - 1);
+        } else if (stage >= PLANT_STAGES.DIGGING && stage <= PLANT_STAGES.BLOOM) {
+            // DIGGING(0), SEED(1), SPROUT(2) -> plant-1 (index 0)
+            // GROWING(3) -> plant-2 (index 1)
+            // BLOOM(4) -> plant-3 (index 2)
+            let imageIndex: number;
+            if (stage <= PLANT_STAGES.SPROUT) {
+                imageIndex = 0;
+            } else {
+                imageIndex = stage - PLANT_STAGES.SPROUT;
+            }
+            imageIndex = Math.min(imageIndex, cropDef.growthImages.length - 1);
             return cropDef.growthImages[imageIndex] || cropDef.growthImages[0];
+        } else {
+            return cropDef.growthImages[0];
         }
     }
 
