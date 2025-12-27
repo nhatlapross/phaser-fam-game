@@ -464,8 +464,9 @@ export class WellManager extends BaseManager {
         // === OPTIMISTIC UPDATE: Update UI immediately ===
         const optimisticAmount = 1; // Default water amount
 
-        // 1. Show success immediately - update GLOBAL STATE
+        // 1. Show success immediately - update GLOBAL STATE and toolbar
         gameState.addWater(optimisticAmount);
+        this.callbacks.addWater(optimisticAmount); // Also update toolbar data
         this.callbacks.playSuccessSound();
         this.showClaimReward(`+${optimisticAmount} Water!`);
 
@@ -493,6 +494,7 @@ export class WellManager extends BaseManager {
                 if (actualAmount !== optimisticAmount) {
                     const diff = actualAmount - optimisticAmount;
                     gameState.addWater(diff);
+                    this.callbacks.addWater(diff); // Also update toolbar data
                 }
 
                 // Update with actual next claim time
@@ -502,6 +504,7 @@ export class WellManager extends BaseManager {
             } else {
                 // === ROLLBACK on failure ===
                 gameState.addWater(-optimisticAmount); // Remove added water
+                this.callbacks.addWater(-optimisticAmount); // Also rollback toolbar data
 
                 // Show error
                 const errorMsg = result?.message || 'Failed! Please try again';
@@ -526,6 +529,7 @@ export class WellManager extends BaseManager {
         } catch (error) {
             // === ROLLBACK on network error ===
             gameState.addWater(-optimisticAmount);
+            this.callbacks.addWater(-optimisticAmount); // Also rollback toolbar data
             this.showClaimReward('Network error! Try again');
 
             statusText.setText('💧 Water Ready!');
