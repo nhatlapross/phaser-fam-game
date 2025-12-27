@@ -109,29 +109,55 @@ export class CheckinManager extends BaseManager {
             ease: 'Back.easeOut'
         });
 
-        // Use cached data if available, otherwise fetch from API
-        let streakStatus: StreakStatusResponse | null;
-        let streakHistory: StreakHistoryResponse | null;
+        // Close on overlay click
+        overlay.on('pointerdown', () => this.close());
 
+        // Use cached data - show immediately if available
         if (this.cachedStreakStatus || this.cachedStreakHistory) {
-            streakStatus = this.cachedStreakStatus;
-            streakHistory = this.cachedStreakHistory;
             console.log('CheckinManager: Using cached streak data');
+            this.scene.time.delayedCall(100, () => {
+                this.createModalContent(modalX, modalY, modalWidth, modalHeight, this.cachedStreakStatus, this.cachedStreakHistory);
+            });
         } else {
-            console.log('CheckinManager: Fetching streak data from API');
-            [streakStatus, streakHistory] = await Promise.all([
+            // Show loading state immediately, then fetch data
+            console.log('CheckinManager: No cache, showing loading then fetching');
+            const loadingText = this.scene.add.text(modalX, modalY, 'Loading...', {
+                fontSize: '12px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            loadingText.setOrigin(0.5);
+            loadingText.setDepth(5302);
+            loadingText.setAlpha(0);
+            this.scene.cameras.main.ignore(loadingText);
+            this.addElement(loadingText);
+
+            this.scene.tweens.add({
+                targets: loadingText,
+                alpha: 1,
+                duration: 150,
+                delay: 100
+            });
+
+            // Fetch data in background
+            const [streakStatus, streakHistory] = await Promise.all([
                 StreakService.getStatus(),
                 StreakService.getHistory(7)
             ]);
+
+            // Cache the fetched data
+            this.cachedStreakStatus = streakStatus;
+            this.cachedStreakHistory = streakHistory;
+
+            // Remove loading text and show content
+            loadingText.destroy();
+            this.elements = this.elements.filter(el => el !== loadingText);
+            
+            if (this.isOpen) { // Guard: check if modal is still open
+                this.createModalContent(modalX, modalY, modalWidth, modalHeight, streakStatus, streakHistory);
+            }
         }
-
-        // Title and content
-        this.scene.time.delayedCall(100, () => {
-            this.createModalContent(modalX, modalY, modalWidth, modalHeight, streakStatus, streakHistory);
-        });
-
-        // Close on overlay click
-        overlay.on('pointerdown', () => this.close());
     }
 
     /**
@@ -345,25 +371,7 @@ export class CheckinManager extends BaseManager {
 
             // Checkmark overlay for checked days
             if (isChecked) {
-                const checkmark = this.scene.add.text(dayX, dayY, '✓', {
-                    fontSize: '20px',
-                    fontFamily: 'PixelFont',
-                    color: '#FFFFFF',
-                    resolution: 2
-                });
-                checkmark.setOrigin(0.5);
-                checkmark.setDepth(5304);
-                checkmark.setStroke('#2d5a2d', 3);
-                checkmark.setAlpha(0);
-                this.scene.cameras.main.ignore(checkmark);
-                this.addElement(checkmark);
-
-                this.scene.tweens.add({
-                    targets: checkmark,
-                    alpha: 1,
-                    duration: 150,
-                    delay: index * 30
-                });
+                this.createCheckmark(dayX, dayY, index * 30);
             }
 
             // Fade in
@@ -508,6 +516,7 @@ export class CheckinManager extends BaseManager {
                     currentStreak: number;
                     rewards: { gold: number; ruby: number; items: string[] };
                     message: string;
+                    nextCheckinAt: string;
                 };
 
                 // Update local data
@@ -538,9 +547,32 @@ export class CheckinManager extends BaseManager {
 
                 this.showCheckinReward(rewardParts.length > 0 ? rewardParts.join(', ') + '!' : 'Check-in successful!', 0x4ade80);
 
-                // Update button to show success
-                btn.setTint(0x4ade80);
-                btnText.setText('✓ Done');
+                // Update button to show "Come back in..." message
+                btn.disableInteractive();
+                btn.setTint(0x888888);
+                
+                // Calculate countdown for next check-in
+                const nextCheckinDate = new Date(successResult.nextCheckinAt);
+                const now = new Date();
+                const diffMs = nextCheckinDate.getTime() - now.getTime();
+                
+                let countdownText = 'Come back tomorrow!';
+                if (diffMs > 0) {
+                    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                    if (hours > 0) {
+                        countdownText = `Come back in ${hours}h ${mins}m`;
+                    } else {
+                        countdownText = `Come back in ${mins}m`;
+                    }
+                }
+                btnText.setText(countdownText);
+                btnText.setColor('#FFA726');
+
+                // Find and update the day box that was just checked in
+                // The day box is at index (streakDay - 1) in the elements array
+                // We need to add a checkmark to the corresponding day box
+                this.addCheckmarkToDayBox(streakDay);
 
                 // Also refresh data from API (runs in background, will sync with actual values)
                 GameDataService.refreshAndUpdateUI();
@@ -559,6 +591,87 @@ export class CheckinManager extends BaseManager {
             btn.setInteractive({ useHandCursor: true });
             btnText.setText(`Check In Day ${streakDay}`);
         }
+    }
+
+    /**
+     * Create a checkmark at the specified position
+     */
+    private createCheckmark(x: number, y: number, delay: number = 0, animate: boolean = true): Phaser.GameObjects.Text {
+        const checkmark = this.scene.add.text(x, y, '✓', {
+            fontSize: '20px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        checkmark.setOrigin(0.5);
+        checkmark.setDepth(5304);
+        checkmark.setStroke('#2d5a2d', 3);
+        this.scene.cameras.main.ignore(checkmark);
+        this.addElement(checkmark);
+
+        if (animate) {
+            if (delay > 0) {
+                checkmark.setAlpha(0);
+                this.scene.tweens.add({
+                    targets: checkmark,
+                    alpha: 1,
+                    duration: 150,
+                    delay: delay
+                });
+            } else {
+                // Immediate bounce animation for check-in action
+                checkmark.setScale(0.5);
+                this.scene.tweens.add({
+                    targets: checkmark,
+                    scale: 1,
+                    duration: 200,
+                    ease: 'Back.easeOut'
+                });
+            }
+        }
+
+        return checkmark;
+    }
+
+    /**
+     * Add checkmark to a specific day box after successful check-in
+     */
+    private addCheckmarkToDayBox(streakDay: number): void {
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+        
+        const dayBoxSize = 36;
+        const daySpacing = 6;
+        const totalWidth = 7 * dayBoxSize + 6 * daySpacing;
+        const startX = modalX - totalWidth / 2 + dayBoxSize / 2;
+        const dayY = modalY - 5;
+        
+        const dayIndex = streakDay - 1;
+        const dayX = startX + dayIndex * (dayBoxSize + daySpacing) + 10;
+
+        // Find and update the day box tint
+        this.elements.forEach(element => {
+            if (element instanceof Phaser.GameObjects.Sprite && 
+                Math.abs(element.x - dayX) < 5 && 
+                Math.abs(element.y - dayY) < 5) {
+                element.setTint(0x4ade80);
+                element.disableInteractive();
+            }
+        });
+
+        // Add checkmark with bounce animation
+        this.createCheckmark(dayX, dayY, 0, true);
+
+        // Update quantity text color to white
+        this.elements.forEach(element => {
+            if (element instanceof Phaser.GameObjects.Text && 
+                Math.abs(element.x - dayX) < 5 && 
+                Math.abs(element.y - (dayY + 18)) < 5) {
+                element.setColor('#FFFFFF');
+            }
+        });
     }
 
     private async performCheckin(
