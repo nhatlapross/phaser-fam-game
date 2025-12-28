@@ -86,6 +86,22 @@ export class Preloader extends Scene
 
         this.load.image('tilled-dirt-tileset', 'tilesets/tilled-dirt.png');
         this.load.image('hills-tileset', 'tilesets/hills.png');
+        // Square tileset (176x112, 11 cols x 7 rows of 16x16 tiles)
+        this.load.spritesheet('square-tileset', 'tilesets/square.png', {
+            frameWidth: 16,
+            frameHeight: 16
+        });
+
+        // Fountain spritesheet (5 frames animation, 334x118 total, each frame 67x118)
+        this.load.spritesheet('fountain', 'objects/square/fountain.png', {
+            frameWidth: 67,
+            frameHeight: 118
+        });
+
+        // Town Square decorations (76x94 each)
+        this.load.image('square-chair', 'objects/square/chair.png');
+        this.load.image('square-lamp', 'objects/square/lamp.png');
+        this.load.image('square-tree', 'objects/square/tree.png');
 
         // Objects
         this.load.spritesheet('plants-sheet', 'objects/plants.png', {
@@ -155,13 +171,12 @@ export class Preloader extends Scene
         this.load.image('tree-plant-death', 'objects/plant/social_plant/Social_plant_death.png');
         this.load.image('tree-fruit', 'objects/plant/social_plant/social-fruit.png');
 
-        // Algae Plant
+        // Algae Plant (3 stages spritesheet: 144x54, 3 frames of 48x54)
         this.load.image('algae-seed', 'objects/plant/technical_plant/Technical_Seed.png');
-        this.load.image('algae-plant-1', 'objects/plant/technical_plant/Technical_plant_1.png');
-        this.load.image('algae-plant-2', 'objects/plant/technical_plant/Technical_plant_2.png');
-        this.load.image('algae-plant-3', 'objects/plant/technical_plant/Technical_plant_3.png');
-        this.load.image('algae-plant-4', 'objects/plant/technical_plant/Technical_plant_4.png');
-        this.load.image('algae-plant-5', 'objects/plant/technical_plant/Technical_plant_5.png');
+        this.load.spritesheet('algae-spritesheet', 'objects/plant/aligant/Algae.png', {
+            frameWidth: 48,
+            frameHeight: 54
+        });
         this.load.image('algae-plant-death', 'objects/plant/technical_plant/Technical_plant_death.png');
         this.load.image('algae-fruit', 'objects/plant/technical_plant/technical-fruit.png');
 
@@ -175,13 +190,12 @@ export class Preloader extends Scene
         this.load.image('branded-plant-death', 'objects/plant/branded_plant/Branded_plant_death.png');
         this.load.image('branded-fruit', 'objects/plant/branded_plant/branded-fruit.png');
 
-        // Mushroom Plant
+        // Mushroom Plant (3 stages spritesheet: 144x48, 3 frames of 48x48)
         this.load.image('mushroom-seed', 'objects/plant/mushroom/mush_seed.png');
-        this.load.image('mushroom-plant-1', 'objects/plant/mushroom/mush_plant_1.png');
-        this.load.image('mushroom-plant-2', 'objects/plant/mushroom/mush_plant_2.png');
-        this.load.image('mushroom-plant-3', 'objects/plant/mushroom/mush_plant_3.png');
-        this.load.image('mushroom-plant-4', 'objects/plant/mushroom/mush_plant_4.png');
-        this.load.image('mushroom-plant-5', 'objects/plant/mushroom/mush_plant_5.png');
+        this.load.spritesheet('mushroom-spritesheet', 'objects/plant/mush-room/mush-room.png', {
+            frameWidth: 48,
+            frameHeight: 48
+        });
         this.load.image('mushroom-plant-death', 'objects/plant/mushroom/mush_plant_death.png');
         this.load.image('mushroom-fruit', 'objects/plant/mushroom/mush-fruit.png');
 
@@ -229,6 +243,17 @@ export class Preloader extends Scene
             frameWidth: 45,
             frameHeight: 55
         });
+
+        // Station/Dock spritesheet (4 frames for animation)
+        this.load.spritesheet('station', 'objects/station/station.png', {
+            frameWidth: 121,
+            frameHeight: 92
+        });
+
+        // Place backgrounds for station travel modal
+        this.load.image('place-farm', 'places/farm.png');
+        this.load.image('place-townsquare', 'places/townSquare.png');
+        this.load.image('place-forest', 'places/forest.png');
 
         // ========== Audio Assets ==========
         // Reset path for audio files (they are in public/sound, not assets/sound)

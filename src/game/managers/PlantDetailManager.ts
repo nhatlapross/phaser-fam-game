@@ -144,34 +144,61 @@ export class PlantDetailManager extends BaseManager {
     }
 
     /**
-     * Get current stage image key
-     * Stages: DIGGING(0), SEED(1), SPROUT(2), GROWING(3), BLOOM(4), MATURE(5)
-     * DIGGING, SEED, SPROUT -> plant-1
-     * GROWING -> plant-2
-     * BLOOM -> plant-3
-     * MATURE -> fruit
+     * Get current stage image key and frame index
+     * Returns { key, frame } where frame is undefined for individual images
+     *
+     * For 3-stage plants (algae, mushroom):
+     * DIGGING(0), SEED(1) -> frame 0
+     * SPROUT(2), GROWING(3) -> frame 1
+     * BLOOM(4) -> frame 2
+     * MATURE(5) -> fruit image
+     *
+     * For 5-stage plants (tree):
+     * DIGGING(0), SEED(1), SPROUT(2) -> plant-1
+     * GROWING(3) -> plant-2
+     * BLOOM(4) -> plant-3, etc.
+     * MATURE(5) -> fruit image
      */
-    private getPlantImageKey(cropType: PlantType, stage: number, isDead: boolean): string {
+    private getPlantImageKey(cropType: PlantType, stage: number, isDead: boolean): { key: string; frame?: number } {
         const cropDef = CROP_DEFINITIONS[cropType];
 
         if (isDead) {
-            return cropDef.deathImage;
+            return { key: cropDef.deathImage };
         } else if (stage === PLANT_STAGES.MATURE) {
-            return cropDef.fruitImage;
+            return { key: cropDef.fruitImage };
         } else if (stage >= PLANT_STAGES.DIGGING && stage <= PLANT_STAGES.BLOOM) {
-            // DIGGING(0), SEED(1), SPROUT(2) -> plant-1 (index 0)
-            // GROWING(3) -> plant-2 (index 1)
-            // BLOOM(4) -> plant-3 (index 2)
-            let imageIndex: number;
-            if (stage <= PLANT_STAGES.SPROUT) {
-                imageIndex = 0;
+            // Check if plant uses spritesheet (3 stages) or individual images (5 stages)
+            if (cropDef.spritesheet && cropDef.stageCount === 3) {
+                // 3-stage plants (algae, mushroom)
+                // DIGGING(0), SEED(1) -> frame 0
+                // SPROUT(2), GROWING(3) -> frame 1
+                // BLOOM(4) -> frame 2
+                let frameIndex: number;
+                if (stage <= PLANT_STAGES.SEED) {
+                    frameIndex = 0;
+                } else if (stage <= PLANT_STAGES.GROWING) {
+                    frameIndex = 1;
+                } else {
+                    frameIndex = 2;
+                }
+                return { key: cropDef.spritesheet, frame: frameIndex };
             } else {
-                imageIndex = stage - PLANT_STAGES.SPROUT;
+                // 5-stage plants (tree)
+                let imageIndex: number;
+                if (stage <= PLANT_STAGES.SPROUT) {
+                    imageIndex = 0;
+                } else {
+                    imageIndex = stage - PLANT_STAGES.SPROUT;
+                }
+                imageIndex = Math.min(imageIndex, cropDef.growthImages.length - 1);
+                return { key: cropDef.growthImages[imageIndex] || cropDef.growthImages[0] };
             }
-            imageIndex = Math.min(imageIndex, cropDef.growthImages.length - 1);
-            return cropDef.growthImages[imageIndex] || cropDef.growthImages[0];
         } else {
-            return cropDef.growthImages[0];
+            // Fallback for unknown stages
+            if (cropDef.spritesheet && cropDef.stageCount === 3) {
+                return { key: cropDef.spritesheet, frame: 2 };
+            }
+            return { key: cropDef.growthImages[0] };
         }
     }
 
@@ -190,7 +217,46 @@ export class PlantDetailManager extends BaseManager {
         const stage = tileState.plantStage;
         const cropDef = CROP_DEFINITIONS[cropType];
         const plantName = cropDef.name; // 'Algae', 'Mushroom', 'Tree'
-        const stageName = STAGE_NAMES[stage] || 'Unknown';
+
+        // Map API stage to visual stage based on plant type
+        // Algae/Mushroom: 3 visual stages, Tree: 5 visual stages
+        let visualStage: number;
+        let totalVisualStages: number;
+        let stageName: string;
+
+        if (cropDef.stageCount === 3) {
+            // 3-stage plants (algae, mushroom)
+            // DIGGING(0), SEED(1) → visual 1
+            // SPROUT(2), GROWING(3) → visual 2
+            // BLOOM(4) → visual 3
+            // MATURE(5) → Harvest
+            totalVisualStages = 3;
+            if (stage === PLANT_STAGES.MATURE) {
+                visualStage = 3;
+                stageName = 'Harvest';
+            } else if (stage <= PLANT_STAGES.SEED) {
+                visualStage = 1;
+                stageName = 'Seedling';
+            } else if (stage <= PLANT_STAGES.GROWING) {
+                visualStage = 2;
+                stageName = 'Growing';
+            } else {
+                visualStage = 3;
+                stageName = 'Mature';
+            }
+        } else {
+            // 5-stage plants (tree)
+            totalVisualStages = 5;
+            stageName = STAGE_NAMES[stage] || 'Unknown';
+            if (stage === PLANT_STAGES.MATURE) {
+                visualStage = 5;
+                stageName = 'Harvest';
+            } else if (stage <= PLANT_STAGES.SPROUT) {
+                visualStage = 1;
+            } else {
+                visualStage = Math.min(stage - 1, 5); // GROWING(3)->2, BLOOM(4)->3
+            }
+        }
 
         // Close button
         const closeBtnX = modalX + modalWidth / 2 - 30;
@@ -233,8 +299,10 @@ export class PlantDetailManager extends BaseManager {
         this.addElement(title);
 
         // Plant image - current stage
-        const plantImageKey = this.getPlantImageKey(cropType, stage, tileState.isDead || false);
-        const plantImage = this.scene.add.image(modalX, modalTop + 85, plantImageKey);
+        const plantImageData = this.getPlantImageKey(cropType, stage, tileState.isDead || false);
+        const plantImage = plantImageData.frame !== undefined
+            ? this.scene.add.image(modalX, modalTop + 85, plantImageData.key, plantImageData.frame)
+            : this.scene.add.image(modalX, modalTop + 85, plantImageData.key);
         plantImage.setDisplaySize(64, 64);
         plantImage.setDepth(5302);
         this.scene.cameras.main.ignore(plantImage);
@@ -245,8 +313,8 @@ export class PlantDetailManager extends BaseManager {
             plantImage.setTint(0xccaa66);
         }
 
-        // Stage name below image (display as 1-indexed: stage+1 out of 6)
-        const stageText = this.scene.add.text(modalX, modalTop + 125, `Stage: ${stageName} (${stage + 1}/6)`, {
+        // Stage name below image (display visual stage out of total visual stages)
+        const stageText = this.scene.add.text(modalX, modalTop + 125, `Stage: ${stageName} (${visualStage}/${totalVisualStages})`, {
             fontSize: '11px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',

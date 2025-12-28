@@ -113,9 +113,12 @@ export interface TileState {
 export interface CropDefinition {
     name: string;
     seedImage: string;
-    growthImages: string[]; // 5 stages
+    growthImages: string[]; // For tree: 5 individual images. For algae/mushroom: ignored (use spritesheet)
     fruitImage: string;
     deathImage: string;
+    // For spritesheet-based plants (algae, mushroom)
+    spritesheet?: string; // Spritesheet key (e.g., 'algae-spritesheet')
+    stageCount: number; // Number of growth stages: 3 for algae/mushroom, 5 for tree
 }
 
 // Crop definitions for all plant types
@@ -123,23 +126,28 @@ export const CROP_DEFINITIONS: Record<PlantType, CropDefinition> = {
     algae: {
         name: 'Algae',
         seedImage: 'algae-seed',
-        growthImages: ['algae-plant-1', 'algae-plant-2', 'algae-plant-3', 'algae-plant-4', 'algae-plant-5'],
+        growthImages: [], // Uses spritesheet instead
         fruitImage: 'algae-fruit',
-        deathImage: 'algae-plant-death'
+        deathImage: 'algae-plant-death',
+        spritesheet: 'algae-spritesheet', // 3 frames: 0, 1, 2
+        stageCount: 3
     },
     mushroom: {
         name: 'Mushroom',
         seedImage: 'mushroom-seed',
-        growthImages: ['mushroom-plant-1', 'mushroom-plant-2', 'mushroom-plant-3', 'mushroom-plant-4', 'mushroom-plant-5'],
+        growthImages: [], // Uses spritesheet instead
         fruitImage: 'mushroom-fruit',
-        deathImage: 'mushroom-plant-death'
+        deathImage: 'mushroom-plant-death',
+        spritesheet: 'mushroom-spritesheet', // 3 frames: 0, 1, 2
+        stageCount: 3
     },
     tree: {
         name: 'Tree',
-        seedImage: 'tree-seed', // Placeholder: use technical seed sprite
+        seedImage: 'tree-seed',
         growthImages: ['tree-plant-1', 'tree-plant-2', 'tree-plant-3', 'tree-plant-4', 'tree-plant-5'],
         fruitImage: 'tree-fruit',
-        deathImage: 'tree-plant-death'
+        deathImage: 'tree-plant-death',
+        stageCount: 5
     }
 };
 

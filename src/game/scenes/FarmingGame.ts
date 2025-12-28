@@ -26,6 +26,8 @@ import {
     SoundManager,
     WellManager,
     PlantDetailManager,
+    StationManager,
+    NavigationData,
     // Import types from GameTypes
     PlantType,
     TileState,
@@ -46,6 +48,13 @@ export class FarmingGame extends Scene {
     private readonly TILE_SIZE = 16;
     private readonly MAP_WIDTH = 50;
     private readonly MAP_HEIGHT = 50;
+
+    // Station position (for spawn point when traveling)
+    private readonly STATION_X = 41.5;
+    private readonly STATION_Y = 24;
+
+    // Navigation data (from station travel)
+    private navigationData: NavigationData | null = null;
     private map!: Phaser.Tilemaps.Tilemap;
     private groundLayer!: Phaser.Tilemaps.TilemapLayer;
     private tilledDirtLayer!: Phaser.Tilemaps.TilemapLayer;
@@ -158,6 +167,7 @@ export class FarmingGame extends Scene {
     private soundManager!: SoundManager;
     private wellManager!: WellManager;
     private plantDetailManager!: PlantDetailManager;
+    private stationManager!: StationManager;
 
     // ========== SOCKET & REAL-TIME ==========
     private socketService!: SocketService;
@@ -168,6 +178,11 @@ export class FarmingGame extends Scene {
 
     constructor() {
         super('FarmingGame');
+    }
+
+    init(data?: NavigationData) {
+        // Store navigation data if coming from station travel
+        this.navigationData = data?.spawnAt ? data : null;
     }
 
     create() {
@@ -213,6 +228,9 @@ export class FarmingGame extends Scene {
 
         // Create well using manager
         this.wellManager.createWell();
+
+        // Create station/dock using manager
+        this.stationManager.create();
 
         // Create player
         this.createPlayer();
@@ -443,6 +461,20 @@ export class FarmingGame extends Scene {
                 // Find tile by landId and remove plant
                 this.removePlantByLandId(landId);
             }
+        });
+
+        // StationManager - Travel/Navigation
+        this.stationManager = new StationManager(this, {
+            onNavigate: (sceneKey, navData) => {
+                console.log(`Navigate to: ${sceneKey}`);
+                // Stop all sounds before scene transition
+                this.soundManager?.destroy();
+                // Navigate to the selected scene after a short delay, passing navigation data
+                this.time.delayedCall(500, () => {
+                    this.scene.start(sceneKey, navData);
+                });
+            },
+            showToastMessage: (text, color) => this.showToastMessage(text, color)
         });
     }
 
@@ -1849,9 +1881,19 @@ export class FarmingGame extends Scene {
     // Factory methods moved to FactoryManager
 
     private createPlayer() {
-        // Spawn player in the center of the rectangle (around row 25, col 25)
-        const spawnX = 25;
-        const spawnY = 25;
+        let spawnX: number;
+        let spawnY: number;
+
+        // Spawn at station if coming from travel, otherwise spawn at center
+        if (this.navigationData?.spawnAt === 'station') {
+            // Spawn near station (offset to the left so player doesn't overlap station)
+            spawnX = this.STATION_X - 5;
+            spawnY = this.STATION_Y;
+        } else {
+            // Default spawn at center of the rectangle (around row 25, col 25)
+            spawnX = 25;
+            spawnY = 25;
+        }
 
         // Create player sprite
         this.player = this.physics.add.sprite(
@@ -2014,7 +2056,7 @@ export class FarmingGame extends Scene {
             padding: { x: 10, y: 5 }
         });
         this.timeText.setDepth(5005);
-        this.cameras.main.ignore(this.timeText);
+        this.cameras.main?.ignore(this.timeText);
         this.updateTimeDisplay();
 
         // User Profile (top right)
@@ -2178,6 +2220,11 @@ export class FarmingGame extends Scene {
     }
 
     private showToastMessage(text: string, color: number = 0xFFFFFF) {
+        // Guard: scene may be destroyed during navigation
+        if (!this.cameras || !this.cameras.main) {
+            return;
+        }
+
         const screenWidth = this.scale.width;
         const screenHeight = this.scale.height;
 
@@ -2191,7 +2238,7 @@ export class FarmingGame extends Scene {
         msgText.setDepth(5600);
         msgText.setStroke('#000000', 2);
         msgText.setTint(color);
-        this.cameras.main.ignore(msgText);
+        this.cameras.main?.ignore(msgText);
 
         this.tweens.add({
             targets: msgText,
@@ -2232,7 +2279,7 @@ export class FarmingGame extends Scene {
         // Background bar (centered)
         const marqueeBg = this.add.rectangle(marqueeX, marqueeY, marqueeWidth, marqueeHeight, 0x000000, 0.7);
         marqueeBg.setDepth(5100);
-        this.cameras.main.ignore(marqueeBg);
+        this.cameras.main?.ignore(marqueeBg);
 
         // Create text (starts from right edge of the box)
         const startX = marqueeX + marqueeWidth / 2;
@@ -2244,7 +2291,7 @@ export class FarmingGame extends Scene {
         });
         this.marqueeText.setOrigin(0, 0.5);
         this.marqueeText.setDepth(5101);
-        this.cameras.main.ignore(this.marqueeText);
+        this.cameras.main?.ignore(this.marqueeText);
 
         // Create mask to hide text outside the box
         const maskShape = this.make.graphics({ x: 0, y: 0 });
@@ -2294,12 +2341,12 @@ export class FarmingGame extends Scene {
         this.joystickBase = this.add.circle(joystickX, joystickY, baseRadius, 0x888888, 0.3);
         this.joystickBase.setStrokeStyle(2, 0xffffff, 0.5);
         this.joystickBase.setDepth(5010);
-        this.cameras.main.ignore(this.joystickBase);
+        this.cameras.main?.ignore(this.joystickBase);
 
         // Joystick thumb
         this.joystickThumb = this.add.circle(joystickX, joystickY, thumbRadius, 0xffffff, 0.8);
         this.joystickThumb.setDepth(5011);
-        this.cameras.main.ignore(this.joystickThumb);
+        this.cameras.main?.ignore(this.joystickThumb);
 
         // Make joystick interactive
         this.joystickBase.setInteractive();
@@ -2349,7 +2396,7 @@ export class FarmingGame extends Scene {
         this.actionButton.setStrokeStyle(3, 0xffffff, 0.9);
         this.actionButton.setDepth(5010);
         this.actionButton.setInteractive();
-        this.cameras.main.ignore(this.actionButton);
+        this.cameras.main?.ignore(this.actionButton);
 
         // Action button text
         this.actionButtonText = this.add.text(
@@ -2360,7 +2407,7 @@ export class FarmingGame extends Scene {
         );
         this.actionButtonText.setOrigin(0.5);
         this.actionButtonText.setDepth(5011);
-        this.cameras.main.ignore(this.actionButtonText);
+        this.cameras.main?.ignore(this.actionButtonText);
 
         this.actionButton.on('pointerdown', () => {
             this.performAction();
@@ -2823,6 +2870,7 @@ export class FarmingGame extends Scene {
 
         const cropDef = CROP_DEFINITIONS[cropType];
         let imageKey: string;
+        let frameIndex: number | undefined; // For spritesheet-based plants
         let stageDescription: string;
 
         if (isDead) {
@@ -2832,20 +2880,35 @@ export class FarmingGame extends Scene {
             imageKey = cropDef.fruitImage; // Ready to harvest (mature stage)
             stageDescription = 'MATURE (5)';
         } else if (stage >= PLANT_STAGES.DIGGING && stage <= PLANT_STAGES.BLOOM) {
-            // DIGGING(0), SEED(1), SPROUT(2) -> plant-1
-            // GROWING(3) -> plant-2
-            // BLOOM(4) -> plant-3
-            let imageIndex: number;
-            if (stage <= PLANT_STAGES.SPROUT) {
-                // DIGGING, SEED, SPROUT all use plant-1
-                imageIndex = 0;
+            // Check if plant uses spritesheet (3 stages: algae, mushroom) or individual images (5 stages: tree)
+            if (cropDef.spritesheet && cropDef.stageCount === 3) {
+                // 3-stage plants (algae, mushroom): map 6 API stages to 3 frames
+                // DIGGING(0), SEED(1) -> frame 0
+                // SPROUT(2), GROWING(3) -> frame 1
+                // BLOOM(4) -> frame 2
+                imageKey = cropDef.spritesheet;
+                if (stage <= PLANT_STAGES.SEED) {
+                    frameIndex = 0;
+                } else if (stage <= PLANT_STAGES.GROWING) {
+                    frameIndex = 1;
+                } else {
+                    frameIndex = 2;
+                }
             } else {
-                // GROWING(3) -> index 1 (plant-2), BLOOM(4) -> index 2 (plant-3)
-                imageIndex = stage - PLANT_STAGES.SPROUT;
+                // 5-stage plants (tree): use individual images
+                // DIGGING(0), SEED(1), SPROUT(2) -> plant-1
+                // GROWING(3) -> plant-2
+                // BLOOM(4) -> plant-3, etc.
+                let imageIndex: number;
+                if (stage <= PLANT_STAGES.SPROUT) {
+                    imageIndex = 0;
+                } else {
+                    imageIndex = stage - PLANT_STAGES.SPROUT;
+                }
+                imageIndex = Math.min(imageIndex, cropDef.growthImages.length - 1);
+                imageKey = cropDef.growthImages[imageIndex];
             }
-            imageIndex = Math.min(imageIndex, cropDef.growthImages.length - 1);
-            imageKey = cropDef.growthImages[imageIndex];
-            
+
             const stageNames: Record<number, string> = {
                 [PLANT_STAGES.DIGGING]: 'DIGGING (0)',
                 [PLANT_STAGES.SEED]: 'SEED (1)',
@@ -2855,24 +2918,38 @@ export class FarmingGame extends Scene {
             };
             stageDescription = stageNames[stage] || `STAGE ${stage}`;
         } else {
-            imageKey = cropDef.growthImages[cropDef.growthImages.length - 1];
+            // Fallback for unknown stages
+            if (cropDef.spritesheet && cropDef.stageCount === 3) {
+                imageKey = cropDef.spritesheet;
+                frameIndex = 2; // Use last frame
+            } else {
+                imageKey = cropDef.growthImages[cropDef.growthImages.length - 1];
+            }
             stageDescription = `UNKNOWN (${stage})`;
         }
 
         // DEBUG: Log stage to image mapping
         console.log(`🌱 [showPlant] ${cropType.toUpperCase()} at (${x},${y})`);
         console.log(`   Stage: ${stageDescription}`);
-        console.log(`   Image: ${imageKey}`);
+        console.log(`   Image: ${imageKey}${frameIndex !== undefined ? ` frame ${frameIndex}` : ''}`);
         console.log(`   isDead: ${isDead}, isWilted: ${isWilted}`);
 
         // Plant size (scale down from 157x153 to fit tile)
         const plantSize = 16;
 
-        const plant = this.add.image(
-            x * this.TILE_SIZE + this.TILE_SIZE / 2,
-            y * this.TILE_SIZE + this.TILE_SIZE / 2,
-            imageKey
-        );
+        // Create plant image - use frame index for spritesheets
+        const plant = frameIndex !== undefined
+            ? this.add.image(
+                x * this.TILE_SIZE + this.TILE_SIZE / 2,
+                y * this.TILE_SIZE + this.TILE_SIZE / 2,
+                imageKey,
+                frameIndex
+            )
+            : this.add.image(
+                x * this.TILE_SIZE + this.TILE_SIZE / 2,
+                y * this.TILE_SIZE + this.TILE_SIZE / 2,
+                imageKey
+            );
         plant.setDisplaySize(plantSize, plantSize);
         plant.setOrigin(0.5, 0.5); // Center on tile
         plant.setDepth(y * this.TILE_SIZE + 5);

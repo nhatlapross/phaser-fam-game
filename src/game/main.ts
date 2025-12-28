@@ -8,6 +8,7 @@ import { HomeGarden } from './scenes/HomeGarden';
 import { EventCheckIn } from './scenes/EventCheckIn';
 import { Networking } from './scenes/Networking';
 import { FarmingGame } from './scenes/FarmingGame';
+import { TownSquare } from './scenes/TownSquare';
 import { TilesetDebug } from './scenes/TilesetDebug';
 import { Login } from './scenes/Login';
 import { GameLoader } from './scenes/GameLoader';
@@ -45,6 +46,7 @@ const config: Phaser.Types.Core.GameConfig = {
         GameLoader,
         TilesetDebug,
         FarmingGame,
+        TownSquare,
         HomeGarden,
         EventCheckIn,
         Networking,

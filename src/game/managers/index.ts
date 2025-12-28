@@ -12,6 +12,8 @@ export { SoundManager } from './SoundManager';
 export { WellManager } from './WellManager';
 export { PlantDetailManager } from './PlantDetailManager';
 export type { PlantDetailInfo } from './PlantDetailManager';
+export { StationManager } from './StationManager';
+export type { NavigationData } from './StationManager';
 
 // Re-export types
 export * from '../types/GameTypes';

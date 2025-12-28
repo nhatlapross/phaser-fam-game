@@ -1,0 +1,1210 @@
+import { Scene } from 'phaser';
+import { EventBus } from '../EventBus';
+import { TOWN_SQUARE_MAP_DATA, TOWN_SQUARE_MAP_WIDTH, TOWN_SQUARE_MAP_HEIGHT } from './TownSquareMapData';
+import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType } from '../managers';
+import { GameDataService } from '../GameDataService';
+
+/**
+ * Town Square Scene - A larger public space for social interactions
+ * Uses water tileset for borders and square tileset for stone floor
+ */
+export class TownSquare extends Scene {
+    private player!: Phaser.Physics.Arcade.Sprite;
+    private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+    private wasdKeys!: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
+
+    // World configuration
+    private readonly TILE_SIZE = 16;
+    private readonly MAP_WIDTH = TOWN_SQUARE_MAP_WIDTH;
+    private readonly MAP_HEIGHT = TOWN_SQUARE_MAP_HEIGHT;
+
+    // Station position (for spawn point)
+    private readonly STATION_X = 6.5;
+    private readonly STATION_Y = 30;
+
+    // Tilemap
+    private map!: Phaser.Tilemaps.Tilemap;
+    private groundLayer!: Phaser.Tilemaps.TilemapLayer;
+
+    // UI
+    private uiCamera!: Phaser.Cameras.Scene2D.Camera;
+
+    // Mobile controls
+    private joystickBase!: Phaser.GameObjects.Arc;
+    private joystickThumb!: Phaser.GameObjects.Arc;
+    private joystickActive: boolean = false;
+    private joystickPointer: Phaser.Input.Pointer | null = null;
+
+    // Station for travel (using StationManager)
+    private stationManager!: StationManager;
+
+    // Sound manager
+    private soundManager!: SoundManager;
+
+    // Profile manager
+    private profileManager!: ProfileManager;
+
+    // Toolbar manager
+    private toolbarManager!: ToolbarManager;
+    private selectedToolIndex: number = 0;
+
+    // Toolbar items (same as FarmingGame)
+    private toolbarItems: ToolbarItem[] = [
+        { type: 'tool', name: 'hand' },
+        { type: 'tool', name: 'wateringCan', count: 0 },
+        { type: 'seed', name: 'seed' },
+        { type: 'tool', name: 'fertilizer' },
+        { type: 'tool', name: 'digest' },
+        { type: 'tool', name: 'chest' },
+    ];
+
+    // Empty states for toolbar (not used in TownSquare)
+    private seedCounts: Record<PlantType, number> = { algae: 0, mushroom: 0, tree: 0 };
+    private fertilizerCounts: Record<'common' | 'rare' | 'epic' | 'legendary', number> = { common: 0, rare: 0, epic: 0, legendary: 0 };
+    private chestInventory: any[] = [];
+    private chestOpen: boolean = false;
+    private selectedSeedIndex: number = 0;
+    private selectedFertilizerIndex: number = 0;
+
+    // Clock UI
+    private timeText!: Phaser.GameObjects.Text;
+
+    // Marquee UI
+    private marqueeText!: Phaser.GameObjects.Text;
+
+    // Player name text (displayed above player in TownSquare)
+    private playerNameText!: Phaser.GameObjects.Text;
+
+    // Chat system
+    private chatButton!: Phaser.GameObjects.Container;
+    private chatModalOpen: boolean = false;
+    private chatModal!: Phaser.GameObjects.Container;
+    private chatHistory: string[] = [];
+    private speechBubble: Phaser.GameObjects.Container | null = null;
+    private chatInputElement: HTMLInputElement | null = null;
+    private chatHistoryText: Phaser.GameObjects.Text | null = null;
+
+    // Navigation data (from station travel)
+    private navigationData: NavigationData | null = null;
+
+    constructor() {
+        super('TownSquare');
+    }
+
+    init(data?: NavigationData) {
+        // Store navigation data if coming from station travel
+        this.navigationData = data?.spawnAt ? data : null;
+    }
+
+    create() {
+        // Initialize sound manager
+        this.soundManager = new SoundManager(this);
+
+        // Create water animation
+        this.createWaterAnimation();
+
+        // Create the map
+        this.createTownSquareMap();
+
+        // Create station using StationManager (with Square as current location)
+        this.stationManager = new StationManager(this, {
+            onNavigate: (sceneKey, navData) => {
+                console.log(`Navigate to: ${sceneKey}`);
+                // Stop all sounds before scene transition
+                this.soundManager?.destroy();
+                this.time.delayedCall(500, () => {
+                    this.scene.start(sceneKey, navData);
+                });
+            },
+            showToastMessage: (text, color) => this.showToastMessage(text, color)
+        }, {
+            x: this.STATION_X,   // Left side of square
+            y: this.STATION_Y,   // Middle height
+            flipX: true,         // Flip to face right
+            currentLocationId: 'square'  // Square is current location
+        });
+        this.stationManager.create();
+
+        // Create player
+        this.createPlayer();
+
+        // Setup main camera
+        this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+        this.cameras.main.setZoom(3);
+        this.cameras.main.setRoundPixels(true); // Prevent tile gaps
+
+        // Create UI camera
+        this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
+        this.uiCamera.setScroll(0, 0);
+        this.uiCamera.name = 'uiCamera';
+
+        // Create clock UI
+        this.createClockUI();
+
+        // Create profile manager
+        this.profileManager = new ProfileManager(this, {
+            onLogout: () => {
+                this.scene.start('Login', { fromLogout: true });
+            },
+            onWalletConnected: (_address) => { }
+        });
+        this.profileManager.createProfileUI();
+
+        // Create toolbar manager (simplified for TownSquare)
+        this.toolbarManager = new ToolbarManager(this, {
+            getToolbarItems: () => this.toolbarItems,
+            getSeedCounts: () => this.seedCounts,
+            getFertilizerCounts: () => this.fertilizerCounts,
+            getChestInventory: () => this.chestInventory,
+            getSelectedToolIndex: () => this.selectedToolIndex,
+            getSelectedSeedIndex: () => this.selectedSeedIndex,
+            getSelectedFertilizerIndex: () => this.selectedFertilizerIndex,
+            getChestOpen: () => this.chestOpen,
+            setSelectedToolIndex: (index) => { this.selectedToolIndex = index; },
+            setSelectedSeedIndex: (index) => { this.selectedSeedIndex = index; },
+            setSelectedFertilizerIndex: (index) => { this.selectedFertilizerIndex = index; },
+            setChestOpen: (open) => { this.chestOpen = open; },
+            onSeedOptionClicked: () => { },
+            showToastMessage: (text, color) => this.showToastMessage(text, color),
+            playSuccessSound: () => this.soundManager.playSuccessSound()
+        });
+
+        // Create marquee announcement
+        this.createMarquee();
+
+        // Create chat button
+        this.createChatButton();
+
+        // Setup controls
+        this.setupControls();
+
+        // Create mobile controls
+        this.createMobileControls();
+
+        // Setup camera ignore for UI elements
+        this.setupCameraIgnore();
+
+        // Handle resize
+        this.scale.on('resize', this.onResize, this);
+
+        // Play theme music
+        this.soundManager.playRandomTheme();
+
+        EventBus.emit('current-scene-ready', this);
+    }
+
+    private createWaterAnimation() {
+        if (!this.anims.exists('water-anim')) {
+            this.anims.create({
+                key: 'water-anim',
+                frames: this.anims.generateFrameNumbers('water-tileset', { start: 0, end: 3 }),
+                frameRate: 4,
+                repeat: -1
+            });
+        }
+    }
+
+    private createTownSquareMap() {
+        // Create water background for entire map
+        this.createWaterBackground();
+
+        // Create tilemap
+        this.map = this.make.tilemap({
+            tileWidth: this.TILE_SIZE,
+            tileHeight: this.TILE_SIZE,
+            width: this.MAP_WIDTH,
+            height: this.MAP_HEIGHT
+        });
+
+        // Add square tileset
+        const squareTiles = this.map.addTilesetImage('square', 'square-tileset');
+
+        if (!squareTiles) {
+            console.error('Failed to load square tileset');
+            return;
+        }
+
+        // Create ground layer
+        this.groundLayer = this.map.createBlankLayer('Ground', squareTiles) as Phaser.Tilemaps.TilemapLayer;
+
+        if (!this.groundLayer) {
+            console.error('Failed to create ground layer');
+            return;
+        }
+
+        this.groundLayer.setDepth(1);
+
+        // Apply tiles based on map data
+        for (let y = 0; y < this.MAP_HEIGHT; y++) {
+            for (let x = 0; x < this.MAP_WIDTH; x++) {
+                const tileValue = TOWN_SQUARE_MAP_DATA[y][x];
+
+                if (tileValue > 0) {
+                    // Use autotiling for stone floor
+                    const autoTileIndex = this.getAutoTileIndex(x, y);
+                    this.groundLayer.putTileAt(autoTileIndex, x, y);
+                }
+            }
+        }
+
+        // Add decorative elements
+        this.addDecorativeElements();
+    }
+
+    private createWaterBackground() {
+        for (let y = 0; y < this.MAP_HEIGHT; y++) {
+            for (let x = 0; x < this.MAP_WIDTH; x++) {
+                const water = this.add.sprite(
+                    x * this.TILE_SIZE + this.TILE_SIZE / 2,
+                    y * this.TILE_SIZE + this.TILE_SIZE / 2,
+                    'water-tileset',
+                    0
+                );
+                water.setOrigin(0.5);
+                water.setDepth(0);
+                water.play('water-anim');
+            }
+        }
+    }
+
+    private isLandTile(x: number, y: number): boolean {
+        if (x < 0 || x >= this.MAP_WIDTH || y < 0 || y >= this.MAP_HEIGHT) {
+            return false;
+        }
+        return TOWN_SQUARE_MAP_DATA[y][x] > 0;
+    }
+
+    private getAutoTileIndex(x: number, y: number): number {
+        const top = this.isLandTile(x, y - 1);
+        const bottom = this.isLandTile(x, y + 1);
+        const left = this.isLandTile(x - 1, y);
+        const right = this.isLandTile(x + 1, y);
+
+        // Square tileset layout (11 cols x 7 rows = 77 tiles):
+        // The tileset has decorative tiles, use simple center tile for floor
+        // Tile 12 (col 1, row 1) is a plain stone center tile
+
+        // Full center (all 4 cardinal directions are land)
+        if (top && bottom && left && right) {
+            return 12; // Center floor tile
+        }
+
+        // Outer corners
+        if (!top && !left && bottom && right) {
+            return 0; // Top-left corner
+        }
+        if (!top && !right && bottom && left) {
+            return 2; // Top-right corner
+        }
+        if (!bottom && !left && top && right) {
+            return 22; // Bottom-left corner (col 0, row 2)
+        }
+        if (!bottom && !right && top && left) {
+            return 24; // Bottom-right corner (col 2, row 2)
+        }
+
+        // Edges
+        if (!top && bottom && left && right) {
+            return 1; // Top edge
+        }
+        if (top && !bottom && left && right) {
+            return 23; // Bottom edge (col 1, row 2)
+        }
+        if (top && bottom && !left && right) {
+            return 11; // Left edge (col 0, row 1)
+        }
+        if (top && bottom && left && !right) {
+            return 13; // Right edge (col 2, row 1)
+        }
+
+        // Default to center floor
+        return 12;
+    }
+
+    private addDecorativeElements() {
+        // Create fountain at center of map
+        this.createFountain();
+
+        // Add trees, lamps, and chairs based on reference layout
+        this.createTrees();
+        this.createLamps();
+        this.createChairs();
+    }
+
+    private createDecoration(key: string, tileX: number, tileY: number, scale: number = 0.5): Phaser.GameObjects.Image {
+        const x = tileX * this.TILE_SIZE;
+        const y = tileY * this.TILE_SIZE;
+        const decoration = this.add.image(x, y, key);
+        decoration.setOrigin(0.5, 0.85);  // Bottom-center origin for depth sorting
+        decoration.setScale(scale);
+        decoration.setDepth(y);
+        return decoration;
+    }
+
+    private createTrees() {
+        // Trees in corners of the stone area (inner corners, not at edge)
+        const treePositions = [
+            { x: 12, y: 12 },   // Top-left
+            { x: 48, y: 12 },   // Top-right
+            { x: 12, y: 48 },   // Bottom-left
+            { x: 48, y: 48 },   // Bottom-right
+            // Additional trees for more decoration
+            { x: 20, y: 12 },   // Top row
+            { x: 40, y: 12 },   // Top row
+            { x: 12, y: 30 },   // Left side middle
+            { x: 48, y: 30 },   // Right side middle
+        ];
+
+        treePositions.forEach(pos => {
+            this.createDecoration('square-tree', pos.x, pos.y, 0.4);
+        });
+    }
+
+    private createLamps() {
+        // Lamps along pathways
+        const lampPositions = [
+            // Near corners
+            { x: 15, y: 15 },
+            { x: 45, y: 15 },
+            { x: 15, y: 45 },
+            { x: 45, y: 45 },
+            // Along center paths
+            { x: 22, y: 30 },   // Left of fountain
+            { x: 38, y: 30 },   // Right of fountain
+            { x: 30, y: 18 },   // Above fountain
+            { x: 30, y: 42 },   // Below fountain
+        ];
+
+        lampPositions.forEach(pos => {
+            this.createDecoration('square-lamp', pos.x, pos.y, 0.35);
+        });
+    }
+
+    private createChairs() {
+        // Benches/chairs around the square
+        const chairPositions = [
+            // Top side
+            { x: 25, y: 14 },
+            { x: 35, y: 14 },
+            // Bottom side
+            { x: 25, y: 46 },
+            { x: 35, y: 46 },
+            // Left side
+            { x: 14, y: 25 },
+            { x: 14, y: 35 },
+            // Right side
+            { x: 46, y: 25 },
+            { x: 46, y: 35 },
+        ];
+
+        chairPositions.forEach(pos => {
+            this.createDecoration('square-chair', pos.x, pos.y, 0.35);
+        });
+    }
+
+    private createFountain() {
+        const centerX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
+        const centerY = this.MAP_HEIGHT / 2 * this.TILE_SIZE;
+
+        // Create fountain animation if not exists
+        if (!this.anims.exists('fountain-anim')) {
+            this.anims.create({
+                key: 'fountain-anim',
+                frames: this.anims.generateFrameNumbers('fountain', { start: 0, end: 4 }),
+                frameRate: 3,  // Slower animation
+                repeat: -1
+            });
+        }
+
+        // Create fountain sprite at center (resized spritesheet 267x94, frame 53x94)
+        const fountain = this.add.sprite(centerX, centerY, 'fountain', 0);
+        fountain.setOrigin(0.5, 0.7);  // Adjust origin for bottom-center alignment
+        fountain.setDepth(centerY);
+        fountain.play('fountain-anim');
+    }
+
+    private createPlayer() {
+        let startX: number;
+        let startY: number;
+
+        // Spawn at station if coming from travel, otherwise spawn at center
+        if (this.navigationData?.spawnAt === 'station') {
+            // Spawn near station (offset to the right so player doesn't overlap station)
+            startX = (this.STATION_X + 3) * this.TILE_SIZE;
+            startY = this.STATION_Y * this.TILE_SIZE;
+        } else {
+            // Default spawn at center
+            startX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
+            startY = this.MAP_HEIGHT / 2 * this.TILE_SIZE + 50;
+        }
+
+        this.player = this.physics.add.sprite(startX, startY, 'player', 0);
+        this.player.setOrigin(0.5, 0.75);
+        this.player.setCollideWorldBounds(false);
+        this.player.setDepth(startY);
+
+        // Create player animations if not exists (same as FarmingGame)
+        this.createPlayerAnimations();
+
+        this.player.play('idle-down');
+
+        // Create player name text above player
+        const cachedData = GameDataService.getCachedData();
+        const fullName = cachedData?.user?.username || 'Player';
+        const playerName = fullName.length > 9 ? fullName.substring(0, 9) + '...' : fullName;
+        this.playerNameText = this.add.text(startX, startY - 18, playerName, {
+            fontSize: '6px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        this.playerNameText.setOrigin(0.5, 1);
+        this.playerNameText.setDepth(startY + 1);
+        this.playerNameText.setStroke('#000000', 1);
+    }
+
+    private createPlayerAnimations() {
+        const frameRate = 6;
+
+        // Spritesheet layout (4x4 grid, 16 frames total):
+        // Frame 0-1: idle front (down)
+        // Frame 2-3: walk front (down)
+        // Frame 4-5: idle back (up)
+        // Frame 6-7: walk back (up)
+        // Frame 8-9: idle left
+        // Frame 10-11: walk left
+        // Frame 12-13: idle right
+        // Frame 14-15: walk right
+
+        // Skip if already created
+        if (this.anims.exists('idle-down')) return;
+
+        // Idle front (down)
+        this.anims.create({
+            key: 'idle-down',
+            frames: this.anims.generateFrameNumbers('player', { start: 0, end: 1 }),
+            frameRate: 2,
+            repeat: -1
+        });
+
+        // Walk front (down)
+        this.anims.create({
+            key: 'walk-down',
+            frames: this.anims.generateFrameNumbers('player', { start: 2, end: 3 }),
+            frameRate: frameRate,
+            repeat: -1
+        });
+
+        // Idle back (up)
+        this.anims.create({
+            key: 'idle-up',
+            frames: this.anims.generateFrameNumbers('player', { start: 4, end: 5 }),
+            frameRate: 2,
+            repeat: -1
+        });
+
+        // Walk back (up)
+        this.anims.create({
+            key: 'walk-up',
+            frames: this.anims.generateFrameNumbers('player', { start: 6, end: 7 }),
+            frameRate: frameRate,
+            repeat: -1
+        });
+
+        // Idle left
+        this.anims.create({
+            key: 'idle-left',
+            frames: this.anims.generateFrameNumbers('player', { start: 8, end: 9 }),
+            frameRate: 2,
+            repeat: -1
+        });
+
+        // Walk left
+        this.anims.create({
+            key: 'walk-left',
+            frames: this.anims.generateFrameNumbers('player', { start: 10, end: 11 }),
+            frameRate: frameRate,
+            repeat: -1
+        });
+
+        // Idle right
+        this.anims.create({
+            key: 'idle-right',
+            frames: this.anims.generateFrameNumbers('player', { start: 12, end: 13 }),
+            frameRate: 2,
+            repeat: -1
+        });
+
+        // Walk right
+        this.anims.create({
+            key: 'walk-right',
+            frames: this.anims.generateFrameNumbers('player', { start: 14, end: 15 }),
+            frameRate: frameRate,
+            repeat: -1
+        });
+    }
+
+    private setupControls() {
+        if (this.input.keyboard) {
+            this.cursors = this.input.keyboard.createCursorKeys();
+            this.wasdKeys = {
+                W: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+                A: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+                S: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
+                D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D)
+            };
+        }
+    }
+
+    private createMobileControls() {
+        const screenHeight = this.scale.height;
+
+        // Joystick
+        const joystickX = 80;
+        const joystickY = screenHeight - 80;
+
+        this.joystickBase = this.add.circle(joystickX, joystickY, 40, 0x333333, 0.5);
+        this.joystickBase.setDepth(5100);
+        this.joystickBase.setScrollFactor(0);
+        this.cameras.main.ignore(this.joystickBase);
+
+        this.joystickThumb = this.add.circle(joystickX, joystickY, 20, 0x666666, 0.8);
+        this.joystickThumb.setDepth(5101);
+        this.joystickThumb.setScrollFactor(0);
+        this.cameras.main.ignore(this.joystickThumb);
+
+        // Make joystick interactive
+        this.joystickBase.setInteractive();
+        this.joystickBase.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            this.joystickActive = true;
+            this.joystickPointer = pointer;
+        });
+
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            if (this.joystickActive && this.joystickPointer === pointer) {
+                const dx = pointer.x - this.joystickBase.x;
+                const dy = pointer.y - this.joystickBase.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const maxDistance = 30;
+
+                if (distance < maxDistance) {
+                    this.joystickThumb.setPosition(pointer.x, pointer.y);
+                } else {
+                    const angle = Math.atan2(dy, dx);
+                    this.joystickThumb.setPosition(
+                        this.joystickBase.x + Math.cos(angle) * maxDistance,
+                        this.joystickBase.y + Math.sin(angle) * maxDistance
+                    );
+                }
+            }
+        });
+
+        this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+            if (this.joystickPointer === pointer) {
+                this.joystickActive = false;
+                this.joystickPointer = null;
+                this.joystickThumb.setPosition(this.joystickBase.x, this.joystickBase.y);
+            }
+        });
+    }
+
+    private setupCameraIgnore() {
+        // UI camera ignores all game objects
+        this.children.each((child) => {
+            if (child instanceof Phaser.GameObjects.GameObject) {
+                const depth = (child as any).depth || 0;
+                if (depth < 5000) {
+                    this.uiCamera.ignore(child);
+                }
+            }
+        });
+    }
+
+    private showToastMessage(text: string, color: number) {
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+
+        const toast = this.add.text(screenWidth / 2, screenHeight - 100, text, {
+            fontSize: '12px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2,
+            backgroundColor: `#${color.toString(16).padStart(6, '0')}`,
+            padding: { x: 12, y: 6 }
+        });
+        toast.setOrigin(0.5);
+        toast.setDepth(5400);
+        toast.setScrollFactor(0);
+        this.cameras.main.ignore(toast);
+
+        this.tweens.add({
+            targets: toast,
+            alpha: 0,
+            y: screenHeight - 130,
+            duration: 2000,
+            ease: 'Quad.easeOut',
+            onComplete: () => toast.destroy()
+        });
+    }
+
+    private onResize(gameSize: Phaser.Structs.Size) {
+        if (this.uiCamera) {
+            this.uiCamera.setSize(gameSize.width, gameSize.height);
+        }
+    }
+
+    update() {
+        this.handlePlayerMovement();
+        this.updateClock();
+    }
+
+    private handlePlayerMovement() {
+        const speed = 80;
+        let velocityX = 0;
+        let velocityY = 0;
+        let direction = '';
+
+        // Keyboard input
+        if (this.cursors) {
+            if (this.cursors.left.isDown || this.wasdKeys?.A.isDown) {
+                velocityX = -speed;
+                direction = 'left';
+            } else if (this.cursors.right.isDown || this.wasdKeys?.D.isDown) {
+                velocityX = speed;
+                direction = 'right';
+            }
+
+            if (this.cursors.up.isDown || this.wasdKeys?.W.isDown) {
+                velocityY = -speed;
+                direction = 'up';
+            } else if (this.cursors.down.isDown || this.wasdKeys?.S.isDown) {
+                velocityY = speed;
+                direction = 'down';
+            }
+        }
+
+        // Joystick input
+        if (this.joystickActive) {
+            const dx = this.joystickThumb.x - this.joystickBase.x;
+            const dy = this.joystickThumb.y - this.joystickBase.y;
+            const threshold = 5;
+
+            if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
+                const angle = Math.atan2(dy, dx);
+                velocityX = Math.cos(angle) * speed;
+                velocityY = Math.sin(angle) * speed;
+
+                // Determine direction
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    direction = dx > 0 ? 'right' : 'left';
+                } else {
+                    direction = dy > 0 ? 'down' : 'up';
+                }
+            }
+        }
+
+        // Apply velocity
+        this.player.setVelocity(velocityX, velocityY);
+
+        // Update animation
+        if (velocityX !== 0 || velocityY !== 0) {
+            this.player.play(`walk-${direction || 'down'}`, true);
+        } else {
+            const currentAnim = this.player.anims.currentAnim?.key || '';
+            if (currentAnim.includes('walk')) {
+                const dir = currentAnim.replace('walk-', '');
+                this.player.play(`idle-${dir}`, true);
+            }
+        }
+
+        // Update player depth based on Y position
+        this.player.setDepth(this.player.y);
+
+        // Update player name position and depth
+        if (this.playerNameText) {
+            this.playerNameText.setPosition(this.player.x, this.player.y - 18);
+            this.playerNameText.setDepth(this.player.y + 1);
+        }
+
+        // Update speech bubble position
+        if (this.speechBubble) {
+            this.speechBubble.setPosition(this.player.x, this.player.y - 40);
+            this.speechBubble.setDepth(this.player.y + 100);
+        }
+
+        // Constrain to land area
+        this.constrainPlayerToLand();
+    }
+
+    private constrainPlayerToLand() {
+        // Stone area bounds (water border is 8 tiles on each side)
+        // Add small buffer (half tile) to keep player visually inside
+        const minX = 8 * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const maxX = (this.MAP_WIDTH - 8) * this.TILE_SIZE - this.TILE_SIZE / 2;
+        const minY = 8 * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const maxY = (this.MAP_HEIGHT - 8) * this.TILE_SIZE - this.TILE_SIZE / 2;
+
+        // Always clamp player to stone area
+        this.player.x = Phaser.Math.Clamp(this.player.x, minX, maxX);
+        this.player.y = Phaser.Math.Clamp(this.player.y, minY, maxY);
+
+        // Fountain collision zone (prevent player from walking into fountain base)
+        const fountainCenterX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
+        const fountainCenterY = this.MAP_HEIGHT / 2 * this.TILE_SIZE;
+
+        // Fountain frame is 67x118 with origin (0.5, 0.7)
+        // Collision zone covers the base area where player shouldn't walk
+        const fountainHalfWidth = 35;  // Half width of collision zone
+        const fountainTop = fountainCenterY - 15;  // Top of collision (allows walking behind water spray)
+        const fountainBottom = fountainCenterY + 35;  // Bottom of collision
+
+        // Check if player is inside fountain collision zone
+        if (this.player.x > fountainCenterX - fountainHalfWidth &&
+            this.player.x < fountainCenterX + fountainHalfWidth &&
+            this.player.y > fountainTop &&
+            this.player.y < fountainBottom) {
+
+            // Calculate which edge to push player to (shortest distance)
+            const distLeft = this.player.x - (fountainCenterX - fountainHalfWidth);
+            const distRight = (fountainCenterX + fountainHalfWidth) - this.player.x;
+            const distTop = this.player.y - fountainTop;
+            const distBottom = fountainBottom - this.player.y;
+
+            const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+            if (minDist === distLeft) {
+                this.player.x = fountainCenterX - fountainHalfWidth;
+            } else if (minDist === distRight) {
+                this.player.x = fountainCenterX + fountainHalfWidth;
+            } else if (minDist === distTop) {
+                this.player.y = fountainTop;
+            } else {
+                this.player.y = fountainBottom;
+            }
+
+            // Stop velocity when colliding
+            this.player.setVelocity(0, 0);
+        }
+    }
+
+    destroy() {
+        this.scale.off('resize', this.onResize, this);
+        this.soundManager?.destroy();
+        this.stationManager?.destroy();
+        this.profileManager?.destroy();
+        this.toolbarManager?.destroy();
+    }
+
+    /**
+     * Create clock UI in top-left corner
+     */
+    private createClockUI() {
+        const uiX = 20;
+        const uiY = 25;
+
+        // Background for clock
+        const clockBg = this.add.rectangle(uiX + 55, uiY, 130, 30, 0x3E2723, 0.8);
+        clockBg.setOrigin(0.5, 0.5);
+        clockBg.setDepth(5000);
+        clockBg.setStrokeStyle(2, 0x5D4037);
+        this.cameras.main?.ignore(clockBg);
+
+        // Clock icon
+        const clockIcon = this.add.text(uiX, uiY, '🕐', {
+            fontSize: '14px',
+            resolution: 2
+        }).setOrigin(0, 0.5);
+        clockIcon.setDepth(5005);
+        this.cameras.main?.ignore(clockIcon);
+
+        // Time text (offset to the right of icon)
+        this.timeText = this.add.text(uiX + 22, uiY, '', {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        }).setOrigin(0, 0.5);
+        this.timeText.setDepth(5005);
+        this.cameras.main?.ignore(this.timeText);
+    }
+
+    /**
+     * Update clock display
+     */
+    private updateClock() {
+        if (!this.timeText) return;
+
+        const now = new Date();
+        const hours = now.getHours().toString().padStart(2, '0');
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        const seconds = now.getSeconds().toString().padStart(2, '0');
+        const timeStr = `${hours}:${minutes}:${seconds}`;
+        this.timeText.setText(timeStr);
+    }
+
+    /**
+     * Create marquee announcement banner
+     */
+    private createMarquee() {
+        const screenWidth = this.scale.width;
+        const marqueeY = 18;
+        const marqueeWidth = 400;
+        const marqueeHeight = 18;
+        const marqueeX = screenWidth / 2;
+        const message = '🎉 Cardano Meetup in First January 2026 with many gifts waiting for you! 🎁';
+
+        // Background bar (centered)
+        const marqueeBg = this.add.rectangle(marqueeX, marqueeY, marqueeWidth, marqueeHeight, 0x000000, 0.7);
+        marqueeBg.setDepth(5100);
+        this.cameras.main?.ignore(marqueeBg);
+
+        // Create text (starts from right edge of the box)
+        const startX = marqueeX + marqueeWidth / 2;
+        this.marqueeText = this.add.text(startX, marqueeY, message, {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        this.marqueeText.setOrigin(0, 0.5);
+        this.marqueeText.setDepth(5101);
+        this.cameras.main?.ignore(this.marqueeText);
+
+        // Create mask to hide text outside the box
+        const maskShape = this.make.graphics({ x: 0, y: 0 });
+        maskShape.fillStyle(0xffffff);
+        maskShape.fillRect(marqueeX - marqueeWidth / 2, marqueeY - marqueeHeight / 2, marqueeWidth, marqueeHeight);
+        const mask = maskShape.createGeometryMask();
+        this.marqueeText.setMask(mask);
+
+        // Animate text scrolling from right to left within the box
+        const textWidth = this.marqueeText.width;
+        const endX = marqueeX - marqueeWidth / 2 - textWidth;
+
+        const animateMarquee = () => {
+            // Show marquee
+            marqueeBg.setVisible(true);
+            this.marqueeText.setVisible(true);
+            this.marqueeText.x = startX;
+
+            this.tweens.add({
+                targets: this.marqueeText,
+                x: endX,
+                duration: 12000,
+                ease: 'Linear',
+                onComplete: () => {
+                    // Hide marquee after text finishes
+                    marqueeBg.setVisible(false);
+                    this.marqueeText.setVisible(false);
+
+                    // Wait 5 minutes then show again
+                    this.time.delayedCall(300000, () => {
+                        animateMarquee();
+                    });
+                }
+            });
+        };
+        animateMarquee();
+    }
+
+    /**
+     * Create chat button in bottom right area
+     */
+    private createChatButton() {
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const buttonX = screenWidth - 60;
+        const buttonY = screenHeight - 140;
+
+        // Create button container
+        this.chatButton = this.add.container(buttonX, buttonY);
+        this.chatButton.setDepth(5200);
+
+        // Button background
+        const bg = this.add.circle(0, 0, 25, 0x4CAF50, 0.9);
+        bg.setStrokeStyle(2, 0x2E7D32);
+
+        // Chat icon (speech bubble emoji)
+        const icon = this.add.text(0, 0, '💬', {
+            fontSize: '20px',
+            resolution: 2
+        }).setOrigin(0.5);
+
+        this.chatButton.add([bg, icon]);
+
+        // Make interactive
+        bg.setInteractive({ useHandCursor: true });
+        bg.on('pointerover', () => bg.setFillStyle(0x66BB6A, 1));
+        bg.on('pointerout', () => bg.setFillStyle(0x4CAF50, 0.9));
+        bg.on('pointerdown', () => this.openChatModal());
+
+        this.cameras.main?.ignore(this.chatButton);
+    }
+
+    /**
+     * Open chat modal
+     */
+    private openChatModal() {
+        if (this.chatModalOpen) return;
+        this.chatModalOpen = true;
+
+        const screenWidth = this.scale.width;
+        const screenHeight = this.scale.height;
+        const modalWidth = 300;
+        const modalHeight = 250;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+
+        this.chatModal = this.add.container(modalX, modalY);
+        this.chatModal.setDepth(5500);
+
+        // Modal background
+        const bg = this.add.rectangle(0, 0, modalWidth, modalHeight, 0x3E2723, 0.95);
+        bg.setStrokeStyle(3, 0x5D4037);
+
+        // Title
+        const title = this.add.text(0, -modalHeight / 2 + 20, '💬 Chat', {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        }).setOrigin(0.5);
+
+        // Close button
+        const closeBtn = this.add.text(modalWidth / 2 - 15, -modalHeight / 2 + 15, '✕', {
+            fontSize: '16px',
+            color: '#FF5722',
+            resolution: 2
+        }).setOrigin(0.5);
+        closeBtn.setInteractive({ useHandCursor: true });
+        closeBtn.on('pointerdown', () => this.closeChatModal());
+
+        // Chat history area background
+        const historyBg = this.add.rectangle(0, -20, modalWidth - 20, 150, 0x2D2D2D, 0.8);
+        historyBg.setStrokeStyle(1, 0x5D4037);
+
+        // Chat history text
+        this.chatHistoryText = this.add.text(-modalWidth / 2 + 15, -90, this.chatHistory.slice(-8).join('\n'), {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2,
+            wordWrap: { width: modalWidth - 30 }
+        });
+
+        // Send button
+        const sendBtn = this.add.rectangle(modalWidth / 2 - 40, modalHeight / 2 - 40, 50, 25, 0x4CAF50, 1);
+        sendBtn.setStrokeStyle(1, 0x2E7D32);
+        const sendText = this.add.text(modalWidth / 2 - 40, modalHeight / 2 - 40, 'Send', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        }).setOrigin(0.5);
+
+        sendBtn.setInteractive({ useHandCursor: true });
+        sendBtn.on('pointerover', () => sendBtn.setFillStyle(0x66BB6A, 1));
+        sendBtn.on('pointerout', () => sendBtn.setFillStyle(0x4CAF50, 1));
+        sendBtn.on('pointerdown', () => this.sendChatMessage());
+
+        this.chatModal.add([bg, title, closeBtn, historyBg, this.chatHistoryText, sendBtn, sendText]);
+        this.cameras.main?.ignore(this.chatModal);
+
+        // Create HTML input element
+        this.createChatInput(modalX, modalY, modalWidth, modalHeight);
+    }
+
+    /**
+     * Create HTML input element for chat
+     */
+    private createChatInput(modalX: number, modalY: number, modalWidth: number, modalHeight: number) {
+        // Remove existing input if any
+        if (this.chatInputElement) {
+            this.chatInputElement.remove();
+        }
+
+        // Get canvas position on page
+        const canvasRect = this.game.canvas.getBoundingClientRect();
+
+        // Calculate input position - align with footer area (inputBg is at modalHeight/2 - 40)
+        // Input should be left of send button, which is at modalWidth/2 - 50
+        const inputWidth = modalWidth - 20;  // Leave space for send button
+        const inputX = canvasRect.left + modalX - modalWidth / 2 + 125;  // Left edge of modal + padding
+        const inputY = canvasRect.top + modalY + modalHeight / 2 - 5;  // Align with inputBg
+
+        // Create HTML input
+        this.chatInputElement = document.createElement('input');
+        this.chatInputElement.type = 'text';
+        this.chatInputElement.placeholder = 'Text your message...';
+        this.chatInputElement.maxLength = 100;
+        this.chatInputElement.style.cssText = `
+            position: fixed;
+            left: ${inputX}px;
+            top: ${inputY}px;
+            width: ${inputWidth}px;
+            height: 30px;
+            padding: 4px 8px;
+            font-family: 'PixelFont', Arial, sans-serif;
+            font-size: 12px;
+            background: #1A1A1A;
+            color: #FFFFFF;
+            border: 1px solid #5D4037;
+            border-radius: 4px;
+            outline: none;
+            z-index: 1000;
+        `;
+
+        // Handle Enter key
+        this.chatInputElement.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                this.sendChatMessage();
+            }
+        });
+
+        // Add to DOM (use body for fixed positioning)
+        document.body.appendChild(this.chatInputElement);
+        this.chatInputElement.focus();
+    }
+
+    /**
+     * Send chat message
+     */
+    private sendChatMessage() {
+        if (!this.chatInputElement) return;
+
+        const message = this.chatInputElement.value.trim();
+        if (message) {
+            // Add to history
+            const cachedData = GameDataService.getCachedData();
+            const playerName = cachedData?.user?.username || 'Player';
+            const shortName = playerName.length > 9 ? playerName.substring(0, 9) + '...' : playerName;
+            this.chatHistory.push(`${shortName}: ${message}`);
+
+            // Update history display
+            if (this.chatHistoryText) {
+                this.chatHistoryText.setText(this.chatHistory.slice(-8).join('\n'));
+            }
+
+            // Clear input
+            this.chatInputElement.value = '';
+            this.chatInputElement.focus();
+
+            // Show speech bubble above player
+            this.showSpeechBubble(message);
+        }
+    }
+
+    /**
+     * Close chat modal
+     */
+    private closeChatModal() {
+        // Remove HTML input
+        if (this.chatInputElement) {
+            this.chatInputElement.remove();
+            this.chatInputElement = null;
+        }
+
+        if (this.chatModal) {
+            this.chatModal.destroy();
+            this.chatModalOpen = false;
+        }
+
+        this.chatHistoryText = null;
+    }
+
+    /**
+     * Show speech bubble with scrolling text above player
+     */
+    private showSpeechBubble(message: string) {
+        // Remove existing bubble and tween
+        if (this.speechBubble) {
+            this.speechBubble.destroy(true);
+            this.speechBubble = null;
+        }
+
+        const bubbleWidth = 50;
+        const bubbleHeight = 14;
+        const padding = 3;
+
+        // Create bubble container at player position
+        this.speechBubble = this.add.container(this.player.x, this.player.y - 24);
+        this.speechBubble.setDepth(this.player.y + 50);
+
+        // IMPORTANT: Ignore by UI camera to prevent duplicate rendering
+        this.uiCamera.ignore(this.speechBubble);
+
+        // Draw bubble directly with graphics (added to container, not scene)
+        const bubbleGraphics = new Phaser.GameObjects.Graphics(this);
+        bubbleGraphics.fillStyle(0xFFFFFF, 1);
+        bubbleGraphics.lineStyle(1, 0x555555, 1);
+
+        // Rounded rectangle centered at 0,0
+        bubbleGraphics.fillRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+        bubbleGraphics.strokeRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+
+        // Speech bubble tail (small triangle pointing down)
+        bubbleGraphics.fillStyle(0xFFFFFF, 1);
+        bubbleGraphics.fillTriangle(-2, bubbleHeight / 2 - 1, 2, bubbleHeight / 2 - 1, 0, bubbleHeight / 2 + 3);
+        bubbleGraphics.lineStyle(1, 0x555555, 1);
+        bubbleGraphics.lineBetween(-2, bubbleHeight / 2, 0, bubbleHeight / 2 + 3);
+        bubbleGraphics.lineBetween(2, bubbleHeight / 2, 0, bubbleHeight / 2 + 3);
+
+        // Create scrolling text
+        const textContent = new Phaser.GameObjects.Text(this, bubbleWidth / 2 - padding, -1, message, {
+            fontSize: '5px',
+            fontFamily: 'PixelFont',
+            color: '#000000',
+            resolution: 2
+        });
+        textContent.setOrigin(0, 0.5);
+
+        // Add elements to container only (not to scene display list)
+        this.speechBubble.add([bubbleGraphics, textContent]);
+
+        // Create mask for text clipping (world coordinates)
+        // Use make.graphics to NOT add to display list (avoids ghost at origin)
+        const maskGraphics = this.make.graphics({ add: false } as Phaser.Types.GameObjects.Graphics.Options);
+        maskGraphics.fillStyle(0xffffff);
+        maskGraphics.fillRect(
+            this.player.x - bubbleWidth / 2 + padding,
+            this.player.y - 24 - bubbleHeight / 2 + 1,
+            bubbleWidth - padding * 2,
+            bubbleHeight - 2
+        );
+        const mask = maskGraphics.createGeometryMask();
+        textContent.setMask(mask);
+
+        // Update mask position when bubble moves
+        const updateMaskPosition = () => {
+            if (!this.speechBubble) return;
+            maskGraphics.clear();
+            maskGraphics.fillStyle(0xffffff);
+            maskGraphics.fillRect(
+                this.speechBubble.x - bubbleWidth / 2 + padding,
+                this.speechBubble.y - bubbleHeight / 2 + 1,
+                bubbleWidth - padding * 2,
+                bubbleHeight - 2
+            );
+        };
+
+        // Animate text scrolling from right to left
+        const textWidth = textContent.width;
+        const endX = -bubbleWidth / 2 - textWidth;
+        const duration = Math.min(Math.max(textWidth * 100, 2000), 8000);
+
+        this.tweens.add({
+            targets: textContent,
+            x: endX,
+            duration: duration,
+            ease: 'Linear',
+            onUpdate: () => updateMaskPosition(),
+            onComplete: () => {
+                maskGraphics.destroy();
+                if (this.speechBubble) {
+                    this.speechBubble.destroy(true);
+                    this.speechBubble = null;
+                }
+            }
+        });
+    }
+}
