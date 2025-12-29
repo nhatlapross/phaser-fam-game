@@ -4,12 +4,14 @@ import { EventBus } from './EventBus';
 import {
     PlantUpdatePayload,
     LandUpdatePayload,
+    InventoryUpdatePayload,
+    CurrencyUpdatePayload,
+    ActionSuccessPayload,
+    ActionErrorPayload,
     SocketConnectionStatus,
     SOCKET_EVENTS,
     WaterPlantPayload,
     HarvestPlantPayload,
-    GameActionResponse,
-    ClaimWaterResponse,
 } from './types/SocketTypes';
 
 /**
@@ -17,16 +19,21 @@ import {
  * 
  * IMPORTANT: Connects to the /game namespace on the backend
  * 
- * Events emitted via EventBus:
+ * Events emitted via EventBus (Server -> Client):
  * - 'socket:connected' - When connection is established
  * - 'socket:disconnected' - When connection is lost
  * - 'socket:plant_update' - When a plant is updated (growth, water, wither)
- * - 'socket:land_update' - When a land plot changes (plant/harvest)
+ * - 'socket:land_update' - When land plots change (buy land, plant, harvest)
+ * - 'socket:inventory_update' - When inventory changes (water, seeds, fruits)
+ * - 'socket:currency_update' - When gold or gems change
+ * - 'socket:action_success' - When a game action completes successfully
+ * - 'socket:action_error' - When a game action fails
  * 
- * Client -> Server Events:
+ * Client -> Server Events (fire-and-forget, responses come via events above):
  * - 'claim_water' - Claim free water from well
  * - 'water_plant' - Water a plant
  * - 'harvest_plant' - Harvest a mature plant
+ * - 'buy_land' - Buy a new land plot
  */
 export class SocketService {
     private static instance: SocketService | null = null;
@@ -154,7 +161,7 @@ export class SocketService {
             }
         });
 
-        // Game events
+        // Game events - Server -> Client
         this.socket.on(SOCKET_EVENTS.PLANT_UPDATE, (payload: PlantUpdatePayload) => {
             console.log('🌱 [SocketService] RECEIVED plant_update:', payload);
             console.log(`🌱 [SocketService] Land: ${payload.landId}, Stage: ${payload.plant.stage}`);
@@ -163,8 +170,33 @@ export class SocketService {
 
         this.socket.on(SOCKET_EVENTS.LAND_UPDATE, (payload: LandUpdatePayload) => {
             console.log('🏡 [SocketService] RECEIVED land_update:', payload);
-            console.log(`🏡 [SocketService] Land: ${payload.landId}, Has plant: ${!!payload.plant}`);
+            console.log(`🏡 [SocketService] Lands count: ${payload.length}`);
+            payload.forEach(land => {
+                console.log(`🏡 [SocketService] Land ${land.plotIndex}: id=${land.id}, hasPlant=${!!land.plant}`);
+            });
             EventBus.emit('socket:land_update', payload);
+        });
+
+        this.socket.on(SOCKET_EVENTS.INVENTORY_UPDATE, (payload: InventoryUpdatePayload) => {
+            console.log('📦 [SocketService] RECEIVED inventory_update:', payload);
+            EventBus.emit('socket:inventory_update', payload);
+        });
+
+        this.socket.on(SOCKET_EVENTS.CURRENCY_UPDATE, (payload: CurrencyUpdatePayload) => {
+            console.log('💰 [SocketService] RECEIVED currency_update:', payload);
+            console.log(`💰 [SocketService] Gold: ${payload.gold}, Gem: ${payload.gem}`);
+            EventBus.emit('socket:currency_update', payload);
+        });
+
+        this.socket.on(SOCKET_EVENTS.ACTION_SUCCESS, (payload: ActionSuccessPayload) => {
+            console.log('✅ [SocketService] RECEIVED action_success:', payload);
+            EventBus.emit('socket:action_success', payload);
+        });
+
+        this.socket.on(SOCKET_EVENTS.ACTION_ERROR, (payload: ActionErrorPayload) => {
+            console.error('❌ [SocketService] RECEIVED action_error:', payload);
+            console.error(`❌ [SocketService] Action: ${payload.action}, Message: ${payload.message}`);
+            EventBus.emit('socket:action_error', payload);
         });
     }
 
@@ -235,88 +267,71 @@ export class SocketService {
 
     // ==========================================
     // Game Action Methods (Client -> Server)
+    // Fire-and-forget: responses come via event listeners
     // ==========================================
 
     /**
      * Claim free water from the well
      * Emit: 'claim_water', {}
-     * @returns Promise that resolves with the server response
+     * Response comes via 'inventory_update' and 'action_success' events
      */
-    public claimWater(): Promise<ClaimWaterResponse> {
-        return new Promise((resolve) => {
-            if (!this.socket?.connected) {
-                console.warn('[SocketService] Cannot claim water, socket not connected');
-                resolve({ success: false, error: 'Socket not connected' });
-                return;
-            }
+    public claimWater(): void {
+        if (!this.socket?.connected) {
+            console.warn('[SocketService] Cannot claim water, socket not connected');
+            return;
+        }
 
-            console.log('💧 [SocketService] Emitting claim_water');
-            this.socket.emit(SOCKET_EVENTS.CLAIM_WATER, {}, (response: ClaimWaterResponse) => {
-                console.log('💧 [SocketService] claim_water response:', response);
-                resolve(response);
-            });
-
-            // Timeout fallback if server doesn't respond with callback
-            setTimeout(() => {
-                resolve({ success: false, error: 'Request timeout' });
-            }, 10000);
-        });
+        console.log('💧 [SocketService] Emitting claim_water');
+        this.socket.emit(SOCKET_EVENTS.CLAIM_WATER, {});
     }
 
     /**
      * Water a plant
      * Emit: 'water_plant', { plantId: string }
+     * Response comes via 'plant_update', 'inventory_update', and 'action_success' events
      * @param plantId - The UUID of the plant to water
-     * @returns Promise that resolves with the server response
      */
-    public waterPlant(plantId: string): Promise<GameActionResponse> {
-        return new Promise((resolve) => {
-            if (!this.socket?.connected) {
-                console.warn('[SocketService] Cannot water plant, socket not connected');
-                resolve({ success: false, error: 'Socket not connected' });
-                return;
-            }
+    public waterPlant(plantId: string): void {
+        if (!this.socket?.connected) {
+            console.warn('[SocketService] Cannot water plant, socket not connected');
+            return;
+        }
 
-            const payload: WaterPlantPayload = { plantId };
-            console.log('🌱 [SocketService] Emitting water_plant:', payload);
-            this.socket.emit(SOCKET_EVENTS.WATER_PLANT, payload, (response: GameActionResponse) => {
-                console.log('🌱 [SocketService] water_plant response:', response);
-                resolve(response);
-            });
-
-            // Timeout fallback if server doesn't respond with callback
-            setTimeout(() => {
-                resolve({ success: false, error: 'Request timeout' });
-            }, 10000);
-        });
+        const payload: WaterPlantPayload = { plantId };
+        console.log('🌱 [SocketService] Emitting water_plant:', payload);
+        this.socket.emit(SOCKET_EVENTS.WATER_PLANT, payload);
     }
 
     /**
      * Harvest a mature plant
      * Emit: 'harvest_plant', { plantId: string }
+     * Response comes via 'land_update', 'inventory_update', and 'action_success' events
      * @param plantId - The UUID of the plant to harvest
-     * @returns Promise that resolves with the server response
      */
-    public harvestPlant(plantId: string): Promise<GameActionResponse> {
-        return new Promise((resolve) => {
-            if (!this.socket?.connected) {
-                console.warn('[SocketService] Cannot harvest plant, socket not connected');
-                resolve({ success: false, error: 'Socket not connected' });
-                return;
-            }
+    public harvestPlant(plantId: string): void {
+        if (!this.socket?.connected) {
+            console.warn('[SocketService] Cannot harvest plant, socket not connected');
+            return;
+        }
 
-            const payload: HarvestPlantPayload = { plantId };
-            console.log('🌾 [SocketService] Emitting harvest_plant:', payload);
-            this.socket.emit(SOCKET_EVENTS.HARVEST_PLANT, payload, (response: GameActionResponse) => {
-                console.log('🌾 [SocketService] harvest_plant response:', response);
-                resolve(response);
-            });
+        const payload: HarvestPlantPayload = { plantId };
+        console.log('🌾 [SocketService] Emitting harvest_plant:', payload);
+        this.socket.emit(SOCKET_EVENTS.HARVEST_PLANT, payload);
+    }
 
-            // Timeout fallback if server doesn't respond with callback
-            setTimeout(() => {
-                resolve({ success: false, error: 'Request timeout' });
-            }, 10000);
-        });
+    /**
+     * Buy a new land plot
+     * Emit: 'buy_land', {}
+     * Response comes via 'land_update', 'inventory_update', and 'action_success' events
+     */
+    public buyLand(): void {
+        if (!this.socket?.connected) {
+            console.warn('[SocketService] Cannot buy land, socket not connected');
+            return;
+        }
+
+        console.log('🏡 [SocketService] Emitting buy_land');
+        this.socket.emit(SOCKET_EVENTS.BUY_LAND, {});
     }
 
     /**

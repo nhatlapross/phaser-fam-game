@@ -482,9 +482,20 @@ export class WellManager extends BaseManager {
         claimBtn.disableInteractive();
         claimBtnText.setText('Claimed');
 
-        // === BACKGROUND API CALL ===
+        // === TRY WEBSOCKET FIRST, FALL BACK TO REST API ===
+        const usedWebSocket = ShopService.claimFreeWaterWS();
+        
+        if (usedWebSocket) {
+            // WebSocket sent - UI updates will come via inventory_update event
+            // No need to wait for response, just mark as done
+            console.log('[WellManager] Claim water sent via WebSocket');
+            this.isClaimingWater = false;
+            return;
+        }
+
+        // Fall back to REST API
         try {
-            const result = await ShopService.claimFreeWaterWS();
+            const result = await ShopService.claimFreeWater();
 
             if (result && result.success) {
                 // API success - update with actual values

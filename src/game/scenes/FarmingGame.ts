@@ -517,6 +517,10 @@ export class FarmingGame extends Scene {
         // Listen for socket connection events
         EventBus.on('socket:connected', this.onSocketConnected, this);
         EventBus.on('socket:disconnected', this.onSocketDisconnected, this);
+        EventBus.on('socket:inventory_update', this.onInventoryUpdate, this);
+        EventBus.on('socket:land_update', this.onLandUpdate, this);
+        EventBus.on('socket:currency_update', this.onCurrencyUpdate, this);
+        EventBus.on('socket:action_error', this.onActionError, this);
 
         console.log('[FarmingGame] Socket connection initialized');
     }
@@ -540,6 +544,106 @@ export class FarmingGame extends Scene {
         if (reason !== 'io client disconnect') {
             this.showToastMessage('⚠️ Connection lost', 0xfbbf24);
         }
+    }
+
+    /**
+     * Handle inventory_update event from socket
+     * Updates water count and other inventory items in real-time
+     */
+    private onInventoryUpdate(items: Array<{ itemType: string; amount: number }>): void {
+        console.log('[FarmingGame] Received inventory_update:', items);
+        
+        // Update water count from inventory
+        const waterItem = items.find(item => item.itemType === 'WATER');
+        if (waterItem) {
+            const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
+            if (wateringCan) {
+                console.log(`[FarmingGame] Updating water count: ${wateringCan.count} -> ${waterItem.amount}`);
+                wateringCan.count = waterItem.amount;
+                this.updateToolbar();
+            }
+        }
+    }
+
+    /**
+     * Handle land_update event from socket
+     * Updates land plots when buying land, planting, or harvesting
+     */
+    private onLandUpdate(lands: Array<{ id: string; plotIndex: number; plant?: unknown; soilQuality: { fertility: number; hydration: number } }>): void {
+        console.log('[FarmingGame] Received land_update:', lands);
+        
+        // Update owned plots count based on received lands
+        const newOwnedPlotsCount = lands.length;
+        if (newOwnedPlotsCount > this.ownedPlotsCount) {
+            console.log(`[FarmingGame] New land purchased! Plots: ${this.ownedPlotsCount} -> ${newOwnedPlotsCount}`);
+            this.ownedPlotsCount = newOwnedPlotsCount;
+            
+            // Refresh garden data to update the UI with new plots
+            this.loadGardenData();
+            
+            // Refresh profile UI to update gem count
+            this.createUserProfileUI();
+        }
+        
+        // Process each land update
+        lands.forEach(land => {
+            // Convert plotIndex to tile coordinates
+            const tileKey = GardenService.plotIndexToTileKey(land.plotIndex);
+            const state = this.farmLandStates.get(tileKey);
+            
+            if (state) {
+                // Update landId if not set
+                if (!state.landId) {
+                    state.landId = land.id;
+                }
+                
+                // Unlock the plot if it was locked
+                if (state.locked) {
+                    state.locked = false;
+                    
+                    // Remove lock overlay
+                    const lockOverlay = this.lockedPlotOverlays.get(tileKey);
+                    if (lockOverlay) {
+                        lockOverlay.destroy();
+                        this.lockedPlotOverlays.delete(tileKey);
+                    }
+                    
+                    console.log(`[FarmingGame] Unlocked plot at ${tileKey} (plotIndex: ${land.plotIndex})`);
+                }
+            }
+        });
+    }
+
+    /**
+     * Handle currency_update event from socket
+     * Updates gold and gem counts in real-time
+     */
+    private onCurrencyUpdate(payload: { gold: number; gem: number }): void {
+        console.log('[FarmingGame] Received currency_update:', payload);
+        
+        // Update local state
+        this.playerGold = payload.gold;
+        this.playerGems = payload.gem;
+        
+        // Update global game state (single source of truth)
+        const gameState = useGameState(this);
+        gameState.setCurrency(payload.gold, payload.gem);
+        
+        // Refresh profile UI to show updated balances
+        this.createUserProfileUI();
+        
+        console.log(`[FarmingGame] Currency updated - Gold: ${payload.gold}, Gems: ${payload.gem}`);
+    }
+
+    /**
+     * Handle action_error event from socket
+     * Shows error message to user when a game action fails
+     */
+    private onActionError(payload: { action: string; message: string }): void {
+        console.error('[FarmingGame] Received action_error:', payload);
+        
+        // Show error toast to user
+        this.showToastMessage(payload.message || 'Action failed!', 0xef4444);
     }
 
     /**
@@ -2587,12 +2691,8 @@ export class FarmingGame extends Scene {
             }
 
             // === OPTIMISTIC UI UPDATE ===
-            // Update UI immediately for responsive feel, then verify with API
-
-            // Store previous values for potential rollback
-            const previousWaterCount = wateringCan.count;
-            const previousLastCareTime = state.lastCareTime;
-            const wasWilted = state.isWilted;
+            // Update UI immediately for responsive feel
+            // Server will send plant_update and inventory_update events
 
             // Immediately update local state
             state.lastCareTime = Date.now();
@@ -2612,30 +2712,24 @@ export class FarmingGame extends Scene {
             console.log('Watered plant at', tileKey, '- Water left:', wateringCan.count);
             this.showToastMessage('Watered!', 0x4ade80);
 
-            // Call API in background (don't await for initial feedback)
+            // Send WebSocket event (fire-and-forget)
+            // UI updates will come via plant_update and inventory_update events
             const plantId = state.plantId;
-            GardenService.waterPlantWS(plantId).then(result => {
-                if (!result.success) {
-                    // API failed - rollback optimistic update
-                    console.warn('Water API failed, rolling back:', result.message);
-                    wateringCan.count = previousWaterCount;
-                    state.lastCareTime = previousLastCareTime;
-                    state.isWilted = wasWilted;
-                    this.updateToolbar();
-                    this.showToastMessage(result.message || 'Water failed!', 0xef4444);
-                } else {
-                    // API succeeded - refresh garden data to get updated stage
-                    this.loadGardenData();
-                }
-            }).catch(error => {
-                // Network error - rollback
-                console.error('Water API error:', error);
-                wateringCan.count = previousWaterCount;
-                state.lastCareTime = previousLastCareTime;
-                state.isWilted = wasWilted;
-                this.updateToolbar();
-                this.showToastMessage('Network error!', 0xef4444);
-            });
+            const usedWebSocket = GardenService.waterPlantWS(plantId);
+            
+            // If WebSocket not available, fall back to REST API
+            if (!usedWebSocket) {
+                GardenService.waterPlant(plantId).then(result => {
+                    if (result.success) {
+                        this.loadGardenData();
+                    } else {
+                        this.showToastMessage(result.message || 'Water failed!', 0xef4444);
+                    }
+                }).catch(error => {
+                    console.error('Water API error:', error);
+                    this.showToastMessage('Network error!', 0xef4444);
+                });
+            }
         }
     }
 
@@ -2795,16 +2889,20 @@ export class FarmingGame extends Scene {
                     console.log('Harvested healthy', harvestedType, 'crop at', tileKey, '- Added to chest');
                 }
 
-                // Call API to harvest plant on backend
+                // Send WebSocket event to harvest plant on backend (fire-and-forget)
+                // UI updates will come via land_update and inventory_update events
                 if (plantId) {
-                    try {
-                        const success = await GardenService.harvestPlantWS(plantId);
-                        if (success) {
-                            // Refresh inventory data after successful harvest
-                            await GameDataService.refreshAfterGardenAction();
-                        }
-                    } catch (error) {
-                        console.error('Failed to harvest plant in database:', error);
+                    const usedWebSocket = GardenService.harvestPlantWS(plantId);
+                    
+                    // If WebSocket not available, fall back to REST API
+                    if (!usedWebSocket) {
+                        GardenService.harvestPlant(plantId).then(success => {
+                            if (success) {
+                                GameDataService.refreshAfterGardenAction();
+                            }
+                        }).catch(error => {
+                            console.error('Failed to harvest plant in database:', error);
+                        });
                     }
                 } else {
                     console.warn('No plantId available for harvesting - plant may not be synced with backend');

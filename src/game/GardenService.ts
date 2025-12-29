@@ -321,51 +321,49 @@ export class GardenService {
     }
 
     // ==========================================
-    // WebSocket-based Methods
+    // WebSocket-based Methods (Fire-and-forget)
+    // UI updates come via socket event listeners
     // ==========================================
 
     /**
      * Waters a plant via WebSocket
      * Uses the game gateway: ws://localhost:3000/game
      * Emit: 'water_plant', { plantId: string }
+     * Response comes via 'plant_update' and 'inventory_update' events
      * @param plantId The plant ID from the backend
-     * @returns A Promise that resolves to success/failure with message
+     * @returns true if WebSocket was used, false if fell back to REST
      */
-    static async waterPlantWS(plantId: string): Promise<{ success: boolean; message?: string }> {
+    static waterPlantWS(plantId: string): boolean {
         const socketService = getSocketService();
         
         if (!socketService.isConnected()) {
             console.log('[GardenService] WebSocket not connected, falling back to REST API');
-            return this.waterPlant(plantId);
+            return false;
         }
 
         console.log(`[GardenService] Watering plant via WebSocket: ${plantId}`);
-        const response = await socketService.waterPlant(plantId);
-        
-        return {
-            success: response.success,
-            message: response.message || response.error
-        };
+        socketService.waterPlant(plantId);
+        return true;
     }
 
     /**
      * Harvests a plant via WebSocket
      * Uses the game gateway: ws://localhost:3000/game
      * Emit: 'harvest_plant', { plantId: string }
+     * Response comes via 'land_update' and 'inventory_update' events
      * @param plantId The plant ID from the backend
-     * @returns A Promise that resolves to true if successful, false otherwise
+     * @returns true if WebSocket was used, false if fell back to REST
      */
-    static async harvestPlantWS(plantId: string): Promise<boolean> {
+    static harvestPlantWS(plantId: string): boolean {
         const socketService = getSocketService();
         
         if (!socketService.isConnected()) {
             console.log('[GardenService] WebSocket not connected, falling back to REST API');
-            return this.harvestPlant(plantId);
+            return false;
         }
 
         console.log(`[GardenService] Harvesting plant via WebSocket: ${plantId}`);
-        const response = await socketService.harvestPlant(plantId);
-        
-        return response.success;
+        socketService.harvestPlant(plantId);
+        return true;
     }
 }

@@ -520,37 +520,42 @@ export class ShopService {
     }
 
     /**
-     * Claim free water via WebSocket
+     * Claim free water via WebSocket (fire-and-forget)
      * Uses the game gateway: ws://localhost:3000/game
      * Emit: 'claim_water', {}
+     * Response comes via 'inventory_update' and 'action_success' events
+     * @returns true if WebSocket was used, false if not connected
      */
-    static async claimFreeWaterWS(): Promise<FreeWaterResponse | null> {
+    static claimFreeWaterWS(): boolean {
         const socketService = getSocketService();
         
         if (!socketService.isConnected()) {
-            console.log('[ShopService] WebSocket not connected, falling back to REST API');
-            return this.claimFreeWater();
+            console.log('[ShopService] WebSocket not connected');
+            return false;
         }
 
         console.log('[ShopService] Claiming water via WebSocket');
-        const response = await socketService.claimWater();
+        socketService.claimWater();
+        return true;
+    }
+
+    /**
+     * Buy land via WebSocket (fire-and-forget)
+     * Uses the game gateway: ws://localhost:3000/game
+     * Emit: 'buy_land', {}
+     * Response comes via 'land_update' and 'action_success' events
+     * @returns true if WebSocket was used, false if not connected
+     */
+    static buyLandWS(): boolean {
+        const socketService = getSocketService();
         
-        if (response.success) {
-            return {
-                success: true,
-                message: response.message || 'Water claimed!',
-                item: 'WATER',
-                amount: response.amount || 1,
-                nextClaimAt: response.nextClaimAt || ''
-            };
-        } else {
-            return {
-                success: false,
-                message: response.message || response.error || 'Failed to claim water',
-                item: '',
-                amount: 0,
-                nextClaimAt: response.nextClaimAt || ''
-            };
+        if (!socketService.isConnected()) {
+            console.log('[ShopService] WebSocket not connected for buy_land');
+            return false;
         }
+
+        console.log('[ShopService] Buying land via WebSocket');
+        socketService.buyLand();
+        return true;
     }
 }
