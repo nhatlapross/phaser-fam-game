@@ -43,12 +43,58 @@ export interface LandUpdatePayload {
  */
 export type SocketConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
+// ==========================================
+// Client -> Server Event Payloads
+// ==========================================
+
+/**
+ * Payload for water_plant event (Client -> Server)
+ */
+export interface WaterPlantPayload {
+    plantId: string;
+}
+
+/**
+ * Payload for harvest_plant event (Client -> Server)
+ */
+export interface HarvestPlantPayload {
+    plantId: string;
+}
+
+/**
+ * Response from server for water/harvest actions
+ */
+export interface GameActionResponse {
+    success: boolean;
+    message?: string;
+    error?: string;
+}
+
+/**
+ * Response from server for claim_water action
+ */
+export interface ClaimWaterResponse {
+    success: boolean;
+    message?: string;
+    error?: string;
+    amount?: number;
+    nextClaimAt?: string;
+}
+
 /**
  * Socket event names
  */
 export const SOCKET_EVENTS = {
+    // Server -> Client events
     PLANT_UPDATE: 'plant_update',
     LAND_UPDATE: 'land_update',
+    
+    // Client -> Server events
+    CLAIM_WATER: 'claim_water',
+    WATER_PLANT: 'water_plant',
+    HARVEST_PLANT: 'harvest_plant',
+    
+    // Connection events
     CONNECT: 'connect',
     DISCONNECT: 'disconnect',
     CONNECT_ERROR: 'connect_error',

@@ -484,7 +484,7 @@ export class WellManager extends BaseManager {
 
         // === BACKGROUND API CALL ===
         try {
-            const result = await ShopService.claimFreeWater();
+            const result = await ShopService.claimFreeWaterWS();
 
             if (result && result.success) {
                 // API success - update with actual values

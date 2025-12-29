@@ -6,6 +6,10 @@ import {
     LandUpdatePayload,
     SocketConnectionStatus,
     SOCKET_EVENTS,
+    WaterPlantPayload,
+    HarvestPlantPayload,
+    GameActionResponse,
+    ClaimWaterResponse,
 } from './types/SocketTypes';
 
 /**
@@ -18,6 +22,11 @@ import {
  * - 'socket:disconnected' - When connection is lost
  * - 'socket:plant_update' - When a plant is updated (growth, water, wither)
  * - 'socket:land_update' - When a land plot changes (plant/harvest)
+ * 
+ * Client -> Server Events:
+ * - 'claim_water' - Claim free water from well
+ * - 'water_plant' - Water a plant
+ * - 'harvest_plant' - Harvest a mature plant
  */
 export class SocketService {
     private static instance: SocketService | null = null;
@@ -222,6 +231,92 @@ export class SocketService {
         } else {
             console.warn('[SocketService] Cannot emit, socket not connected');
         }
+    }
+
+    // ==========================================
+    // Game Action Methods (Client -> Server)
+    // ==========================================
+
+    /**
+     * Claim free water from the well
+     * Emit: 'claim_water', {}
+     * @returns Promise that resolves with the server response
+     */
+    public claimWater(): Promise<ClaimWaterResponse> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected) {
+                console.warn('[SocketService] Cannot claim water, socket not connected');
+                resolve({ success: false, error: 'Socket not connected' });
+                return;
+            }
+
+            console.log('💧 [SocketService] Emitting claim_water');
+            this.socket.emit(SOCKET_EVENTS.CLAIM_WATER, {}, (response: ClaimWaterResponse) => {
+                console.log('💧 [SocketService] claim_water response:', response);
+                resolve(response);
+            });
+
+            // Timeout fallback if server doesn't respond with callback
+            setTimeout(() => {
+                resolve({ success: false, error: 'Request timeout' });
+            }, 10000);
+        });
+    }
+
+    /**
+     * Water a plant
+     * Emit: 'water_plant', { plantId: string }
+     * @param plantId - The UUID of the plant to water
+     * @returns Promise that resolves with the server response
+     */
+    public waterPlant(plantId: string): Promise<GameActionResponse> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected) {
+                console.warn('[SocketService] Cannot water plant, socket not connected');
+                resolve({ success: false, error: 'Socket not connected' });
+                return;
+            }
+
+            const payload: WaterPlantPayload = { plantId };
+            console.log('🌱 [SocketService] Emitting water_plant:', payload);
+            this.socket.emit(SOCKET_EVENTS.WATER_PLANT, payload, (response: GameActionResponse) => {
+                console.log('🌱 [SocketService] water_plant response:', response);
+                resolve(response);
+            });
+
+            // Timeout fallback if server doesn't respond with callback
+            setTimeout(() => {
+                resolve({ success: false, error: 'Request timeout' });
+            }, 10000);
+        });
+    }
+
+    /**
+     * Harvest a mature plant
+     * Emit: 'harvest_plant', { plantId: string }
+     * @param plantId - The UUID of the plant to harvest
+     * @returns Promise that resolves with the server response
+     */
+    public harvestPlant(plantId: string): Promise<GameActionResponse> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected) {
+                console.warn('[SocketService] Cannot harvest plant, socket not connected');
+                resolve({ success: false, error: 'Socket not connected' });
+                return;
+            }
+
+            const payload: HarvestPlantPayload = { plantId };
+            console.log('🌾 [SocketService] Emitting harvest_plant:', payload);
+            this.socket.emit(SOCKET_EVENTS.HARVEST_PLANT, payload, (response: GameActionResponse) => {
+                console.log('🌾 [SocketService] harvest_plant response:', response);
+                resolve(response);
+            });
+
+            // Timeout fallback if server doesn't respond with callback
+            setTimeout(() => {
+                resolve({ success: false, error: 'Request timeout' });
+            }, 10000);
+        });
     }
 
     /**

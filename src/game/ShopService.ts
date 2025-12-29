@@ -1,5 +1,7 @@
 // src/game/ShopService.ts
 
+import { getSocketService } from './SocketService';
+
 // Gold Shop Types
 export interface GoldShopItem {
     key: string;
@@ -514,6 +516,41 @@ export class ShopService {
         } catch (error) {
             console.error("Network error claiming free water:", error);
             return null;
+        }
+    }
+
+    /**
+     * Claim free water via WebSocket
+     * Uses the game gateway: ws://localhost:3000/game
+     * Emit: 'claim_water', {}
+     */
+    static async claimFreeWaterWS(): Promise<FreeWaterResponse | null> {
+        const socketService = getSocketService();
+        
+        if (!socketService.isConnected()) {
+            console.log('[ShopService] WebSocket not connected, falling back to REST API');
+            return this.claimFreeWater();
+        }
+
+        console.log('[ShopService] Claiming water via WebSocket');
+        const response = await socketService.claimWater();
+        
+        if (response.success) {
+            return {
+                success: true,
+                message: response.message || 'Water claimed!',
+                item: 'WATER',
+                amount: response.amount || 1,
+                nextClaimAt: response.nextClaimAt || ''
+            };
+        } else {
+            return {
+                success: false,
+                message: response.message || response.error || 'Failed to claim water',
+                item: '',
+                amount: 0,
+                nextClaimAt: response.nextClaimAt || ''
+            };
         }
     }
 }

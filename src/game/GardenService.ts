@@ -1,5 +1,7 @@
 // src/game/GardenService.ts
 
+import { getSocketService } from './SocketService';
+
 export interface Plant {
     id: string;
     type: 'ALGAE' | 'MUSHROOM' | 'TREE' | 'SOCIAL';
@@ -316,5 +318,54 @@ export class GardenService {
             console.error("Network error clearing land:", error);
             return null;
         }
+    }
+
+    // ==========================================
+    // WebSocket-based Methods
+    // ==========================================
+
+    /**
+     * Waters a plant via WebSocket
+     * Uses the game gateway: ws://localhost:3000/game
+     * Emit: 'water_plant', { plantId: string }
+     * @param plantId The plant ID from the backend
+     * @returns A Promise that resolves to success/failure with message
+     */
+    static async waterPlantWS(plantId: string): Promise<{ success: boolean; message?: string }> {
+        const socketService = getSocketService();
+        
+        if (!socketService.isConnected()) {
+            console.log('[GardenService] WebSocket not connected, falling back to REST API');
+            return this.waterPlant(plantId);
+        }
+
+        console.log(`[GardenService] Watering plant via WebSocket: ${plantId}`);
+        const response = await socketService.waterPlant(plantId);
+        
+        return {
+            success: response.success,
+            message: response.message || response.error
+        };
+    }
+
+    /**
+     * Harvests a plant via WebSocket
+     * Uses the game gateway: ws://localhost:3000/game
+     * Emit: 'harvest_plant', { plantId: string }
+     * @param plantId The plant ID from the backend
+     * @returns A Promise that resolves to true if successful, false otherwise
+     */
+    static async harvestPlantWS(plantId: string): Promise<boolean> {
+        const socketService = getSocketService();
+        
+        if (!socketService.isConnected()) {
+            console.log('[GardenService] WebSocket not connected, falling back to REST API');
+            return this.harvestPlant(plantId);
+        }
+
+        console.log(`[GardenService] Harvesting plant via WebSocket: ${plantId}`);
+        const response = await socketService.harvestPlant(plantId);
+        
+        return response.success;
     }
 }

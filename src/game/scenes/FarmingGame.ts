@@ -2614,7 +2614,7 @@ export class FarmingGame extends Scene {
 
             // Call API in background (don't await for initial feedback)
             const plantId = state.plantId;
-            GardenService.waterPlant(plantId).then(result => {
+            GardenService.waterPlantWS(plantId).then(result => {
                 if (!result.success) {
                     // API failed - rollback optimistic update
                     console.warn('Water API failed, rolling back:', result.message);
@@ -2650,6 +2650,7 @@ export class FarmingGame extends Scene {
         // Check if we have fertilizer of the selected type
         if (currentFertilizerCount <= 0) {
             console.log('No', selectedFertilizerType, 'fertilizer left!');
+            this.showToastMessage('No fertilizer!', 0xfbbf24);
             return;
         }
 
@@ -2657,39 +2658,82 @@ export class FarmingGame extends Scene {
             // Cannot fertilize dead plants
             if (state.isDead) {
                 console.log('This plant is dead and cannot be fertilized!');
+                this.showToastMessage('Plant is dead!', 0xef4444);
                 return;
             }
 
-            // Reset care timer (prevents death/wilt)
-            state.lastCareTime = Date.now();
+            // Check if landId is available for API call
+            if (!state.landId) {
+                console.warn('No landId available for fertilizing - plant may not be synced with backend');
+                this.showToastMessage('Plant not synced yet', 0xfbbf24);
+                return;
+            }
 
-            // Reset health bar to full
+            // === OPTIMISTIC UI UPDATE ===
+            // Store previous values for potential rollback
+            const previousFertilizerCount = this.fertilizerCounts[selectedFertilizerType];
+            const previousLastCareTime = state.lastCareTime;
+            const previousPlantStage = state.plantStage;
+            const wasWilted = state.isWilted;
+
+            // Immediately update local state
+            state.lastCareTime = Date.now();
             this.resetHealthBar(tileKey);
 
-            // If plant was wilted, restore it
+            // If plant was wilted, restore it optimistically
             if (state.isWilted) {
                 state.isWilted = false;
-                console.log('Plant at', tileKey, 'has been restored from wilted state!');
             }
 
-            const maxStage = PLANT_STAGES.MATURE;
+            // Decrease fertilizer count optimistically
+            this.fertilizerCounts[selectedFertilizerType]--;
+            this.updateToolbar();
 
-            if (state.plantStage < maxStage) {
-                // Fertilizer grows plant by 2 stages (but not beyond max)
-                state.plantStage = Math.min(state.plantStage + 2, maxStage);
-                this.fertilizerCounts[selectedFertilizerType]--;
+            // Play success sound immediately
+            this.soundManager.playSuccessSound();
+            this.showToastMessage('Fertilized!', 0x4ade80);
+
+            console.log('Fertilizing with', selectedFertilizerType, 'at', tileKey, '- Fertilizer left:', this.fertilizerCounts[selectedFertilizerType]);
+
+            // Call API in background
+            const landId = state.landId;
+            const apiFertilizerType = FertilizerService.mapToApiFertilizerType(selectedFertilizerType);
+            
+            FertilizerService.applyFertilizer(landId, apiFertilizerType).then(result => {
+                if (!result || !result.success) {
+                    // API failed - rollback optimistic update
+                    console.warn('Fertilizer API failed, rolling back');
+                    this.fertilizerCounts[selectedFertilizerType] = previousFertilizerCount;
+                    state.lastCareTime = previousLastCareTime;
+                    state.plantStage = previousPlantStage;
+                    state.isWilted = wasWilted;
+                    this.updateToolbar();
+                    this.showToastMessage('Fertilize failed!', 0xef4444);
+                } else {
+                    // API succeeded - update with actual data from server
+                    console.log('Fertilizer applied successfully:', result.message);
+                    
+                    // Update plant stage if changed
+                    if (result.stageChanged) {
+                        const newStage = GardenService.mapStageToGameStage(result.newStage);
+                        state.plantStage = newStage;
+                        this.updatePlantSprite(x, y, state.cropType!, newStage, false, false);
+                        console.log('Plant stage changed from', result.oldStage, 'to', result.newStage);
+                    }
+
+                    // Refresh garden data to get updated state
+                    this.loadGardenData();
+                }
+            }).catch(error => {
+                // Network error - rollback
+                console.error('Fertilizer API error:', error);
+                this.fertilizerCounts[selectedFertilizerType] = previousFertilizerCount;
+                state.lastCareTime = previousLastCareTime;
+                state.plantStage = previousPlantStage;
+                state.isWilted = wasWilted;
                 this.updateToolbar();
-
-                // Update plant sprite
-                this.updatePlantSprite(x, y, state.cropType, state.plantStage, false, state.isWilted);
-
-                console.log('Fertilized with', selectedFertilizerType, 'and grew to stage', state.plantStage, 'at', tileKey, '- Fertilizer left:', this.fertilizerCounts[selectedFertilizerType]);
-            } else {
-                // Still consume fertilizer but just reset timer
-                this.fertilizerCounts[selectedFertilizerType]--;
-                this.updateToolbar();
-                console.log('Plant is already fully grown at', tileKey, '- Care timer reset');
-            }
+                this.showToastMessage('Network error!', 0xef4444);
+            });
         }
     }
 
@@ -2754,7 +2798,7 @@ export class FarmingGame extends Scene {
                 // Call API to harvest plant on backend
                 if (plantId) {
                     try {
-                        const success = await GardenService.harvestPlant(plantId);
+                        const success = await GardenService.harvestPlantWS(plantId);
                         if (success) {
                             // Refresh inventory data after successful harvest
                             await GameDataService.refreshAfterGardenAction();
