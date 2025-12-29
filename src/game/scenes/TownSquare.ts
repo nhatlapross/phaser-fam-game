@@ -3,6 +3,8 @@ import { EventBus } from '../EventBus';
 import { TOWN_SQUARE_MAP_DATA, TOWN_SQUARE_MAP_WIDTH, TOWN_SQUARE_MAP_HEIGHT } from './TownSquareMapData';
 import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType } from '../managers';
 import { GameDataService } from '../GameDataService';
+import { LobbySocketService } from '../LobbySocketService';
+import { LobbyChatPayload } from '../types/LobbyTypes';
 
 /**
  * Town Square Scene - A larger public space for social interactions
@@ -79,10 +81,13 @@ export class TownSquare extends Scene {
     private chatButton!: Phaser.GameObjects.Container;
     private chatModalOpen: boolean = false;
     private chatModal!: Phaser.GameObjects.Container;
-    private chatHistory: string[] = [];
+    private chatHistory: Array<{ username: string; message: string; timestamp: Date; scope: string }> = [];
     private speechBubble: Phaser.GameObjects.Container | null = null;
     private chatInputElement: HTMLInputElement | null = null;
     private chatHistoryText: Phaser.GameObjects.Text | null = null;
+
+    // Lobby WebSocket service
+    private lobbySocketService!: LobbySocketService;
 
     // Navigation data (from station travel)
     private navigationData: NavigationData | null = null;
@@ -183,6 +188,9 @@ export class TownSquare extends Scene {
 
         // Setup camera ignore for UI elements
         this.setupCameraIgnore();
+
+        // Initialize lobby WebSocket and setup chat listeners
+        this.initializeLobbySocket();
 
         // Handle resize
         this.scale.on('resize', this.onResize, this);
@@ -793,6 +801,112 @@ export class TownSquare extends Scene {
         this.stationManager?.destroy();
         this.profileManager?.destroy();
         this.toolbarManager?.destroy();
+        
+        // Cleanup lobby socket event listeners
+        this.cleanupLobbySocketListeners();
+    }
+
+    /**
+     * Initialize lobby WebSocket connection and setup event listeners
+     */
+    private initializeLobbySocket() {
+        this.lobbySocketService = LobbySocketService.getInstance();
+        
+        // Connect if not already connected
+        if (!this.lobbySocketService.isConnected()) {
+            this.lobbySocketService.connect();
+        }
+
+        // Setup event listeners for chat
+        this.setupLobbyChatListeners();
+    }
+
+    /**
+     * Setup lobby chat event listeners
+     */
+    private setupLobbyChatListeners() {
+        // Listen for incoming chat messages
+        EventBus.on('lobby:chat', this.handleLobbyChatMessage, this);
+        
+        // Listen for connection status
+        EventBus.on('lobby:connected', this.handleLobbyConnected, this);
+        EventBus.on('lobby:disconnected', this.handleLobbyDisconnected, this);
+    }
+
+    /**
+     * Cleanup lobby socket event listeners
+     */
+    private cleanupLobbySocketListeners() {
+        EventBus.off('lobby:chat', this.handleLobbyChatMessage, this);
+        EventBus.off('lobby:connected', this.handleLobbyConnected, this);
+        EventBus.off('lobby:disconnected', this.handleLobbyDisconnected, this);
+    }
+
+    /**
+     * Handle incoming lobby chat message from WebSocket
+     */
+    private handleLobbyChatMessage = (payload: LobbyChatPayload) => {
+        console.log('💬 [TownSquare] Received chat message:', payload);
+        
+        // Add to chat history
+        this.chatHistory.push({
+            username: payload.username,
+            message: payload.message,
+            timestamp: new Date(payload.timestamp),
+            scope: payload.scope
+        });
+
+        // Keep only last 50 messages
+        if (this.chatHistory.length > 50) {
+            this.chatHistory = this.chatHistory.slice(-50);
+        }
+
+        // Update chat modal if open
+        this.updateChatHistoryDisplay();
+
+        // Show speech bubble for the message (if from another user or self)
+        const cachedData = GameDataService.getCachedData();
+        const currentUserId = cachedData?.user?.id;
+        
+        // Show speech bubble for own messages
+        if (payload.userId === currentUserId) {
+            this.showSpeechBubble(payload.message);
+        }
+        
+        // TODO: Show speech bubbles for other players when multiplayer avatars are implemented
+    };
+
+    /**
+     * Handle lobby connected event
+     */
+    private handleLobbyConnected = () => {
+        console.log('✅ [TownSquare] Lobby WebSocket connected');
+        this.showToastMessage('Connected to chat', 0x4CAF50);
+    };
+
+    /**
+     * Handle lobby disconnected event
+     */
+    private handleLobbyDisconnected = (reason: string) => {
+        console.log('❌ [TownSquare] Lobby WebSocket disconnected:', reason);
+        this.showToastMessage('Chat disconnected', 0xFF5722);
+    };
+
+    /**
+     * Update chat history display in modal
+     */
+    private updateChatHistoryDisplay() {
+        if (!this.chatHistoryText || !this.chatModalOpen) return;
+
+        const displayMessages = this.chatHistory.slice(-8).map(msg => {
+            const shortName = msg.username.length > 9 
+                ? msg.username.substring(0, 9) + '...' 
+                : msg.username;
+            const scopeIcon = msg.scope === 'GLOBAL' ? '🌐' : '📍';
+            return `${scopeIcon} ${shortName}: ${msg.message}`;
+        });
+
+        this.chatHistoryText.setText(displayMessages.join('\n'));
     }
 
     /**
@@ -962,8 +1076,10 @@ export class TownSquare extends Scene {
         const bg = this.add.rectangle(0, 0, modalWidth, modalHeight, 0x3E2723, 0.95);
         bg.setStrokeStyle(3, 0x5D4037);
 
-        // Title
-        const title = this.add.text(0, -modalHeight / 2 + 20, '💬 Chat', {
+        // Title with connection status
+        const isConnected = this.lobbySocketService?.isConnected();
+        const statusIcon = isConnected ? '🟢' : '🔴';
+        const title = this.add.text(0, -modalHeight / 2 + 20, `💬 Global Chat ${statusIcon}`, {
             fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#FFD700',
@@ -983,8 +1099,16 @@ export class TownSquare extends Scene {
         const historyBg = this.add.rectangle(0, -20, modalWidth - 20, 150, 0x2D2D2D, 0.8);
         historyBg.setStrokeStyle(1, 0x5D4037);
 
-        // Chat history text
-        this.chatHistoryText = this.add.text(-modalWidth / 2 + 15, -90, this.chatHistory.slice(-8).join('\n'), {
+        // Chat history text - format messages with scope icons
+        const displayMessages = this.chatHistory.slice(-8).map(msg => {
+            const shortName = msg.username.length > 9 
+                ? msg.username.substring(0, 9) + '...' 
+                : msg.username;
+            const scopeIcon = msg.scope === 'GLOBAL' ? '🌐' : '📍';
+            return `${scopeIcon} ${shortName}: ${msg.message}`;
+        });
+
+        this.chatHistoryText = this.add.text(-modalWidth / 2 + 15, -90, displayMessages.join('\n'), {
             fontSize: '9px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -1067,31 +1191,31 @@ export class TownSquare extends Scene {
     }
 
     /**
-     * Send chat message
+     * Send chat message via WebSocket (global chat)
      */
     private sendChatMessage() {
         if (!this.chatInputElement) return;
 
         const message = this.chatInputElement.value.trim();
-        if (message) {
-            // Add to history
-            const cachedData = GameDataService.getCachedData();
-            const playerName = cachedData?.user?.username || 'Player';
-            const shortName = playerName.length > 9 ? playerName.substring(0, 9) + '...' : playerName;
-            this.chatHistory.push(`${shortName}: ${message}`);
+        if (!message) return;
 
-            // Update history display
-            if (this.chatHistoryText) {
-                this.chatHistoryText.setText(this.chatHistory.slice(-8).join('\n'));
-            }
-
-            // Clear input
-            this.chatInputElement.value = '';
-            this.chatInputElement.focus();
-
-            // Show speech bubble above player
-            this.showSpeechBubble(message);
+        // Check if connected to lobby
+        if (!this.lobbySocketService?.isConnected()) {
+            this.showToastMessage('Not connected to chat server', 0xFF5722);
+            return;
         }
+
+        // Send via WebSocket (fire-and-forget)
+        // Server will broadcast back via 'lobby_chat' event
+        console.log('💬 [TownSquare] Sending global chat:', message);
+        this.lobbySocketService.chatGlobal(message);
+
+        // Clear input
+        this.chatInputElement.value = '';
+        this.chatInputElement.focus();
+
+        // Note: Message will appear in chat history when server broadcasts it back
+        // This ensures consistency - we only show messages confirmed by server
     }
 
     /**
