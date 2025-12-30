@@ -35,6 +35,7 @@
         "next": "15.3.6",
         "phaser": "^3.90.0",
         "phaser-hooks": "^0.7.0",
+        "phaser3-rex-plugins": "^1.80.17",
         "react": "19.0.1",
         "react-dom": "19.0.1",
         "socket.io-client": "^4.8.3",

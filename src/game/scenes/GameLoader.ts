@@ -121,14 +121,14 @@ export class GameLoader extends Scene {
         // Safety check
         if (!this.cameras || !this.cameras.main || !this.scene.isActive('GameLoader')) {
             if (this.scene) {
-                this.scene.start('FarmingGame');
+                this.scene.start('TownSquare');
             }
             return;
         }
 
         this.cameras.main.fadeOut(500, 0, 0, 0);
         this.cameras.main.once('camerafadeoutcomplete', () => {
-            this.scene.start('FarmingGame');
+            this.scene.start('TownSquare');
         });
     }
 

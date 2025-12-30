@@ -12,6 +12,7 @@ import { TownSquare } from './scenes/TownSquare';
 import { TilesetDebug } from './scenes/TilesetDebug';
 import { Login } from './scenes/Login';
 import { GameLoader } from './scenes/GameLoader';
+import InputTextPlugin from 'phaser3-rex-plugins/plugins/inputtext-plugin.js';
 
 //  Find out more information about the Game Config at:
 //  https://newdocs.phaser.io/docs/3.70.0/Phaser.Types.Core.GameConfig
@@ -38,6 +39,16 @@ const config: Phaser.Types.Core.GameConfig = {
         touch: {
             capture: true
         }
+    },
+    dom: {
+        createContainer: true
+    },
+    plugins: {
+        global: [{
+            key: 'rexInputTextPlugin',
+            plugin: InputTextPlugin,
+            start: true
+        }]
     },
     scene: [
         Boot,

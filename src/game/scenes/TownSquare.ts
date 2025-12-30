@@ -1139,22 +1139,40 @@ export class TownSquare extends Scene {
     }
 
     /**
-     * Create HTML input element for chat
+     * Create HTML input for chat (positioned using canvas scale calculations)
      */
     private createChatInput(modalX: number, modalY: number, modalWidth: number, modalHeight: number) {
         // Remove existing input if any
         if (this.chatInputElement) {
             this.chatInputElement.remove();
+            this.chatInputElement = null;
         }
 
-        // Get canvas position on page
-        const canvasRect = this.game.canvas.getBoundingClientRect();
+        // Get canvas rect and calculate scale factor
+        const canvas = this.game.canvas;
+        const canvasRect = canvas.getBoundingClientRect();
 
-        // Calculate input position - align with footer area (inputBg is at modalHeight/2 - 40)
-        // Input should be left of send button, which is at modalWidth/2 - 50
-        const inputWidth = modalWidth - 20;  // Leave space for send button
-        const inputX = canvasRect.left + modalX - modalWidth / 2 + 125;  // Left edge of modal + padding
-        const inputY = canvasRect.top + modalY + modalHeight / 2 - 5;  // Align with inputBg
+        // Game dimensions vs actual canvas dimensions
+        const gameWidth = this.scale.width;  // 960
+        const gameHeight = this.scale.height; // 540
+        const scaleX = canvasRect.width / gameWidth;
+        const scaleY = canvasRect.height / gameHeight;
+
+        // Send button is at x = modalWidth/2 - 40 from modal center, width 50
+        // Input should be to the left of send button with 5px gap
+        const sendButtonWidth = 50;
+        const gap = 5;
+        const inputWidthGame = modalWidth - 20 - sendButtonWidth - gap; // in game units
+
+        // Calculate input position in game coordinates (relative to modal center)
+        const inputOffsetX = -modalWidth / 2 + 10; // left edge of input from modal center
+        const inputOffsetY = modalHeight / 2 - 40; // same Y as send button
+
+        // Convert to screen coordinates
+        const inputX = canvasRect.left + (modalX + inputOffsetX) * scaleX;
+        const inputY = canvasRect.top + (modalY + inputOffsetY) * scaleY - (25 * scaleY / 2); // center vertically
+        const inputWidth = inputWidthGame * scaleX;
+        const inputHeight = 25 * scaleY;
 
         // Create HTML input
         this.chatInputElement = document.createElement('input');
@@ -1166,28 +1184,70 @@ export class TownSquare extends Scene {
             left: ${inputX}px;
             top: ${inputY}px;
             width: ${inputWidth}px;
-            height: 30px;
+            height: ${inputHeight}px;
             padding: 4px 8px;
             font-family: 'PixelFont', Arial, sans-serif;
-            font-size: 12px;
+            font-size: ${12 * scaleY}px;
             background: #1A1A1A;
             color: #FFFFFF;
             border: 1px solid #5D4037;
             border-radius: 4px;
             outline: none;
             z-index: 1000;
+            box-sizing: border-box;
         `;
 
         // Handle Enter key
-        this.chatInputElement.addEventListener('keydown', (e) => {
+        this.chatInputElement.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Enter') {
                 this.sendChatMessage();
             }
         });
 
-        // Add to DOM (use body for fixed positioning)
+        // Add to DOM
         document.body.appendChild(this.chatInputElement);
         this.chatInputElement.focus();
+
+        // Listen to resize to reposition
+        this.scale.on('resize', this.repositionChatInput, this);
+    }
+
+    /**
+     * Reposition chat input when screen resizes
+     */
+    private repositionChatInput() {
+        if (!this.chatInputElement || !this.chatModalOpen) return;
+
+        const canvas = this.game.canvas;
+        const canvasRect = canvas.getBoundingClientRect();
+
+        const gameWidth = this.scale.width;
+        const gameHeight = this.scale.height;
+        const scaleX = canvasRect.width / gameWidth;
+        const scaleY = canvasRect.height / gameHeight;
+
+        const modalWidth = 300;
+        const modalHeight = 250;
+        const modalX = gameWidth / 2;
+        const modalY = gameHeight / 2;
+
+        const sendButtonWidth = 50;
+        const gap = 5;
+        const inputWidthGame = modalWidth - 20 - sendButtonWidth - gap;
+
+        const inputOffsetX = -modalWidth / 2 + 10;
+        const inputOffsetY = modalHeight / 2 - 40;
+
+        const inputX = canvasRect.left + (modalX + inputOffsetX) * scaleX;
+        const inputY = canvasRect.top + (modalY + inputOffsetY) * scaleY - (25 * scaleY / 2);
+        const inputWidth = inputWidthGame * scaleX;
+        const inputHeight = 25 * scaleY;
+
+        this.chatInputElement.style.left = `${inputX}px`;
+        this.chatInputElement.style.top = `${inputY}px`;
+        this.chatInputElement.style.width = `${inputWidth}px`;
+        this.chatInputElement.style.height = `${inputHeight}px`;
+        this.chatInputElement.style.fontSize = `${12 * scaleY}px`;
     }
 
     /**
@@ -1222,6 +1282,9 @@ export class TownSquare extends Scene {
      * Close chat modal
      */
     private closeChatModal() {
+        // Remove resize listener
+        this.scale.off('resize', this.repositionChatInput, this);
+
         // Remove HTML input
         if (this.chatInputElement) {
             this.chatInputElement.remove();
