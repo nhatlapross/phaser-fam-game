@@ -1,5 +1,7 @@
 // src/game/ShopService.ts
 
+import { getSocketService } from './SocketService';
+
 // Gold Shop Types
 export interface GoldShopItem {
     key: string;
@@ -515,5 +517,45 @@ export class ShopService {
             console.error("Network error claiming free water:", error);
             return null;
         }
+    }
+
+    /**
+     * Claim free water via WebSocket (fire-and-forget)
+     * Uses the game gateway: ws://localhost:3000/game
+     * Emit: 'claim_water', {}
+     * Response comes via 'inventory_update' and 'action_success' events
+     * @returns true if WebSocket was used, false if not connected
+     */
+    static claimFreeWaterWS(): boolean {
+        const socketService = getSocketService();
+        
+        if (!socketService.isConnected()) {
+            console.log('[ShopService] WebSocket not connected');
+            return false;
+        }
+
+        console.log('[ShopService] Claiming water via WebSocket');
+        socketService.claimWater();
+        return true;
+    }
+
+    /**
+     * Buy land via WebSocket (fire-and-forget)
+     * Uses the game gateway: ws://localhost:3000/game
+     * Emit: 'buy_land', {}
+     * Response comes via 'land_update' and 'action_success' events
+     * @returns true if WebSocket was used, false if not connected
+     */
+    static buyLandWS(): boolean {
+        const socketService = getSocketService();
+        
+        if (!socketService.isConnected()) {
+            console.log('[ShopService] WebSocket not connected for buy_land');
+            return false;
+        }
+
+        console.log('[ShopService] Buying land via WebSocket');
+        socketService.buyLand();
+        return true;
     }
 }

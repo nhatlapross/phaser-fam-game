@@ -322,12 +322,21 @@ export class PlotManager extends BaseManager {
 
         console.log('Purchased plot', plotIndex + 1);
 
-        // 2. CALL API - Purchase land slot via gem shop
+        // 2. TRY WEBSOCKET FIRST - Buy land via WebSocket (fire-and-forget)
+        const usedWebSocket = ShopService.buyLandWS();
+        
+        if (usedWebSocket) {
+            // WebSocket sent - UI updates will come via land_update and action_success events
+            console.log('[PlotManager] Buy land sent via WebSocket');
+            return;
+        }
+
+        // 3. FALL BACK TO REST API if WebSocket not available
         try {
             const result = await ShopService.purchaseGemItem(plotItem.key, 1);
             
             if (!result || !result.success) {
-                // 3. ROLLBACK on failure
+                // ROLLBACK on failure
                 this.callbacks.setPlayerGems(previousGems);
                 this.callbacks.setOwnedPlotsCount(previousOwnedPlots);
                 
@@ -340,7 +349,7 @@ export class PlotManager extends BaseManager {
                 this.callbacks.showFloatingMessage(result?.message || 'Purchase failed!', tileX, tileY);
                 console.error('Failed to purchase plot:', result?.message);
             } else {
-                // 4. SYNC with server data
+                // SYNC with server data
                 await GameDataService.refreshAndUpdateUI();
             }
         } catch (error) {
