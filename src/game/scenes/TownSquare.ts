@@ -4,7 +4,8 @@ import { TOWN_SQUARE_MAP_DATA, TOWN_SQUARE_MAP_WIDTH, TOWN_SQUARE_MAP_HEIGHT } f
 import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType } from '../managers';
 import { GameDataService } from '../GameDataService';
 import { LobbySocketService } from '../LobbySocketService';
-import { LobbyChatPayload } from '../types/LobbyTypes';
+import { LobbyChatPayload, UserLobbyState, LobbyStatePayload, UserJoinedPayload, UserLeftPayload, UserMovedPayload } from '../types/LobbyTypes';
+import { useGameState } from '../hooks/useGameState';
 
 /**
  * Town Square Scene - A larger public space for social interactions
@@ -89,6 +90,21 @@ export class TownSquare extends Scene {
     // Lobby WebSocket service
     private lobbySocketService!: LobbySocketService;
 
+    // Multiplayer - other players
+    private otherPlayers: Map<string, {
+        sprite: Phaser.GameObjects.Sprite;
+        nameText: Phaser.GameObjects.Text;
+        speechBubble: Phaser.GameObjects.Container | null;
+        targetX: number;
+        targetY: number;
+        lastX: number;
+        lastY: number;
+        isMoving: boolean;
+    }> = new Map();
+    private lastPositionSent: { x: number; y: number; time: number } = { x: 0, y: 0, time: 0 };
+    private readonly POSITION_SEND_THROTTLE = 100; // ms between position updates
+    private readonly POSITION_CHANGE_THRESHOLD = 2; // minimum distance to trigger update
+
     // Navigation data (from station travel)
     private navigationData: NavigationData | null = null;
 
@@ -145,6 +161,9 @@ export class TownSquare extends Scene {
 
         // Create clock UI
         this.createClockUI();
+
+        // Initialize gameState from cached data (needed for ProfileManager currency display)
+        this.initializeGameState();
 
         // Create profile manager
         this.profileManager = new ProfileManager(this, {
@@ -664,6 +683,10 @@ export class TownSquare extends Scene {
     update() {
         this.handlePlayerMovement();
         this.updateClock();
+
+        // Multiplayer: send position and update other players
+        this.sendPlayerPosition();
+        this.updateOtherPlayers();
     }
 
     private handlePlayerMovement() {
@@ -795,13 +818,43 @@ export class TownSquare extends Scene {
         }
     }
 
+    /**
+     * Initialize gameState from cached data (for ProfileManager currency display)
+     */
+    private initializeGameState() {
+        const cachedData = GameDataService.getCachedData();
+        if (!cachedData) return;
+
+        const gameState = useGameState(this);
+        gameState.initialize({
+            currency: {
+                gold: cachedData.user?.balanceGold ?? cachedData.currencies?.gold ?? 0,
+                gem: cachedData.user?.balanceGem ?? cachedData.currencies?.gem ?? 0,
+            },
+            seeds: this.seedCounts,
+            fertilizers: this.fertilizerCounts,
+            fruits: [],
+            waterCount: 0,
+            user: cachedData.user ? {
+                id: cachedData.user.id,
+                username: cachedData.user.username || 'Player',
+                avatar: cachedData.user.avatar || null,
+                xp: cachedData.user.xp,
+                reputationScore: cachedData.user.reputationScore,
+                address: cachedData.user.address,
+                landsCount: cachedData.user.landsCount || 0,
+                plantsCount: cachedData.user.plantsCount || 0,
+            } : null,
+        });
+    }
+
     destroy() {
         this.scale.off('resize', this.onResize, this);
         this.soundManager?.destroy();
         this.stationManager?.destroy();
         this.profileManager?.destroy();
         this.toolbarManager?.destroy();
-        
+
         // Cleanup lobby socket event listeners
         this.cleanupLobbySocketListeners();
     }
@@ -811,14 +864,19 @@ export class TownSquare extends Scene {
      */
     private initializeLobbySocket() {
         this.lobbySocketService = LobbySocketService.getInstance();
-        
-        // Connect if not already connected
-        if (!this.lobbySocketService.isConnected()) {
-            this.lobbySocketService.connect();
+
+        // Setup event listeners BEFORE connecting to ensure we catch lobby_state
+        this.setupLobbyChatListeners();
+
+        // Force fresh connection when entering TownSquare to get lobby_state
+        // This ensures users joining later will see all existing users
+        if (this.lobbySocketService.isConnected()) {
+            console.log('🔄 [TownSquare] Socket already connected, forcing reconnect for fresh lobby_state');
+            this.lobbySocketService.disconnect();
         }
 
-        // Setup event listeners for chat
-        this.setupLobbyChatListeners();
+        // Connect (or reconnect) to get lobby_state
+        this.lobbySocketService.connect();
     }
 
     /**
@@ -827,10 +885,16 @@ export class TownSquare extends Scene {
     private setupLobbyChatListeners() {
         // Listen for incoming chat messages
         EventBus.on('lobby:chat', this.handleLobbyChatMessage, this);
-        
+
         // Listen for connection status
         EventBus.on('lobby:connected', this.handleLobbyConnected, this);
         EventBus.on('lobby:disconnected', this.handleLobbyDisconnected, this);
+
+        // Listen for multiplayer events
+        EventBus.on('lobby:state', this.handleLobbyState, this);
+        EventBus.on('lobby:user_joined', this.handleUserJoined, this);
+        EventBus.on('lobby:user_left', this.handleUserLeft, this);
+        EventBus.on('lobby:user_moved', this.handleUserMoved, this);
     }
 
     /**
@@ -840,6 +904,22 @@ export class TownSquare extends Scene {
         EventBus.off('lobby:chat', this.handleLobbyChatMessage, this);
         EventBus.off('lobby:connected', this.handleLobbyConnected, this);
         EventBus.off('lobby:disconnected', this.handleLobbyDisconnected, this);
+
+        // Cleanup multiplayer events
+        EventBus.off('lobby:state', this.handleLobbyState, this);
+        EventBus.off('lobby:user_joined', this.handleUserJoined, this);
+        EventBus.off('lobby:user_left', this.handleUserLeft, this);
+        EventBus.off('lobby:user_moved', this.handleUserMoved, this);
+
+        // Destroy all other player sprites and speech bubbles
+        this.otherPlayers.forEach((player) => {
+            player.sprite.destroy();
+            player.nameText.destroy();
+            if (player.speechBubble) {
+                player.speechBubble.destroy(true);
+            }
+        });
+        this.otherPlayers.clear();
     }
 
     /**
@@ -864,16 +944,17 @@ export class TownSquare extends Scene {
         // Update chat modal if open
         this.updateChatHistoryDisplay();
 
-        // Show speech bubble for the message (if from another user or self)
+        // Show speech bubble for the message
         const cachedData = GameDataService.getCachedData();
         const currentUserId = cachedData?.user?.id;
-        
-        // Show speech bubble for own messages
+
         if (payload.userId === currentUserId) {
+            // Show speech bubble for own messages (above main player)
             this.showSpeechBubble(payload.message);
+        } else {
+            // Show speech bubble for other players
+            this.showOtherPlayerSpeechBubble(payload.userId, payload.message);
         }
-        
-        // TODO: Show speech bubbles for other players when multiplayer avatars are implemented
     };
 
     /**
@@ -882,6 +963,18 @@ export class TownSquare extends Scene {
     private handleLobbyConnected = () => {
         console.log('✅ [TownSquare] Lobby WebSocket connected');
         this.showToastMessage('Connected to chat', 0x4CAF50);
+
+        // Send initial position immediately after connection
+        // This ensures other players see us right away
+        if (this.player) {
+            this.time.delayedCall(100, () => {
+                this.lobbySocketService?.move(this.player.x, this.player.y, 'square');
+                this.lastPositionSent.x = this.player.x;
+                this.lastPositionSent.y = this.player.y;
+                this.lastPositionSent.time = Date.now();
+                console.log('📍 [TownSquare] Sent initial position:', this.player.x, this.player.y);
+            });
+        }
     };
 
     /**
@@ -891,6 +984,267 @@ export class TownSquare extends Scene {
         console.log('❌ [TownSquare] Lobby WebSocket disconnected:', reason);
         this.showToastMessage('Chat disconnected', 0xFF5722);
     };
+
+    // ==========================================
+    // Multiplayer Handlers
+    // ==========================================
+
+    /**
+     * Handle initial lobby state - spawn all existing players
+     */
+    private handleLobbyState = (payload: LobbyStatePayload) => {
+        console.log('👥 [TownSquare] Received lobby state:', payload.length, 'users');
+        console.log('👥 [TownSquare] Users in lobby:', payload.map(u => u.username).join(', '));
+
+        const cachedData = GameDataService.getCachedData();
+        const currentUserId = cachedData?.user?.id;
+        console.log('👤 [TownSquare] Current user ID:', currentUserId);
+
+        // Clear existing players first (in case of reconnection)
+        this.otherPlayers.forEach((player, id) => {
+            player.sprite.destroy();
+            player.nameText.destroy();
+            this.otherPlayers.delete(id);
+        });
+
+        let createdCount = 0;
+        payload.forEach((user) => {
+            // Don't create sprite for self
+            if (user.userId === currentUserId) {
+                console.log('👤 [TownSquare] Skipping self:', user.username);
+                return;
+            }
+
+            this.createOtherPlayer(user);
+            createdCount++;
+        });
+
+        console.log(`✅ [TownSquare] Created ${createdCount} other player sprites`);
+    };
+
+    /**
+     * Handle new user joined
+     */
+    private handleUserJoined = (payload: UserJoinedPayload) => {
+        console.log('➕ [TownSquare] User joined:', payload.username);
+
+        const cachedData = GameDataService.getCachedData();
+        const currentUserId = cachedData?.user?.id;
+
+        // Don't create sprite for self
+        if (payload.userId === currentUserId) return;
+
+        // Remove existing if any (shouldn't happen, but safety check)
+        this.removeOtherPlayer(payload.userId);
+
+        this.createOtherPlayer(payload);
+        this.showToastMessage(`${payload.username} joined`, 0x4CAF50);
+    };
+
+    /**
+     * Handle user left
+     */
+    private handleUserLeft = (payload: UserLeftPayload) => {
+        console.log('➖ [TownSquare] User left:', payload.userId);
+
+        const player = this.otherPlayers.get(payload.userId);
+        if (player) {
+            this.showToastMessage(`${player.nameText.text} left`, 0xFF9800);
+            this.removeOtherPlayer(payload.userId);
+        }
+    };
+
+    /**
+     * Handle user moved
+     */
+    private handleUserMoved = (payload: UserMovedPayload) => {
+        const cachedData = GameDataService.getCachedData();
+        const currentUserId = cachedData?.user?.id;
+
+        // Ignore self movement
+        if (payload.userId === currentUserId) return;
+
+        const player = this.otherPlayers.get(payload.userId);
+        if (player) {
+            // Update target position for smooth interpolation
+            player.targetX = payload.x;
+            player.targetY = payload.y;
+        } else {
+            // Player not found, create them
+            this.createOtherPlayer(payload);
+        }
+    };
+
+    /**
+     * Create sprite and name text for another player
+     */
+    private createOtherPlayer(user: UserLobbyState) {
+        // Don't create duplicate
+        if (this.otherPlayers.has(user.userId)) {
+            console.log(`⚠️ [TownSquare] Player ${user.username} already exists, skipping`);
+            return;
+        }
+
+        // Create sprite using same atlas as main player
+        const sprite = this.add.sprite(user.x, user.y, 'player', 0);
+        sprite.setOrigin(0.5, 0.75); // Same origin as main player
+        sprite.setDepth(user.y); // Depth based on Y position for proper layering
+
+        // Play idle animation
+        if (this.anims.exists('idle-down')) {
+            sprite.play('idle-down');
+        }
+
+        // Create name text above sprite
+        const displayName = (user.username || 'Player').length > 9
+            ? (user.username || 'Player').substring(0, 9) + '...'
+            : (user.username || 'Player');
+        const nameText = this.add.text(user.x, user.y - 18, displayName, {
+            fontSize: '6px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        }).setOrigin(0.5, 1);
+        nameText.setDepth(user.y + 1);
+        nameText.setStroke('#000000', 1);
+
+        // UI camera should ignore game objects
+        if (this.uiCamera) {
+            this.uiCamera.ignore(sprite);
+            this.uiCamera.ignore(nameText);
+        }
+
+        this.otherPlayers.set(user.userId, {
+            sprite,
+            nameText,
+            speechBubble: null,
+            targetX: user.x,
+            targetY: user.y,
+            lastX: user.x,
+            lastY: user.y,
+            isMoving: false
+        });
+
+        console.log(`🎮 [TownSquare] Created player: ${user.username} at (${user.x}, ${user.y})`);
+    }
+
+    /**
+     * Remove another player's sprite
+     */
+    private removeOtherPlayer(userId: string) {
+        const player = this.otherPlayers.get(userId);
+        if (player) {
+            player.sprite.destroy();
+            player.nameText.destroy();
+            if (player.speechBubble) {
+                player.speechBubble.destroy(true);
+            }
+            this.otherPlayers.delete(userId);
+        }
+    }
+
+    /**
+     * Send player position to server (throttled)
+     */
+    private sendPlayerPosition() {
+        if (!this.lobbySocketService?.isConnected()) return;
+
+        const now = Date.now();
+        const dx = Math.abs(this.player.x - this.lastPositionSent.x);
+        const dy = Math.abs(this.player.y - this.lastPositionSent.y);
+
+        // Only send if enough time has passed AND position changed significantly
+        if (now - this.lastPositionSent.time >= this.POSITION_SEND_THROTTLE &&
+            (dx >= this.POSITION_CHANGE_THRESHOLD || dy >= this.POSITION_CHANGE_THRESHOLD)) {
+
+            this.lobbySocketService.move(this.player.x, this.player.y, 'square');
+
+            this.lastPositionSent.x = this.player.x;
+            this.lastPositionSent.y = this.player.y;
+            this.lastPositionSent.time = now;
+        }
+    }
+
+    /**
+     * Update other players' positions with smooth interpolation and animations
+     */
+    private updateOtherPlayers() {
+        const lerpFactor = 0.15; // Smoothness factor (0 = no movement, 1 = instant)
+        const movementThreshold = 0.5; // Minimum movement to be considered "moving"
+
+        this.otherPlayers.forEach((player) => {
+            const currentX = player.sprite.x;
+            const currentY = player.sprite.y;
+
+            // Calculate distance to target
+            const dx = player.targetX - currentX;
+            const dy = player.targetY - currentY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Check if player is moving
+            const wasMoving = player.isMoving;
+            player.isMoving = distance > movementThreshold;
+
+            if (player.isMoving) {
+                // Lerp position
+                player.sprite.x = currentX + dx * lerpFactor;
+                player.sprite.y = currentY + dy * lerpFactor;
+
+                // Determine direction and play animation
+                const absX = Math.abs(dx);
+                const absY = Math.abs(dy);
+
+                let direction = 'down';
+                if (absX > absY) {
+                    // Horizontal movement is dominant
+                    direction = dx > 0 ? 'right' : 'left';
+                } else {
+                    // Vertical movement is dominant
+                    direction = dy > 0 ? 'down' : 'up';
+                }
+
+                // Play walk animation if not already playing
+                const walkAnim = `walk-${direction}`;
+                if (this.anims.exists(walkAnim)) {
+                    const currentAnim = player.sprite.anims.currentAnim?.key;
+                    if (currentAnim !== walkAnim) {
+                        player.sprite.play(walkAnim, true);
+                    }
+                }
+            } else {
+                // Snap to target if very close
+                player.sprite.x = player.targetX;
+                player.sprite.y = player.targetY;
+
+                // Play idle animation when stopped
+                if (wasMoving) {
+                    // Get last direction from current animation
+                    const currentAnim = player.sprite.anims.currentAnim?.key || '';
+                    let idleDirection = 'down';
+                    if (currentAnim.includes('up')) idleDirection = 'up';
+                    else if (currentAnim.includes('left')) idleDirection = 'left';
+                    else if (currentAnim.includes('right')) idleDirection = 'right';
+
+                    const idleAnim = `idle-${idleDirection}`;
+                    if (this.anims.exists(idleAnim)) {
+                        player.sprite.play(idleAnim, true);
+                    }
+                }
+            }
+
+            // Update depth based on Y position for proper layering
+            player.sprite.setDepth(player.sprite.y);
+            player.nameText.setDepth(player.sprite.y + 1);
+
+            // Update name text position
+            player.nameText.x = player.sprite.x;
+            player.nameText.y = player.sprite.y - 18;
+
+            // Update last position
+            player.lastX = currentX;
+            player.lastY = currentY;
+        });
+    }
 
     /**
      * Update chat history display in modal
@@ -1390,6 +1744,120 @@ export class TownSquare extends Scene {
                 if (this.speechBubble) {
                     this.speechBubble.destroy(true);
                     this.speechBubble = null;
+                }
+            }
+        });
+    }
+
+    /**
+     * Show speech bubble with scrolling text above another player
+     */
+    private showOtherPlayerSpeechBubble(userId: string, message: string) {
+        const player = this.otherPlayers.get(userId);
+        if (!player) {
+            console.log(`⚠️ [TownSquare] Cannot show speech bubble - player ${userId} not found`);
+            return;
+        }
+
+        // Remove existing bubble for this player
+        if (player.speechBubble) {
+            player.speechBubble.destroy(true);
+            player.speechBubble = null;
+        }
+
+        const bubbleWidth = 50;
+        const bubbleHeight = 14;
+        const padding = 3;
+
+        // Create bubble container at player sprite position
+        const bubble = this.add.container(player.sprite.x, player.sprite.y - 24);
+        bubble.setDepth(player.sprite.y + 50);
+
+        // IMPORTANT: Ignore by UI camera to prevent duplicate rendering
+        if (this.uiCamera) {
+            this.uiCamera.ignore(bubble);
+        }
+
+        // Draw bubble directly with graphics
+        const bubbleGraphics = new Phaser.GameObjects.Graphics(this);
+        bubbleGraphics.fillStyle(0xFFFFFF, 1);
+        bubbleGraphics.lineStyle(1, 0x555555, 1);
+
+        // Rounded rectangle centered at 0,0
+        bubbleGraphics.fillRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+        bubbleGraphics.strokeRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+
+        // Speech bubble tail (small triangle pointing down)
+        bubbleGraphics.fillStyle(0xFFFFFF, 1);
+        bubbleGraphics.fillTriangle(-2, bubbleHeight / 2 - 1, 2, bubbleHeight / 2 - 1, 0, bubbleHeight / 2 + 3);
+        bubbleGraphics.lineStyle(1, 0x555555, 1);
+        bubbleGraphics.lineBetween(-2, bubbleHeight / 2, 0, bubbleHeight / 2 + 3);
+        bubbleGraphics.lineBetween(2, bubbleHeight / 2, 0, bubbleHeight / 2 + 3);
+
+        // Create scrolling text
+        const textContent = new Phaser.GameObjects.Text(this, bubbleWidth / 2 - padding, -1, message, {
+            fontSize: '5px',
+            fontFamily: 'PixelFont',
+            color: '#000000',
+            resolution: 2
+        });
+        textContent.setOrigin(0, 0.5);
+
+        // Add elements to container
+        bubble.add([bubbleGraphics, textContent]);
+
+        // Create mask for text clipping
+        const maskGraphics = this.make.graphics({ add: false } as Phaser.Types.GameObjects.Graphics.Options);
+        maskGraphics.fillStyle(0xffffff);
+        maskGraphics.fillRect(
+            player.sprite.x - bubbleWidth / 2 + padding,
+            player.sprite.y - 24 - bubbleHeight / 2 + 1,
+            bubbleWidth - padding * 2,
+            bubbleHeight - 2
+        );
+        const mask = maskGraphics.createGeometryMask();
+        textContent.setMask(mask);
+
+        // Store reference to bubble
+        player.speechBubble = bubble;
+
+        // Update mask position when bubble moves (follows player)
+        const updateMaskPosition = () => {
+            const p = this.otherPlayers.get(userId);
+            if (!p || !p.speechBubble) return;
+
+            // Update bubble position to follow player
+            p.speechBubble.x = p.sprite.x;
+            p.speechBubble.y = p.sprite.y - 24;
+            p.speechBubble.setDepth(p.sprite.y + 50);
+
+            maskGraphics.clear();
+            maskGraphics.fillStyle(0xffffff);
+            maskGraphics.fillRect(
+                p.speechBubble.x - bubbleWidth / 2 + padding,
+                p.speechBubble.y - bubbleHeight / 2 + 1,
+                bubbleWidth - padding * 2,
+                bubbleHeight - 2
+            );
+        };
+
+        // Animate text scrolling from right to left
+        const textWidth = textContent.width;
+        const endX = -bubbleWidth / 2 - textWidth;
+        const duration = Math.min(Math.max(textWidth * 100, 2000), 8000);
+
+        this.tweens.add({
+            targets: textContent,
+            x: endX,
+            duration: duration,
+            ease: 'Linear',
+            onUpdate: () => updateMaskPosition(),
+            onComplete: () => {
+                maskGraphics.destroy();
+                const p = this.otherPlayers.get(userId);
+                if (p && p.speechBubble) {
+                    p.speechBubble.destroy(true);
+                    p.speechBubble = null;
                 }
             }
         });

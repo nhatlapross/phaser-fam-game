@@ -452,3 +452,108 @@ After creating/modifying a manager:
 4. Check camera ignore is working (UI stays fixed)
 5. Test optimistic UI updates (network lag simulation)
 6. Verify rollback works on API failure
+
+---
+
+## HTML Input trong Phaser với Scaling
+
+### Vấn đề
+- Game dùng `Scale.ENVELOP` (960x540) nhưng canvas thực tế có kích thước khác tùy màn hình
+- HTML elements (input, textarea) dùng **pixel màn hình**, không theo Phaser coordinates
+- rexUI InputText (DOM-based) **KHÔNG hoạt động tốt** với scaled games
+- Phaser Container **KHÔNG di chuyển** DOM elements khi add vào
+
+### Giải pháp: Tính toán Scale Factor
+
+```typescript
+private createHtmlInput(gameX: number, gameY: number, gameWidth: number, gameHeight: number) {
+    // 1. Lấy canvas rect và tính scale factor
+    const canvasRect = this.game.canvas.getBoundingClientRect();
+    const scaleX = canvasRect.width / this.scale.width;   // canvas pixels / game units
+    const scaleY = canvasRect.height / this.scale.height;
+
+    // 2. Convert game coords → screen coords
+    const screenX = canvasRect.left + gameX * scaleX;
+    const screenY = canvasRect.top + gameY * scaleY;
+
+    // 3. Scale width/height của element
+    const screenWidth = gameWidth * scaleX;
+    const screenHeight = gameHeight * scaleY;
+
+    // 4. Tạo và position HTML input
+    const input = document.createElement('input');
+    input.style.cssText = `
+        position: fixed;
+        left: ${screenX}px;
+        top: ${screenY}px;
+        width: ${screenWidth}px;
+        height: ${screenHeight}px;
+        font-size: ${12 * scaleY}px;
+        z-index: 1000;
+        box-sizing: border-box;
+    `;
+
+    document.body.appendChild(input);
+
+    // 5. Thêm resize listener
+    this.scale.on('resize', this.repositionInput, this);
+}
+
+private repositionInput() {
+    if (!this.inputElement) return;
+
+    // Recalculate với scale mới
+    const canvasRect = this.game.canvas.getBoundingClientRect();
+    const scaleX = canvasRect.width / this.scale.width;
+    const scaleY = canvasRect.height / this.scale.height;
+
+    // Update position
+    this.inputElement.style.left = `${canvasRect.left + gameX * scaleX}px`;
+    this.inputElement.style.top = `${canvasRect.top + gameY * scaleY}px`;
+    // ... update width, height, fontSize
+}
+
+private cleanup() {
+    // 6. Cleanup khi đóng
+    this.scale.off('resize', this.repositionInput, this);
+    if (this.inputElement) {
+        this.inputElement.remove();
+        this.inputElement = null;
+    }
+}
+```
+
+### Checklist cho HTML Input mới
+
+| Step | Action |
+|------|--------|
+| 1 | Tính scale factor từ `canvas.getBoundingClientRect()` |
+| 2 | Convert tọa độ game → screen: `canvasRect.left + gameX * scaleX` |
+| 3 | Scale kích thước element: `gameWidth * scaleX` |
+| 4 | Scale font-size: `fontSize * scaleY` |
+| 5 | Dùng `position: fixed` và `box-sizing: border-box` |
+| 6 | Thêm `this.scale.on('resize', ...)` listener |
+| 7 | Cleanup: `this.scale.off('resize', ...)` + `element.remove()` |
+
+### ❌ KHÔNG nên dùng
+
+```typescript
+// ❌ rexUI InputText - không hoạt động tốt với scaling
+import InputText from 'phaser3-rex-plugins/plugins/inputtext';
+this.chatInput = new InputText(this, x, y, width, height, config);
+
+// ❌ Phaser DOM element trong Container - không di chuyển theo container
+this.chatModal.add(this.add.dom(x, y, htmlElement));
+
+// ❌ Position cố định không tính scale
+input.style.left = `${gameX}px`; // SAI - cần nhân với scaleX
+```
+
+### ✅ NÊN dùng
+
+```typescript
+// ✅ HTML input thuần với scale calculation
+const input = document.createElement('input');
+const screenX = canvasRect.left + gameX * scaleX;
+input.style.left = `${screenX}px`;
+```

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
 import { UserService } from '../UserService';
+import { GameDataService } from '../GameDataService';
 import { EventBus } from '../EventBus';
 import { useGameState } from '../hooks/useGameState';
 
@@ -42,7 +43,9 @@ export class ProfileManager extends BaseManager {
         this.avatarImage = null;
         this.loadedAvatarUrl = null;
 
-        const user = UserService.getStoredUser();
+        // Use GameDataService (pre-fetched data) as primary source, fallback to localStorage
+        const cachedData = GameDataService.getCachedData();
+        const user = cachedData?.user || UserService.getStoredUser();
         if (!user) return;
 
         const screenWidth = this.scene.scale.width;
@@ -230,7 +233,9 @@ export class ProfileManager extends BaseManager {
         if (this.isOpen) return;
         this.isOpen = true;
 
-        const user = UserService.getStoredUser();
+        // Use GameDataService (pre-fetched data) as primary source, fallback to localStorage
+        const cachedData = GameDataService.getCachedData();
+        const user = cachedData?.user || UserService.getStoredUser();
         if (!user) return;
 
         const screenWidth = this.scene.scale.width;
