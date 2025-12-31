@@ -4,6 +4,7 @@ import { UserService } from '../UserService';
 import { GameDataService } from '../GameDataService';
 import { EventBus } from '../EventBus';
 import { useGameState } from '../hooks/useGameState';
+import { NFTVoucherManager, SAMPLE_VOUCHERS } from './NFTVoucherManager';
 
 interface ProfileCallbacks {
     onLogout: () => void;
@@ -24,6 +25,12 @@ export class ProfileManager extends BaseManager {
     private editFormOpen: boolean = false;
     private editInput: HTMLInputElement | null = null;
     private fileInput: HTMLInputElement | null = null;
+    
+    // Tab system
+    private activeTab: 'profile' | 'vouchers' = 'profile';
+    private tabElements: Phaser.GameObjects.GameObject[] = [];
+    private profileContentElements: Phaser.GameObjects.GameObject[] = [];
+    private voucherManager: NFTVoucherManager | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: ProfileCallbacks) {
         super(scene);
@@ -219,7 +226,7 @@ export class ProfileManager extends BaseManager {
                 avatar.setDepth(5103);
                 avatar.setAlpha(0);
                 this.scene.cameras.main.ignore(avatar);
-                this.modalElements.push(avatar);
+                this.profileContentElements.push(avatar);
                 this.scene.tweens.add({ targets: avatar, alpha: 1, duration: 150 });
             }
         });
@@ -232,6 +239,7 @@ export class ProfileManager extends BaseManager {
     public open(): void {
         if (this.isOpen) return;
         this.isOpen = true;
+        this.activeTab = 'profile';
 
         // Use GameDataService (pre-fetched data) as primary source, fallback to localStorage
         const cachedData = GameDataService.getCachedData();
@@ -240,8 +248,8 @@ export class ProfileManager extends BaseManager {
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
-        const modalWidth = 260;
-        const modalHeight = 300;
+        const modalWidth = 300;
+        const modalHeight = 380;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
 
@@ -274,6 +282,7 @@ export class ProfileManager extends BaseManager {
         });
 
         this.scene.time.delayedCall(100, () => {
+            this.createTabs(modalX, modalY, modalWidth, modalHeight);
             this.createModalContent(modalX, modalY, modalWidth, modalHeight, user);
         });
 
@@ -289,11 +298,162 @@ export class ProfileManager extends BaseManager {
             if (el && el.destroy) el.destroy();
         });
         this.modalElements = [];
+        
+        // Cleanup tab elements
+        this.tabElements.forEach(el => {
+            if (el && el.destroy) el.destroy();
+        });
+        this.tabElements = [];
+        
+        // Cleanup profile content
+        this.profileContentElements.forEach(el => {
+            if (el && el.destroy) el.destroy();
+        });
+        this.profileContentElements = [];
+        
+        // Cleanup voucher manager
+        if (this.voucherManager) {
+            this.voucherManager.destroy();
+            this.voucherManager = null;
+        }
+    }
+
+    /**
+     * Create tab buttons for Profile and Vouchers
+     */
+    private createTabs(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
+        const tabY = modalY - modalHeight / 2 + 35;
+        const tabWidth = 90;
+        const tabHeight = 28;
+        const tabSpacing = 10;
+
+        // Profile tab
+        const profileTabBg = this.scene.add.rectangle(
+            modalX - tabWidth / 2 - tabSpacing / 2,
+            tabY,
+            tabWidth,
+            tabHeight,
+            this.activeTab === 'profile' ? 0x5D4037 : 0x3E2723,
+            1
+        );
+        profileTabBg.setStrokeStyle(2, this.activeTab === 'profile' ? 0xFFD700 : 0x5D4037);
+        profileTabBg.setDepth(5102);
+        profileTabBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(profileTabBg);
+        this.tabElements.push(profileTabBg);
+
+        const profileTabText = this.scene.add.text(
+            modalX - tabWidth / 2 - tabSpacing / 2,
+            tabY,
+            '👤 Profile',
+            {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: this.activeTab === 'profile' ? '#FFD700' : '#BCAAA4',
+                resolution: 2
+            }
+        );
+        profileTabText.setOrigin(0.5);
+        profileTabText.setDepth(5103);
+        this.scene.cameras.main.ignore(profileTabText);
+        this.tabElements.push(profileTabText);
+
+        // Vouchers tab
+        const vouchersTabBg = this.scene.add.rectangle(
+            modalX + tabWidth / 2 + tabSpacing / 2,
+            tabY,
+            tabWidth,
+            tabHeight,
+            this.activeTab === 'vouchers' ? 0x5D4037 : 0x3E2723,
+            1
+        );
+        vouchersTabBg.setStrokeStyle(2, this.activeTab === 'vouchers' ? 0xFFD700 : 0x5D4037);
+        vouchersTabBg.setDepth(5102);
+        vouchersTabBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(vouchersTabBg);
+        this.tabElements.push(vouchersTabBg);
+
+        const vouchersTabText = this.scene.add.text(
+            modalX + tabWidth / 2 + tabSpacing / 2,
+            tabY,
+            '🎁 Vouchers',
+            {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: this.activeTab === 'vouchers' ? '#FFD700' : '#BCAAA4',
+                resolution: 2
+            }
+        );
+        vouchersTabText.setOrigin(0.5);
+        vouchersTabText.setDepth(5103);
+        this.scene.cameras.main.ignore(vouchersTabText);
+        this.tabElements.push(vouchersTabText);
+
+        // Tab click handlers
+        profileTabBg.on('pointerdown', () => {
+            if (this.activeTab !== 'profile') {
+                this.activeTab = 'profile';
+                this.refreshModalContent(modalX, modalY, modalWidth, modalHeight);
+            }
+        });
+        profileTabBg.on('pointerover', () => {
+            if (this.activeTab !== 'profile') profileTabBg.setFillStyle(0x4E342E, 1);
+        });
+        profileTabBg.on('pointerout', () => {
+            if (this.activeTab !== 'profile') profileTabBg.setFillStyle(0x3E2723, 1);
+        });
+
+        vouchersTabBg.on('pointerdown', () => {
+            if (this.activeTab !== 'vouchers') {
+                this.activeTab = 'vouchers';
+                this.refreshModalContent(modalX, modalY, modalWidth, modalHeight);
+            }
+        });
+        vouchersTabBg.on('pointerover', () => {
+            if (this.activeTab !== 'vouchers') vouchersTabBg.setFillStyle(0x4E342E, 1);
+        });
+        vouchersTabBg.on('pointerout', () => {
+            if (this.activeTab !== 'vouchers') vouchersTabBg.setFillStyle(0x3E2723, 1);
+        });
+
+        // Animate tabs
+        [profileTabBg, profileTabText, vouchersTabBg, vouchersTabText].forEach(el => {
+            (el as any).setAlpha(0);
+            this.scene.tweens.add({ targets: el, alpha: 1, duration: 150 });
+        });
+    }
+
+    /**
+     * Refresh modal content when switching tabs
+     */
+    private refreshModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
+        // Clear current content
+        this.profileContentElements.forEach(el => {
+            if (el && el.destroy) el.destroy();
+        });
+        this.profileContentElements = [];
+
+        if (this.voucherManager) {
+            this.voucherManager.destroy();
+            this.voucherManager = null;
+        }
+
+        // Update tab styles
+        this.tabElements.forEach(el => el.destroy());
+        this.tabElements = [];
+        this.createTabs(modalX, modalY, modalWidth, modalHeight);
+
+        // Create new content
+        const cachedData = GameDataService.getCachedData();
+        const user = cachedData?.user || UserService.getStoredUser();
+        if (user) {
+            this.createModalContent(modalX, modalY, modalWidth, modalHeight, user);
+        }
     }
 
     private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number, user: any): void {
-        // Close button
-        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 40, 'square-buttons', 7);
+        // Close button (always visible)
+        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 20, 'square-buttons', 7);
         closeBtnBg.setDisplaySize(24, 24);
         closeBtnBg.setDepth(5102);
         closeBtnBg.setAlpha(0);
@@ -301,7 +461,7 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(closeBtnBg);
         this.modalElements.push(closeBtnBg);
 
-        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 40, 'X', {
+        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 20, 'X', {
             fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -324,7 +484,22 @@ export class ProfileManager extends BaseManager {
         closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
         closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
 
-        const avatarY = modalY - 65;
+        // Content area starts below tabs
+        const contentStartY = modalY - modalHeight / 2 + 60;
+        const contentHeight = modalHeight - 80;
+
+        if (this.activeTab === 'profile') {
+            this.createProfileContent(modalX, contentStartY, modalWidth, contentHeight, user);
+        } else {
+            this.createVouchersContent(modalX, contentStartY, modalWidth, contentHeight);
+        }
+    }
+
+    /**
+     * Create profile tab content
+     */
+    private createProfileContent(modalX: number, contentStartY: number, modalWidth: number, contentHeight: number, user: any): void {
+        const avatarY = contentStartY + 30;
         const avatarSize = 64;
 
         // Avatar frame
@@ -334,7 +509,7 @@ export class ProfileManager extends BaseManager {
         avatarFrame.setAlpha(0);
         avatarFrame.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(avatarFrame);
-        this.modalElements.push(avatarFrame);
+        this.profileContentElements.push(avatarFrame);
 
         this.scene.tweens.add({ targets: avatarFrame, alpha: 1, duration: 150 });
 
@@ -347,7 +522,7 @@ export class ProfileManager extends BaseManager {
             modalAvatar.setDepth(5103);
             modalAvatar.setAlpha(0);
             this.scene.cameras.main.ignore(modalAvatar);
-            this.modalElements.push(modalAvatar);
+            this.profileContentElements.push(modalAvatar);
             this.scene.tweens.add({ targets: modalAvatar, alpha: 1, duration: 150 });
         }
 
@@ -363,7 +538,7 @@ export class ProfileManager extends BaseManager {
         editAvatarBtn.setAlpha(0);
         editAvatarBtn.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(editAvatarBtn);
-        this.modalElements.push(editAvatarBtn);
+        this.profileContentElements.push(editAvatarBtn);
 
         this.scene.tweens.add({ targets: editAvatarBtn, alpha: 1, duration: 150 });
 
@@ -395,14 +570,14 @@ export class ProfileManager extends BaseManager {
         this.createReadOnlyField('Score:', user.reputationScore.toString(), labelX, valueX, fieldStartY + fieldSpacing * 3);
 
         // Logout button
-        const logoutY = modalY + modalHeight / 2 - 30;
+        const logoutY = contentStartY + contentHeight - 25;
         const logoutBg = this.scene.add.sprite(modalX, logoutY, 'square-buttons', 7);
         logoutBg.setDisplaySize(110, 34);
         logoutBg.setDepth(5102);
         logoutBg.setAlpha(0);
         logoutBg.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(logoutBg);
-        this.modalElements.push(logoutBg);
+        this.profileContentElements.push(logoutBg);
 
         const logoutText = this.scene.add.text(modalX, logoutY, 'Log Out', {
             fontSize: '12px',
@@ -415,7 +590,7 @@ export class ProfileManager extends BaseManager {
         logoutText.setAlpha(0);
         logoutText.setStroke('#5D4037', 2);
         this.scene.cameras.main.ignore(logoutText);
-        this.modalElements.push(logoutText);
+        this.profileContentElements.push(logoutText);
 
         this.scene.tweens.add({
             targets: [logoutBg, logoutText],
@@ -432,6 +607,40 @@ export class ProfileManager extends BaseManager {
         logoutBg.on('pointerout', () => logoutBg.clearTint());
     }
 
+    /**
+     * Create vouchers tab content
+     */
+    private createVouchersContent(modalX: number, contentStartY: number, modalWidth: number, contentHeight: number): void {
+        // Initialize voucher manager
+        this.voucherManager = new NFTVoucherManager(this.scene, {
+            showToastMessage: (text, color) => {
+                // Simple toast - can be enhanced
+                console.log(`[Voucher] ${text}`);
+            }
+        });
+
+        // Load sample vouchers (replace with API call later)
+        this.voucherManager.loadVouchers(SAMPLE_VOUCHERS);
+
+        // Calculate center of content area
+        // contentStartY is the TOP of the content area
+        const centerY = contentStartY + contentHeight / 2;
+        const listWidth = modalWidth - 60;
+        const listHeight = contentHeight - 20;
+
+        // Create voucher list
+        const voucherElements = this.voucherManager.createVoucherList(
+            modalX + 10,
+            centerY,
+            listWidth,
+            listHeight,
+            5200
+        );
+
+        // Track elements for cleanup
+        voucherElements.forEach(el => this.profileContentElements.push(el));
+    }
+
     private createProfileField(label: string, value: string, labelX: number, valueX: number, editX: number, y: number, fieldName: string, user: any): void {
         const labelText = this.scene.add.text(labelX, y, label + ':', {
             fontSize: '11px',
@@ -443,7 +652,7 @@ export class ProfileManager extends BaseManager {
         labelText.setAlpha(0);
         labelText.setStroke('#5D4037', 2);
         this.scene.cameras.main.ignore(labelText);
-        this.modalElements.push(labelText);
+        this.profileContentElements.push(labelText);
 
         const displayValue = value.length > 10 ? value.slice(0, 9) + '..' : value;
         const valueText = this.scene.add.text(valueX, y, displayValue, {
@@ -456,7 +665,7 @@ export class ProfileManager extends BaseManager {
         valueText.setAlpha(0);
         valueText.setStroke('#5D4037', 2);
         this.scene.cameras.main.ignore(valueText);
-        this.modalElements.push(valueText);
+        this.profileContentElements.push(valueText);
 
         const editBtn = this.scene.add.text(editX - 18, y, 'Edit', {
             fontSize: '10px',
@@ -468,7 +677,7 @@ export class ProfileManager extends BaseManager {
         editBtn.setAlpha(0);
         editBtn.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(editBtn);
-        this.modalElements.push(editBtn);
+        this.profileContentElements.push(editBtn);
 
         this.scene.tweens.add({
             targets: [labelText, valueText, editBtn],
@@ -493,7 +702,7 @@ export class ProfileManager extends BaseManager {
         labelText.setAlpha(0);
         labelText.setStroke('#5D4037', 2);
         this.scene.cameras.main.ignore(labelText);
-        this.modalElements.push(labelText);
+        this.profileContentElements.push(labelText);
 
         const valueText = this.scene.add.text(valueX, y, value, {
             fontSize: '11px',
@@ -505,7 +714,7 @@ export class ProfileManager extends BaseManager {
         valueText.setAlpha(0);
         valueText.setStroke('#5D4037', 2);
         this.scene.cameras.main.ignore(valueText);
-        this.modalElements.push(valueText);
+        this.profileContentElements.push(valueText);
 
         this.scene.tweens.add({
             targets: [labelText, valueText],
@@ -526,7 +735,7 @@ export class ProfileManager extends BaseManager {
         labelText.setAlpha(0);
         labelText.setStroke('#5D4037', 2);
         this.scene.cameras.main.ignore(labelText);
-        this.modalElements.push(labelText);
+        this.profileContentElements.push(labelText);
 
         // Show shortened address
         const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -540,7 +749,7 @@ export class ProfileManager extends BaseManager {
         addressText.setAlpha(0);
         addressText.setStroke('#5D4037', 2);
         this.scene.cameras.main.ignore(addressText);
-        this.modalElements.push(addressText);
+        this.profileContentElements.push(addressText);
 
         // Copy button
         const copyBtnX = centerX + modalWidth / 2 - 53;
@@ -554,7 +763,7 @@ export class ProfileManager extends BaseManager {
         copyBtn.setAlpha(0);
         copyBtn.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(copyBtn);
-        this.modalElements.push(copyBtn);
+        this.profileContentElements.push(copyBtn);
 
         this.scene.tweens.add({
             targets: [labelText, addressText, copyBtn],
