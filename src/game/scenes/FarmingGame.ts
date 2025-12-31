@@ -3022,30 +3022,40 @@ export class FarmingGame extends Scene {
             imageKey = cropDef.fruitImage; // Ready to harvest (mature stage)
             stageDescription = 'MATURE (5)';
         } else if (stage >= PLANT_STAGES.DIGGING && stage <= PLANT_STAGES.BLOOM) {
-            // Check if plant uses spritesheet (3 stages: algae, mushroom) or individual images (5 stages: tree)
-            if (cropDef.spritesheet && cropDef.stageCount === 3) {
-                // 3-stage plants (algae, mushroom): map 6 API stages to 3 frames
-                // DIGGING(0), SEED(1) -> frame 0
-                // SPROUT(2), GROWING(3) -> frame 1
-                // BLOOM(4) -> frame 2
+            // Check if plant uses spritesheet or individual images
+            if (cropDef.spritesheet) {
                 imageKey = cropDef.spritesheet;
-                if (stage <= PLANT_STAGES.SEED) {
-                    frameIndex = 0;
-                } else if (stage <= PLANT_STAGES.GROWING) {
-                    frameIndex = 1;
-                } else {
-                    frameIndex = 2;
+                
+                if (cropDef.stageCount === 2) {
+                    // 2-stage plants (algae, mushroom): map 6 API stages to 2 visual frames
+                    // DIGGING(0), SEED(1), SPROUT(2) -> frame 0 (seedling)
+                    // GROWING(3), BLOOM(4) -> frame 2 (mature) - skip frame 1
+                    frameIndex = stage <= PLANT_STAGES.SPROUT ? 0 : 2;
+                } else if (cropDef.stageCount === 3) {
+                    // 3-stage plants with spritesheet: map 6 API stages to 3 frames
+                    // DIGGING(0), SEED(1) -> frame 0
+                    // SPROUT(2), GROWING(3) -> frame 1
+                    // BLOOM(4) -> frame 2
+                    if (stage <= PLANT_STAGES.SEED) {
+                        frameIndex = 0;
+                    } else if (stage <= PLANT_STAGES.GROWING) {
+                        frameIndex = 1;
+                    } else {
+                        frameIndex = 2;
+                    }
                 }
             } else {
-                // 5-stage plants (tree): use individual images
-                // DIGGING(0), SEED(1), SPROUT(2) -> plant-1
-                // GROWING(3) -> plant-2
-                // BLOOM(4) -> plant-3, etc.
+                // Plants using individual images (tree): 3 visual stages
+                // DIGGING(0), SEED(1) -> image 0 (tree-plant-1)
+                // SPROUT(2), GROWING(3) -> image 1 (tree-plant-2)
+                // BLOOM(4) -> image 2 (tree-plant-3)
                 let imageIndex: number;
-                if (stage <= PLANT_STAGES.SPROUT) {
+                if (stage <= PLANT_STAGES.SEED) {
                     imageIndex = 0;
+                } else if (stage <= PLANT_STAGES.GROWING) {
+                    imageIndex = 1;
                 } else {
-                    imageIndex = stage - PLANT_STAGES.SPROUT;
+                    imageIndex = 2;
                 }
                 imageIndex = Math.min(imageIndex, cropDef.growthImages.length - 1);
                 imageKey = cropDef.growthImages[imageIndex];
@@ -3061,9 +3071,10 @@ export class FarmingGame extends Scene {
             stageDescription = stageNames[stage] || `STAGE ${stage}`;
         } else {
             // Fallback for unknown stages
-            if (cropDef.spritesheet && cropDef.stageCount === 3) {
+            if (cropDef.spritesheet) {
                 imageKey = cropDef.spritesheet;
-                frameIndex = 2; // Use last frame
+                // Use last visual frame: frame 2 for both 2-stage and 3-stage spritesheets
+                frameIndex = 2;
             } else {
                 imageKey = cropDef.growthImages[cropDef.growthImages.length - 1];
             }

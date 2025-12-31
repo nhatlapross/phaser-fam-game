@@ -129,8 +129,8 @@ export const CROP_DEFINITIONS: Record<PlantType, CropDefinition> = {
         growthImages: [], // Uses spritesheet instead
         fruitImage: 'algae-fruit',
         deathImage: 'algae-plant-death',
-        spritesheet: 'algae-spritesheet', // 3 frames: 0, 1, 2
-        stageCount: 3
+        spritesheet: 'algae-spritesheet', // 2 visual stages: frame 0 (seedling), frame 2 (mature)
+        stageCount: 2
     },
     mushroom: {
         name: 'Mushroom',
@@ -138,16 +138,17 @@ export const CROP_DEFINITIONS: Record<PlantType, CropDefinition> = {
         growthImages: [], // Uses spritesheet instead
         fruitImage: 'mushroom-fruit',
         deathImage: 'mushroom-plant-death',
-        spritesheet: 'mushroom-spritesheet', // 3 frames: 0, 1, 2
-        stageCount: 3
+        spritesheet: 'mushroom-spritesheet', // 2 visual stages: frame 0 (seedling), frame 2 (mature)
+        stageCount: 2
     },
     tree: {
         name: 'Tree',
         seedImage: 'tree-seed',
-        growthImages: ['tree-plant-1', 'tree-plant-2', 'tree-plant-3', 'tree-plant-4', 'tree-plant-5'],
+        growthImages: ['tree-plant-1', 'tree-plant-2', 'tree-plant-3'], // 3 visual stages
         fruitImage: 'tree-fruit',
         deathImage: 'tree-plant-death',
-        stageCount: 5
+        // No spritesheet - uses growthImages
+        stageCount: 3
     }
 };
 
