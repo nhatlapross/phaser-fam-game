@@ -77,6 +77,10 @@ export class UserService {
         if (typeof window === 'undefined') return;
         localStorage.removeItem(STORAGE_KEY_TOKEN);
         localStorage.removeItem(STORAGE_KEY_USER);
+        // Also clear badges data
+        localStorage.removeItem('fam_game_user_badges');
+        // Clear new user flag
+        localStorage.removeItem('fam_game_is_new_user');
     }
 
     /**

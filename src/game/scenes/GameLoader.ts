@@ -121,14 +121,29 @@ export class GameLoader extends Scene {
         // Safety check
         if (!this.cameras || !this.cameras.main || !this.scene.isActive('GameLoader')) {
             if (this.scene) {
-                this.scene.start('TownSquare');
+                this.scene.start('ProfileScene');
             }
             return;
         }
 
+        // Check if this is a new user who needs transformation effect
+        const showTransformation = localStorage.getItem('fam_game_show_transformation') === 'true';
+        const isNewUser = localStorage.getItem('fam_game_is_new_user') === 'true';
+        
         this.cameras.main.fadeOut(500, 0, 0, 0);
         this.cameras.main.once('camerafadeoutcomplete', () => {
-            this.scene.start('TownSquare');
+            if (showTransformation) {
+                // New user - show transformation effect first
+                this.scene.start('Transformation');
+            } else {
+                // Existing user - go directly to ProfileScene
+                this.scene.start('ProfileScene', { isNewUser });
+            }
+            
+            // Clear the flags after use
+            if (isNewUser) {
+                localStorage.removeItem('fam_game_is_new_user');
+            }
         });
     }
 

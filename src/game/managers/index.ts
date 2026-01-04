@@ -16,6 +16,7 @@ export { StationManager } from './StationManager';
 export type { NavigationData } from './StationManager';
 export { NFTVoucherManager, SAMPLE_VOUCHERS } from './NFTVoucherManager';
 export type { NFTVoucher } from './NFTVoucherManager';
+export { WelcomeManager } from './WelcomeManager';
 
 // Re-export types
 export * from '../types/GameTypes';
