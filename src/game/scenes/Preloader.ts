@@ -1,4 +1,5 @@
 import { Scene } from 'phaser';
+import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 
 export class Preloader extends Scene
 {
@@ -73,6 +74,15 @@ export class Preloader extends Scene
         this.load.spritesheet('player', 'characters/player.png', {
             frameWidth: 48,
             frameHeight: 48
+        });
+
+        // Load all playable character spritesheets from config
+        // Each character: 4x4 grid (16 frames), path: characters/{key}/{key}.png
+        PLAYABLE_CHARACTERS.forEach(char => {
+            this.load.spritesheet(char.key, `characters/${char.key}/${char.key}.png`, {
+                frameWidth: char.frameWidth,
+                frameHeight: char.frameHeight
+            });
         });
 
         // Tilesets

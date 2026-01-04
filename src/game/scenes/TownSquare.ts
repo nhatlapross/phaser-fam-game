@@ -6,6 +6,7 @@ import { GameDataService } from '../GameDataService';
 import { LobbySocketService } from '../LobbySocketService';
 import { LobbyChatPayload, UserLobbyState, LobbyStatePayload, UserJoinedPayload, UserLeftPayload, UserMovedPayload } from '../types/LobbyTypes';
 import { useGameState } from '../hooks/useGameState';
+import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacterKey, getCharacterByKey } from '../config/CharacterConfig';
 
 /**
  * Town Square Scene - A larger public space for social interactions
@@ -108,6 +109,10 @@ export class TownSquare extends Scene {
 
     // Navigation data (from station travel)
     private navigationData: NavigationData | null = null;
+
+    // Character switching (uses CharacterConfig)
+    private currentCharacterKey: string = DEFAULT_CHARACTER;
+    private pKey!: Phaser.Input.Keyboard.Key;
 
     constructor() {
         super('TownSquare');
@@ -466,15 +471,16 @@ export class TownSquare extends Scene {
             startY = this.MAP_HEIGHT / 2 * this.TILE_SIZE + 50;
         }
 
-        this.player = this.physics.add.sprite(startX, startY, 'player', 0);
-        this.player.setOrigin(0.5, 0.75);
+        // Create player with default character from config
+        this.player = this.physics.add.sprite(startX, startY, this.currentCharacterKey, 0);
+        this.player.setOrigin(0.5, 0.8);
         this.player.setCollideWorldBounds(false);
         this.player.setDepth(startY);
 
-        // Create player animations if not exists (same as FarmingGame)
+        // Create player animations for all characters
         this.createPlayerAnimations();
 
-        this.player.play('idle-down');
+        this.player.play(`${this.currentCharacterKey}-idle-down`);
 
         // Create player name text above player
         const cachedData = GameDataService.getCachedData();
@@ -494,82 +500,114 @@ export class TownSquare extends Scene {
     private createPlayerAnimations() {
         const frameRate = 6;
 
-        // Spritesheet layout (4x4 grid, 16 frames total):
-        // Frame 0-1: idle front (down)
-        // Frame 2-3: walk front (down)
-        // Frame 4-5: idle back (up)
-        // Frame 6-7: walk back (up)
-        // Frame 8-9: idle left
-        // Frame 10-11: walk left
-        // Frame 12-13: idle right
-        // Frame 14-15: walk right
+        // Spritesheet layout for all characters (4x4 grid, 16 frames total):
+        // Row 0 (frames 0-3): Down direction
+        // Row 1 (frames 4-7): Up direction
+        // Row 2 (frames 8-11): Left direction
+        // Row 3 (frames 12-15): Right direction
 
-        // Skip if already created
-        if (this.anims.exists('idle-down')) return;
+        // Create animations for all characters from config
+        PLAYABLE_CHARACTERS.forEach(char => {
+            const charKey = char.key;
+            // Skip if already created for this character
+            if (this.anims.exists(`${charKey}-idle-down`)) return;
 
-        // Idle front (down)
-        this.anims.create({
-            key: 'idle-down',
-            frames: this.anims.generateFrameNumbers('player', { start: 0, end: 1 }),
-            frameRate: 2,
-            repeat: -1
+            // Idle front (down) - frames 0-1
+            this.anims.create({
+                key: `${charKey}-idle-down`,
+                frames: this.anims.generateFrameNumbers(charKey, { start: 0, end: 1 }),
+                frameRate: 2,
+                repeat: -1
+            });
+
+            // Walk front (down) - frames 0-3
+            this.anims.create({
+                key: `${charKey}-walk-down`,
+                frames: this.anims.generateFrameNumbers(charKey, { start: 0, end: 3 }),
+                frameRate: frameRate,
+                repeat: -1
+            });
+
+            // Idle back (up) - frames 4-5
+            this.anims.create({
+                key: `${charKey}-idle-up`,
+                frames: this.anims.generateFrameNumbers(charKey, { start: 4, end: 5 }),
+                frameRate: 2,
+                repeat: -1
+            });
+
+            // Walk back (up) - frames 4-7
+            this.anims.create({
+                key: `${charKey}-walk-up`,
+                frames: this.anims.generateFrameNumbers(charKey, { start: 4, end: 7 }),
+                frameRate: frameRate,
+                repeat: -1
+            });
+
+            // Idle left - frames 8-9
+            this.anims.create({
+                key: `${charKey}-idle-left`,
+                frames: this.anims.generateFrameNumbers(charKey, { start: 8, end: 9 }),
+                frameRate: 2,
+                repeat: -1
+            });
+
+            // Walk left - frames 8-11
+            this.anims.create({
+                key: `${charKey}-walk-left`,
+                frames: this.anims.generateFrameNumbers(charKey, { start: 8, end: 11 }),
+                frameRate: frameRate,
+                repeat: -1
+            });
+
+            // Idle right - frames 12-13
+            this.anims.create({
+                key: `${charKey}-idle-right`,
+                frames: this.anims.generateFrameNumbers(charKey, { start: 12, end: 13 }),
+                frameRate: 2,
+                repeat: -1
+            });
+
+            // Walk right - frames 12-15
+            this.anims.create({
+                key: `${charKey}-walk-right`,
+                frames: this.anims.generateFrameNumbers(charKey, { start: 12, end: 15 }),
+                frameRate: frameRate,
+                repeat: -1
+            });
         });
+    }
 
-        // Walk front (down)
-        this.anims.create({
-            key: 'walk-down',
-            frames: this.anims.generateFrameNumbers('player', { start: 2, end: 3 }),
-            frameRate: frameRate,
-            repeat: -1
-        });
+    /**
+     * Switch to next character (P key)
+     */
+    private switchCharacter() {
+        // Don't switch if chat modal is open (to allow typing P)
+        if (this.chatModalOpen) return;
 
-        // Idle back (up)
-        this.anims.create({
-            key: 'idle-up',
-            frames: this.anims.generateFrameNumbers('player', { start: 4, end: 5 }),
-            frameRate: 2,
-            repeat: -1
-        });
+        // Cycle to next character using config helper
+        this.currentCharacterKey = getNextCharacterKey(this.currentCharacterKey);
+        const charDef = getCharacterByKey(this.currentCharacterKey);
 
-        // Walk back (up)
-        this.anims.create({
-            key: 'walk-up',
-            frames: this.anims.generateFrameNumbers('player', { start: 6, end: 7 }),
-            frameRate: frameRate,
-            repeat: -1
-        });
+        // Get current animation direction
+        const currentAnim = this.player.anims.currentAnim?.key || '';
+        let direction = 'down';
+        if (currentAnim.includes('up')) direction = 'up';
+        else if (currentAnim.includes('left')) direction = 'left';
+        else if (currentAnim.includes('right')) direction = 'right';
 
-        // Idle left
-        this.anims.create({
-            key: 'idle-left',
-            frames: this.anims.generateFrameNumbers('player', { start: 8, end: 9 }),
-            frameRate: 2,
-            repeat: -1
-        });
+        const isWalking = currentAnim.includes('walk');
 
-        // Walk left
-        this.anims.create({
-            key: 'walk-left',
-            frames: this.anims.generateFrameNumbers('player', { start: 10, end: 11 }),
-            frameRate: frameRate,
-            repeat: -1
-        });
+        // Change sprite texture
+        this.player.setTexture(this.currentCharacterKey, 0);
 
-        // Idle right
-        this.anims.create({
-            key: 'idle-right',
-            frames: this.anims.generateFrameNumbers('player', { start: 12, end: 13 }),
-            frameRate: 2,
-            repeat: -1
-        });
+        // Play appropriate animation for new character
+        const animType = isWalking ? 'walk' : 'idle';
+        this.player.play(`${this.currentCharacterKey}-${animType}-${direction}`, true);
 
-        // Walk right
-        this.anims.create({
-            key: 'walk-right',
-            frames: this.anims.generateFrameNumbers('player', { start: 14, end: 15 }),
-            frameRate: frameRate,
-            repeat: -1
-        });
+        // Show toast message with display name from config
+        const displayName = charDef?.displayName || this.currentCharacterKey;
+        this.showToastMessage(`Character: ${displayName}`, 0x9C27B0);
     }
 
     private setupControls() {
@@ -581,6 +619,10 @@ export class TownSquare extends Scene {
                 S: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
                 D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D)
             };
+
+            // P key to switch character
+            this.pKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
+            this.pKey.on('down', () => this.switchCharacter());
         }
     }
 
@@ -738,14 +780,15 @@ export class TownSquare extends Scene {
         // Apply velocity
         this.player.setVelocity(velocityX, velocityY);
 
-        // Update animation
+        // Update animation using current character key
         if (velocityX !== 0 || velocityY !== 0) {
-            this.player.play(`walk-${direction || 'down'}`, true);
+            this.player.play(`${this.currentCharacterKey}-walk-${direction || 'down'}`, true);
         } else {
             const currentAnim = this.player.anims.currentAnim?.key || '';
             if (currentAnim.includes('walk')) {
-                const dir = currentAnim.replace('walk-', '');
-                this.player.play(`idle-${dir}`, true);
+                // Extract direction from current animation (e.g., 'lion-walk-down' -> 'down')
+                const dir = currentAnim.split('-').pop() || 'down';
+                this.player.play(`${this.currentCharacterKey}-idle-${dir}`, true);
             }
         }
 
@@ -1089,14 +1132,14 @@ export class TownSquare extends Scene {
             return;
         }
 
-        // Create sprite using same atlas as main player
-        const sprite = this.add.sprite(user.x, user.y, 'player', 0);
-        sprite.setOrigin(0.5, 0.75); // Same origin as main player
+        // Create sprite using default character from config
+        const sprite = this.add.sprite(user.x, user.y, DEFAULT_CHARACTER, 0);
+        sprite.setOrigin(0.5, 0.8); // Same origin as main player
         sprite.setDepth(user.y); // Depth based on Y position for proper layering
 
-        // Play idle animation
-        if (this.anims.exists('idle-down')) {
-            sprite.play('idle-down');
+        // Play idle animation (use default character for other players)
+        if (this.anims.exists(`${DEFAULT_CHARACTER}-idle-down`)) {
+            sprite.play(`${DEFAULT_CHARACTER}-idle-down`);
         }
 
         // Create name text above sprite
@@ -1207,8 +1250,8 @@ export class TownSquare extends Scene {
                     direction = dy > 0 ? 'down' : 'up';
                 }
 
-                // Play walk animation if not already playing
-                const walkAnim = `walk-${direction}`;
+                // Play walk animation if not already playing (use default character for other players)
+                const walkAnim = `${DEFAULT_CHARACTER}-walk-${direction}`;
                 if (this.anims.exists(walkAnim)) {
                     const currentAnim = player.sprite.anims.currentAnim?.key;
                     if (currentAnim !== walkAnim) {
@@ -1229,7 +1272,7 @@ export class TownSquare extends Scene {
                     else if (currentAnim.includes('left')) idleDirection = 'left';
                     else if (currentAnim.includes('right')) idleDirection = 'right';
 
-                    const idleAnim = `idle-${idleDirection}`;
+                    const idleAnim = `${DEFAULT_CHARACTER}-idle-${idleDirection}`;
                     if (this.anims.exists(idleAnim)) {
                         player.sprite.play(idleAnim, true);
                     }
