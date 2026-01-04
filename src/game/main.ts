@@ -16,6 +16,7 @@ import { SetupProfile } from './scenes/SetupProfile';
 import { Transformation } from './scenes/Transformation';
 import { ProfileScene } from './scenes/ProfileScene';
 import InputTextPlugin from 'phaser3-rex-plugins/plugins/inputtext-plugin.js';
+import UIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin.js';
 
 //  Find out more information about the Game Config at:
 //  https://newdocs.phaser.io/docs/3.70.0/Phaser.Types.Core.GameConfig
@@ -51,6 +52,11 @@ const config: Phaser.Types.Core.GameConfig = {
             key: 'rexInputTextPlugin',
             plugin: InputTextPlugin,
             start: true
+        }],
+        scene: [{
+            key: 'rexUI',
+            plugin: UIPlugin,
+            mapping: 'rexUI'
         }]
     },
     scene: [
