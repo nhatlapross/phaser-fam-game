@@ -82,6 +82,7 @@ export class TownSquare extends Scene {
     private chatButton!: Phaser.GameObjects.Container;
     private chatModalOpen: boolean = false;
     private chatModal!: Phaser.GameObjects.Container;
+    private chatModalOverlay: Phaser.GameObjects.Rectangle | null = null;
     private chatHistory: Array<{ username: string; message: string; timestamp: Date; scope: string }> = [];
     private speechBubble: Phaser.GameObjects.Container | null = null;
     private chatInputElement: HTMLInputElement | null = null;
@@ -883,6 +884,9 @@ export class TownSquare extends Scene {
      * Setup lobby chat event listeners
      */
     private setupLobbyChatListeners() {
+        // Clean up any existing listeners first (prevent duplicates on scene re-entry)
+        this.cleanupLobbySocketListeners();
+
         // Listen for incoming chat messages
         EventBus.on('lobby:chat', this.handleLobbyChatMessage, this);
 
@@ -1252,9 +1256,10 @@ export class TownSquare extends Scene {
     private updateChatHistoryDisplay() {
         if (!this.chatHistoryText || !this.chatModalOpen) return;
 
-        const displayMessages = this.chatHistory.slice(-8).map(msg => {
-            const shortName = msg.username.length > 9 
-                ? msg.username.substring(0, 9) + '...' 
+        // Show last 10 messages (newest at bottom)
+        const displayMessages = this.chatHistory.slice(-10).map(msg => {
+            const shortName = msg.username.length > 9
+                ? msg.username.substring(0, 9) + '...'
                 : msg.username;
             const scopeIcon = msg.scope === 'GLOBAL' ? '🌐' : '📍';
             return `${scopeIcon} ${shortName}: ${msg.message}`;
@@ -1423,12 +1428,27 @@ export class TownSquare extends Scene {
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
 
+        // Create dark overlay (click to close)
+        this.chatModalOverlay = this.add.rectangle(
+            screenWidth / 2,
+            screenHeight / 2,
+            screenWidth,
+            screenHeight,
+            0x000000,
+            0.5
+        );
+        this.chatModalOverlay.setDepth(5400);
+        this.chatModalOverlay.setInteractive();
+        this.chatModalOverlay.on('pointerdown', () => this.closeChatModal());
+        this.cameras.main?.ignore(this.chatModalOverlay);
+
         this.chatModal = this.add.container(modalX, modalY);
         this.chatModal.setDepth(5500);
 
-        // Modal background
+        // Modal background (interactive to block clicks from reaching overlay)
         const bg = this.add.rectangle(0, 0, modalWidth, modalHeight, 0x3E2723, 0.95);
         bg.setStrokeStyle(3, 0x5D4037);
+        bg.setInteractive(); // Block click propagation to overlay
 
         // Title with connection status
         const isConnected = this.lobbySocketService?.isConnected();
@@ -1450,24 +1470,31 @@ export class TownSquare extends Scene {
         closeBtn.on('pointerdown', () => this.closeChatModal());
 
         // Chat history area background
-        const historyBg = this.add.rectangle(0, -20, modalWidth - 20, 150, 0x2D2D2D, 0.8);
+        const historyBgHeight = 150;
+        const historyBgY = -20;
+        const historyBg = this.add.rectangle(0, historyBgY, modalWidth - 20, historyBgHeight, 0x2D2D2D, 0.8);
         historyBg.setStrokeStyle(1, 0x5D4037);
 
-        // Chat history text - format messages with scope icons
-        const displayMessages = this.chatHistory.slice(-8).map(msg => {
-            const shortName = msg.username.length > 9 
-                ? msg.username.substring(0, 9) + '...' 
+        // Chat history text - show last 10 messages (newest at bottom)
+        const displayMessages = this.chatHistory.slice(-10).map(msg => {
+            const shortName = msg.username.length > 9
+                ? msg.username.substring(0, 9) + '...'
                 : msg.username;
             const scopeIcon = msg.scope === 'GLOBAL' ? '🌐' : '📍';
             return `${scopeIcon} ${shortName}: ${msg.message}`;
         });
 
-        this.chatHistoryText = this.add.text(-modalWidth / 2 + 15, -90, displayMessages.join('\n'), {
+        // Position text inside history area
+        const textX = -modalWidth / 2 + 20;
+        const textY = historyBgY - historyBgHeight / 2 + 8;
+
+        this.chatHistoryText = this.add.text(textX, textY, displayMessages.join('\n'), {
             fontSize: '9px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2,
-            wordWrap: { width: modalWidth - 30 }
+            wordWrap: { width: modalWidth - 45 },
+            lineSpacing: 4
         });
 
         // Send button
@@ -1643,6 +1670,12 @@ export class TownSquare extends Scene {
         if (this.chatInputElement) {
             this.chatInputElement.remove();
             this.chatInputElement = null;
+        }
+
+        // Destroy overlay
+        if (this.chatModalOverlay) {
+            this.chatModalOverlay.destroy();
+            this.chatModalOverlay = null;
         }
 
         if (this.chatModal) {
