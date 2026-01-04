@@ -12,6 +12,9 @@ import { TownSquare } from './scenes/TownSquare';
 import { TilesetDebug } from './scenes/TilesetDebug';
 import { Login } from './scenes/Login';
 import { GameLoader } from './scenes/GameLoader';
+import { SetupProfile } from './scenes/SetupProfile';
+import { Transformation } from './scenes/Transformation';
+import { ProfileScene } from './scenes/ProfileScene';
 import InputTextPlugin from 'phaser3-rex-plugins/plugins/inputtext-plugin.js';
 import UIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin.js';
 
@@ -60,6 +63,9 @@ const config: Phaser.Types.Core.GameConfig = {
         Boot,
         Preloader,
         Login,
+        SetupProfile,
+        Transformation,
+        ProfileScene,
         GameLoader,
         TilesetDebug,
         FarmingGame,

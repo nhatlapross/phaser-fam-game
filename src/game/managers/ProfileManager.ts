@@ -5,6 +5,7 @@ import { GameDataService } from '../GameDataService';
 import { EventBus } from '../EventBus';
 import { useGameState } from '../hooks/useGameState';
 import { NFTVoucherManager, SAMPLE_VOUCHERS } from './NFTVoucherManager';
+import { BadgeService, AVAILABLE_BADGES, Badge } from '../BadgeService';
 
 interface ProfileCallbacks {
     onLogout: () => void;
@@ -27,10 +28,15 @@ export class ProfileManager extends BaseManager {
     private fileInput: HTMLInputElement | null = null;
     
     // Tab system
-    private activeTab: 'profile' | 'vouchers' = 'profile';
+    private activeTab: 'profile' | 'vouchers' | 'badges' = 'profile';
     private tabElements: Phaser.GameObjects.GameObject[] = [];
     private profileContentElements: Phaser.GameObjects.GameObject[] = [];
     private voucherManager: NFTVoucherManager | null = null;
+    
+    // Badges tab scrolling
+    private badgesScrollY: number = 0;
+    private badgesContainer: Phaser.GameObjects.Container | null = null;
+    private badgesMask: Phaser.GameObjects.Graphics | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: ProfileCallbacks) {
         super(scene);
@@ -316,20 +322,33 @@ export class ProfileManager extends BaseManager {
             this.voucherManager.destroy();
             this.voucherManager = null;
         }
+
+        // Cleanup badges tab
+        if (this.badgesContainer) {
+            this.badgesContainer.destroy();
+            this.badgesContainer = null;
+        }
+        if (this.badgesMask) {
+            this.badgesMask.destroy();
+            this.badgesMask = null;
+        }
+        this.badgesScrollY = 0;
     }
 
     /**
-     * Create tab buttons for Profile and Vouchers
+     * Create tab buttons for Profile, Vouchers, and Badges
      */
     private createTabs(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
         const tabY = modalY - modalHeight / 2 + 35;
-        const tabWidth = 90;
-        const tabHeight = 28;
-        const tabSpacing = 10;
+        const tabWidth = 75;
+        const tabHeight = 26;
+        const tabSpacing = 8;
+        const totalWidth = tabWidth * 3 + tabSpacing * 2;
+        const startX = modalX - totalWidth / 2 + tabWidth / 2;
 
         // Profile tab
         const profileTabBg = this.scene.add.rectangle(
-            modalX - tabWidth / 2 - tabSpacing / 2,
+            startX,
             tabY,
             tabWidth,
             tabHeight,
@@ -343,11 +362,11 @@ export class ProfileManager extends BaseManager {
         this.tabElements.push(profileTabBg);
 
         const profileTabText = this.scene.add.text(
-            modalX - tabWidth / 2 - tabSpacing / 2,
+            startX,
             tabY,
             '👤 Profile',
             {
-                fontSize: '10px',
+                fontSize: '9px',
                 fontFamily: 'PixelFont',
                 color: this.activeTab === 'profile' ? '#FFD700' : '#BCAAA4',
                 resolution: 2
@@ -360,7 +379,7 @@ export class ProfileManager extends BaseManager {
 
         // Vouchers tab
         const vouchersTabBg = this.scene.add.rectangle(
-            modalX + tabWidth / 2 + tabSpacing / 2,
+            startX + tabWidth + tabSpacing,
             tabY,
             tabWidth,
             tabHeight,
@@ -374,11 +393,11 @@ export class ProfileManager extends BaseManager {
         this.tabElements.push(vouchersTabBg);
 
         const vouchersTabText = this.scene.add.text(
-            modalX + tabWidth / 2 + tabSpacing / 2,
+            startX + tabWidth + tabSpacing,
             tabY,
             '🎁 Vouchers',
             {
-                fontSize: '10px',
+                fontSize: '9px',
                 fontFamily: 'PixelFont',
                 color: this.activeTab === 'vouchers' ? '#FFD700' : '#BCAAA4',
                 resolution: 2
@@ -388,6 +407,37 @@ export class ProfileManager extends BaseManager {
         vouchersTabText.setDepth(5103);
         this.scene.cameras.main.ignore(vouchersTabText);
         this.tabElements.push(vouchersTabText);
+
+        // Badges tab
+        const badgesTabBg = this.scene.add.rectangle(
+            startX + (tabWidth + tabSpacing) * 2,
+            tabY,
+            tabWidth,
+            tabHeight,
+            this.activeTab === 'badges' ? 0x5D4037 : 0x3E2723,
+            1
+        );
+        badgesTabBg.setStrokeStyle(2, this.activeTab === 'badges' ? 0xFFD700 : 0x5D4037);
+        badgesTabBg.setDepth(5102);
+        badgesTabBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(badgesTabBg);
+        this.tabElements.push(badgesTabBg);
+
+        const badgesTabText = this.scene.add.text(
+            startX + (tabWidth + tabSpacing) * 2,
+            tabY,
+            '🏅 Badges',
+            {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: this.activeTab === 'badges' ? '#FFD700' : '#BCAAA4',
+                resolution: 2
+            }
+        );
+        badgesTabText.setOrigin(0.5);
+        badgesTabText.setDepth(5103);
+        this.scene.cameras.main.ignore(badgesTabText);
+        this.tabElements.push(badgesTabText);
 
         // Tab click handlers
         profileTabBg.on('pointerdown', () => {
@@ -416,8 +466,21 @@ export class ProfileManager extends BaseManager {
             if (this.activeTab !== 'vouchers') vouchersTabBg.setFillStyle(0x3E2723, 1);
         });
 
+        badgesTabBg.on('pointerdown', () => {
+            if (this.activeTab !== 'badges') {
+                this.activeTab = 'badges';
+                this.refreshModalContent(modalX, modalY, modalWidth, modalHeight);
+            }
+        });
+        badgesTabBg.on('pointerover', () => {
+            if (this.activeTab !== 'badges') badgesTabBg.setFillStyle(0x4E342E, 1);
+        });
+        badgesTabBg.on('pointerout', () => {
+            if (this.activeTab !== 'badges') badgesTabBg.setFillStyle(0x3E2723, 1);
+        });
+
         // Animate tabs
-        [profileTabBg, profileTabText, vouchersTabBg, vouchersTabText].forEach(el => {
+        [profileTabBg, profileTabText, vouchersTabBg, vouchersTabText, badgesTabBg, badgesTabText].forEach(el => {
             (el as any).setAlpha(0);
             this.scene.tweens.add({ targets: el, alpha: 1, duration: 150 });
         });
@@ -490,8 +553,10 @@ export class ProfileManager extends BaseManager {
 
         if (this.activeTab === 'profile') {
             this.createProfileContent(modalX, contentStartY, modalWidth, contentHeight, user);
-        } else {
+        } else if (this.activeTab === 'vouchers') {
             this.createVouchersContent(modalX, contentStartY, modalWidth, contentHeight);
+        } else if (this.activeTab === 'badges') {
+            this.createBadgesTabContent(modalX, contentStartY, modalWidth, contentHeight);
         }
     }
 
@@ -639,6 +704,211 @@ export class ProfileManager extends BaseManager {
 
         // Track elements for cleanup
         voucherElements.forEach(el => this.profileContentElements.push(el));
+    }
+
+    /**
+     * Create badges tab content - Grid of all badges (6 columns, scrollable)
+     */
+    private createBadgesTabContent(modalX: number, contentStartY: number, modalWidth: number, contentHeight: number): void {
+        // Reset scroll position
+        this.badgesScrollY = 0;
+
+        // Grid configuration
+        const columns = 5;
+        const cellSize = 35;
+        const cellSpacing = 10;
+        const gridWidth = columns * cellSize + (columns - 1) * cellSpacing;
+        const startX = modalX - gridWidth / 2 + cellSize / 2 + 10;
+        const startY = contentStartY + 20;
+
+        // Create container for scrollable content
+        this.badgesContainer = this.scene.add.container(0, 25);
+        this.badgesContainer.setDepth(5150);
+        this.scene.cameras.main.ignore(this.badgesContainer);
+        this.profileContentElements.push(this.badgesContainer);
+
+        // Create mask for scrolling area
+        const maskGraphics = this.scene.add.graphics();
+        maskGraphics.fillStyle(0xffffff);
+        maskGraphics.fillRect(
+            modalX - modalWidth / 2 + 40,
+            contentStartY,
+            modalWidth - 60,
+            contentHeight - 40
+        );
+        const mask = maskGraphics.createGeometryMask();
+        this.badgesContainer.setMask(mask);
+        this.badgesMask = maskGraphics;
+        this.scene.cameras.main.ignore(maskGraphics);
+
+        // Get all badges
+        const allBadges = AVAILABLE_BADGES;
+        const rows = Math.ceil(allBadges.length / columns);
+
+        allBadges.forEach((badge, index) => {
+            const col = index % columns;
+            const row = Math.floor(index / columns);
+            const x = startX + col * (cellSize + cellSpacing);
+            const y = startY + row * (cellSize + cellSpacing);
+
+            const isClaimed = BadgeService.isBadgeClaimed(badge.id);
+
+            // Badge background
+            const badgeBg = this.scene.add.rectangle(x, y, cellSize, cellSize, isClaimed ? 0x2d5a3d : 0x3E2723, 0.8);
+            badgeBg.setStrokeStyle(2, isClaimed ? 0x4ade80 : 0x5D4037);
+            badgeBg.setInteractive({ useHandCursor: true });
+            this.badgesContainer!.add(badgeBg);
+
+            // Badge icon
+            const badgeIcon = this.scene.add.text(x, y - 3, badge.icon, {
+                fontSize: '18px',
+                resolution: 2
+            });
+            badgeIcon.setOrigin(0.5);
+            badgeIcon.setAlpha(isClaimed ? 1 : 0.4);
+            this.badgesContainer!.add(badgeIcon);
+
+            // Hover tooltip
+            badgeBg.on('pointerover', () => {
+                this.showBadgeTooltip(x, y - cellSize / 2 + 10, badge, isClaimed);
+                badgeBg.setStrokeStyle(2, 0xFFD700);
+            });
+            badgeBg.on('pointerout', () => {
+                this.hideBadgeTooltip();
+                badgeBg.setStrokeStyle(2, isClaimed ? 0x4ade80 : 0x5D4037);
+            });
+
+            // Glow animation for claimed badges
+            if (isClaimed) {
+                this.scene.tweens.add({
+                    targets: badgeIcon,
+                    scale: 1.1,
+                    duration: 800,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut'
+                });
+            }
+        });
+
+        // Calculate if scrolling is needed
+        const totalHeight = rows * (cellSize + cellSpacing);
+        const visibleHeight = contentHeight - 60;
+        const maxScroll = Math.max(0, totalHeight - visibleHeight);
+
+        // Enable scrolling if content exceeds visible area
+        if (maxScroll > 0) {
+            // Scroll indicator
+            const scrollHint = this.scene.add.text(modalX, contentStartY + contentHeight - 25, '↕ Scroll for more', {
+                fontSize: '8px',
+                fontFamily: 'PixelFont',
+                color: '#BCAAA4',
+                resolution: 2
+            });
+            scrollHint.setOrigin(0.5);
+            scrollHint.setDepth(5151);
+            this.scene.cameras.main.ignore(scrollHint);
+            this.profileContentElements.push(scrollHint);
+
+            // Mouse wheel scrolling
+            this.scene.input.on('wheel', (pointer: Phaser.Input.Pointer, _gameObjects: any[], _deltaX: number, deltaY: number) => {
+                if (!this.badgesContainer || this.activeTab !== 'badges') return;
+                
+                // Check if pointer is within modal bounds
+                const modalLeft = modalX - modalWidth / 2;
+                const modalRight = modalX + modalWidth / 2;
+                const modalTop = contentStartY;
+                const modalBottom = contentStartY + contentHeight;
+                
+                if (pointer.x >= modalLeft && pointer.x <= modalRight &&
+                    pointer.y >= modalTop && pointer.y <= modalBottom) {
+                    this.badgesScrollY = Phaser.Math.Clamp(
+                        this.badgesScrollY + deltaY * 0.5,
+                        0,
+                        maxScroll
+                    );
+                    this.badgesContainer.y = -this.badgesScrollY;
+                }
+            });
+        }
+
+        // Title
+        const title = this.scene.add.text(modalX, contentStartY + 5, 'All Badges', {
+            fontSize: '12px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(5151);
+        title.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(title);
+        this.profileContentElements.push(title);
+
+        // Stats
+        const claimedCount = allBadges.filter(b => BadgeService.isBadgeClaimed(b.id)).length;
+        const statsText = this.scene.add.text(modalX, contentStartY + contentHeight - 10, `${claimedCount}/${allBadges.length} Collected`, {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#4ade80',
+            resolution: 2
+        });
+        statsText.setOrigin(0.5);
+        statsText.setDepth(5151);
+        this.scene.cameras.main.ignore(statsText);
+        this.profileContentElements.push(statsText);
+    }
+
+    private badgeTooltip: Phaser.GameObjects.Container | null = null;
+
+    private showBadgeTooltip(x: number, y: number, badge: Badge, isClaimed: boolean): void {
+        this.hideBadgeTooltip();
+
+        const container = this.scene.add.container(x, y);
+        container.setDepth(5200);
+        this.scene.cameras.main.ignore(container);
+
+        const bg = this.scene.add.rectangle(0, 0, 100, 32, 0x3E2723, 0.95);
+        bg.setStrokeStyle(1, 0x5D4037);
+        container.add(bg);
+
+        const nameText = this.scene.add.text(0, -6, badge.name, {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: isClaimed ? '#4ade80' : '#FFFFFF',
+            resolution: 2
+        });
+        nameText.setOrigin(0.5);
+        container.add(nameText);
+
+        const statusText = this.scene.add.text(0, 6, isClaimed ? '✓ Claimed' : 'Not claimed', {
+            fontSize: '7px',
+            fontFamily: 'PixelFont',
+            color: isClaimed ? '#4ade80' : '#BCAAA4',
+            resolution: 2
+        });
+        statusText.setOrigin(0.5);
+        container.add(statusText);
+
+        this.badgeTooltip = container;
+        this.profileContentElements.push(container);
+
+        container.setAlpha(0);
+        container.setScale(0.8);
+        this.scene.tweens.add({
+            targets: container,
+            alpha: 1,
+            scale: 1,
+            duration: 100,
+            ease: 'Back.easeOut'
+        });
+    }
+
+    private hideBadgeTooltip(): void {
+        if (this.badgeTooltip) {
+            this.badgeTooltip.destroy();
+            this.badgeTooltip = null;
+        }
     }
 
     private createProfileField(label: string, value: string, labelX: number, valueX: number, editX: number, y: number, fieldName: string, user: any): void {

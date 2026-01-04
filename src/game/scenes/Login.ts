@@ -111,33 +111,73 @@ export class Login extends Scene {
         const user = await UserService.checkUser(address);
 
         if (user) {
+            // Existing user - clear any new user flags and go to ProfileScene
             console.log('Login: User found in DB:', user.username);
+            localStorage.removeItem('fam_game_is_new_user');
+            localStorage.removeItem('fam_game_show_transformation');
             EventBus.emit('hide-registration-form');
-            this.transitionToGame(address);
+            this.transitionToProfile(address, false);
         }
         else {
-            console.log('Login: User not found in DB. Showing registration form.');
-            this._showRegistrationForm(address);
+            // New user - go to SetupProfile scene
+            console.log('Login: User not found in DB. Going to SetupProfile.');
+            this.transitionToSetupProfile(address);
         }
     }
 
     private _showRegistrationForm(address: string) {
-        // Hide Phaser UI elements that might conflict with the React form
+        // No longer used - keeping for compatibility
+        // New flow uses SetupProfile scene instead
+        this.transitionToSetupProfile(address);
+    }
+
+    private transitionToSetupProfile(address: string) {
+        // Hide Phaser UI elements
         this.gameName.setVisible(false);
         this.subtitleText.setVisible(false);
-        // Emitting event for React to show registration form
-        EventBus.emit('show-registration-form', address);
+
+        // Show connected message briefly
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
+
+        const connectedText = this.add.text(centerX, centerY + 130, `Connected: ${address.slice(0, 6)}...${address.slice(-4)}`, {
+            fontSize: '12px',
+            fontFamily: 'Arial',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        connectedText.setOrigin(0.5);
+        connectedText.setStroke('#5D4037', 2);
+
+        // Transition to SetupProfile scene
+        this.time.delayedCall(800, () => {
+            if (!this.cameras || !this.cameras.main || !this.scene.isActive('Login')) {
+                if (this.scene) {
+                    this.scene.start('SetupProfile', { address });
+                }
+                return;
+            }
+            this.cameras.main.fadeOut(500, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () => {
+                this.scene.start('SetupProfile', { address });
+            });
+        });
     }
 
     private onRegistrationComplete(data: { address: string, username: string }) {
+        // Legacy handler - new flow uses SetupProfile scene
         console.log('Login: Registration complete for:', data.username, data.address);
-        // Show Phaser UI elements again
         this.gameName.setVisible(true);
         this.subtitleText.setVisible(true);
-        this.transitionToGame(data.address);
+        
+        // Set flag for transformation effect
+        localStorage.setItem('fam_game_is_new_user', 'true');
+        localStorage.setItem('fam_game_show_transformation', 'true');
+        
+        this.transitionToProfile(data.address, true);
     }
 
-    private transitionToGame(address: string) {
+    private transitionToProfile(address: string, isNewUser: boolean) {
         // Show connected message briefly then transition
         const centerX = this.scale.width / 2;
         const centerY = this.scale.height / 2;
@@ -151,11 +191,9 @@ export class Login extends Scene {
         connectedText.setOrigin(0.5);
         connectedText.setStroke('#5D4037', 2);
 
-        // Transition to GameLoader (which will load API data before entering FarmingGame)
+        // Transition to GameLoader first to load data, then to ProfileScene
         this.time.delayedCall(1000, () => {
-            // Safety check - scene might have been destroyed
             if (!this.cameras || !this.cameras.main || !this.scene.isActive('Login')) {
-                // Just start the scene directly if we can't fade
                 if (this.scene) {
                     this.scene.start('GameLoader');
                 }
@@ -163,9 +201,15 @@ export class Login extends Scene {
             }
             this.cameras.main.fadeOut(500, 0, 0, 0);
             this.cameras.main.once('camerafadeoutcomplete', () => {
+                // GameLoader will redirect to ProfileScene
                 this.scene.start('GameLoader');
             });
         });
+    }
+
+    // Legacy method - kept for compatibility
+    private transitionToGame(address: string) {
+        this.transitionToProfile(address, false);
     }
 
     shutdown() {
