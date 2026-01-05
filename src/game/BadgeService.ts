@@ -51,6 +51,24 @@ export const AVAILABLE_BADGES: Badge[] = [
         isClaimable: true
     },
     {
+        id: 'beta_tester',
+        name: 'Beta Tester',
+        description: 'Helped test the game',
+        icon: '🧪',
+        color: '#9B59B6',
+        requirement: 'Participate in beta testing',
+        isClaimable: true
+    },
+    {
+        id: 'ambassador',
+        name: 'Ambassador',
+        description: 'Official game ambassador',
+        icon: '🏅',
+        color: '#E74C3C',
+        requirement: 'Apply for ambassador program',
+        isClaimable: true
+    },
+    {
         id: 'first_harvest',
         name: 'First Harvest',
         description: 'Harvested your first crop',
