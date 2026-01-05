@@ -2,11 +2,18 @@
 
 interface UserData {
     id: string;
-    address: string; // The wallet address, internally represented as 'address'
+    address: string; // The wallet address (EVM), internally represented as 'address'
+    walletAddress?: string; // Alternative field name from API
+    walletAddressSui?: string; // Sui wallet address
+    walletAddressAptos?: string; // Aptos wallet address
+    walletAddressCardano?: string; // Cardano wallet address
     username: string | null;
     avatar: string | null;
+    characterType?: number;
     xp: number;
     reputationScore: number;
+    gold?: number;
+    gem?: number;
     landsCount: number;
     plantsCount: number;
     network: string;
@@ -19,15 +26,21 @@ interface LoginResponse {
     user: {
         id: string;
         walletAddress: string;
+        walletAddressSui?: string;
+        walletAddressAptos?: string;
+        walletAddressCardano?: string;
         network: string;
         username: string | null;
         avatar: string | null;
+        characterType?: number;
         xp: number;
         reputationScore: number;
+        gold?: number;
+        gem?: number;
         landsCount: number;
         plantsCount: number;
     };
-    isNewUser: boolean;
+    isNewUser?: boolean;
 }
 
 const STORAGE_KEY_TOKEN = 'fam_game_access_token';
@@ -109,10 +122,17 @@ export class UserService {
                 const userData: UserData = {
                     id: data.user.id,
                     address: data.user.walletAddress,
+                    walletAddress: data.user.walletAddress,
+                    walletAddressSui: data.user.walletAddressSui,
+                    walletAddressAptos: data.user.walletAddressAptos,
+                    walletAddressCardano: data.user.walletAddressCardano,
                     username: data.user.username,
                     avatar: data.user.avatar,
+                    characterType: data.user.characterType,
                     xp: data.user.xp,
                     reputationScore: data.user.reputationScore,
+                    gold: data.user.gold,
+                    gem: data.user.gem,
                     landsCount: data.user.landsCount,
                     plantsCount: data.user.plantsCount,
                     network: data.user.network,
@@ -170,10 +190,17 @@ export class UserService {
                 const userData: UserData = {
                     id: data.user.id,
                     address: data.user.walletAddress,
+                    walletAddress: data.user.walletAddress,
+                    walletAddressSui: data.user.walletAddressSui,
+                    walletAddressAptos: data.user.walletAddressAptos,
+                    walletAddressCardano: data.user.walletAddressCardano,
                     username: data.user.username,
                     avatar: data.user.avatar,
+                    characterType: data.user.characterType,
                     xp: data.user.xp,
                     reputationScore: data.user.reputationScore,
+                    gold: data.user.gold,
+                    gem: data.user.gem,
                     landsCount: data.user.landsCount,
                     plantsCount: data.user.plantsCount,
                     network: data.user.network,
@@ -221,19 +248,30 @@ export class UserService {
             if (response.ok) {
                 const data = await response.json();
 
-                // Map API response to UserData
+                // Get existing stored user to preserve wallet addresses
+                const existingUser = UserService.getStoredUser();
+
+                // Map API response to UserData, preserving wallet addresses from login
                 const userData: UserData = {
                     id: data.id,
                     address: data.walletAddress,
+                    walletAddress: data.walletAddress,
+                    // Preserve wallet addresses from existing stored user (from login)
+                    walletAddressSui: data.walletAddressSui || existingUser?.walletAddressSui,
+                    walletAddressAptos: data.walletAddressAptos || existingUser?.walletAddressAptos,
+                    walletAddressCardano: data.walletAddressCardano || existingUser?.walletAddressCardano,
                     username: data.username,
                     avatar: data.avatar,
+                    characterType: data.characterType,
                     xp: data.xp,
                     reputationScore: data.reputationScore,
+                    gold: data.gold,
+                    gem: data.gem,
                     landsCount: data._count?.lands || 0,
                     plantsCount: data.lands?.filter((land: any) => land.plant).length || 0,
                     network: data.network,
-                    balanceGold: data.balanceGold || 0,
-                    balanceGem: data.balanceGem || 0,
+                    balanceGold: data.balanceGold || data.gold || 0,
+                    balanceGem: data.balanceGem || data.gem || 0,
                 };
 
                 // Update stored user data

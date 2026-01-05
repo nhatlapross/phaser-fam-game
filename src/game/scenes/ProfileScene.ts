@@ -130,17 +130,13 @@ export class ProfileScene extends Scene {
         const leftX = centerX - panelWidth / 2 + 55;
         const lineHeight = 18;
 
-        // Mock addresses for demo - will be replaced with real data from API
-        const mockAptosAddress = '0x' + user.address.slice(2, 10) + '...' + 'aptos' + user.address.slice(-8);
-        const mockSuiAddress = '0x' + user.address.slice(2, 10) + '...' + 'sui' + user.address.slice(-10);
-        const mockCardanoAddress = 'addr1' + user.address.slice(2, 12) + '...' + user.address.slice(-12);
-
-        // Wallet chains config
+        // Use real wallet addresses from API response
+        // API returns: walletAddress (EVM), walletAddressSui, walletAddressAptos, walletAddressCardano
         const wallets = [
-            { chain: 'EVM', icon: '⟠', address: user.address, color: '#627EEA' },
-            { chain: 'Aptos', icon: '🔷', address: mockAptosAddress, color: '#2DD8A7' },
-            { chain: 'Sui', icon: '💧', address: mockSuiAddress, color: '#6FBCF0' },
-            { chain: 'Cardano', icon: '🔵', address: mockCardanoAddress, color: '#0033AD' }
+            { chain: 'EVM', icon: '⟠', address: user.walletAddress || user.address, color: '#627EEA' },
+            { chain: 'Aptos', icon: '🔷', address: user.walletAddressAptos, color: '#2DD8A7' },
+            { chain: 'Sui', icon: '💧', address: user.walletAddressSui, color: '#6FBCF0' },
+            { chain: 'Cardano', icon: '🔵', address: user.walletAddressCardano, color: '#0033AD' }
         ];
 
         wallets.forEach((wallet, index) => {
@@ -190,8 +186,8 @@ export class ProfileScene extends Scene {
                     if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
                 });
             } else {
-                // Not connected
-                const notConnected = this.add.text(leftX + 90, y, 'Not connected', {
+                // Not linked yet
+                this.add.text(leftX + 90, y, 'Not linked', {
                     fontSize: '10px',
                     fontFamily: 'PixelFont',
                     color: '#6b7280',
