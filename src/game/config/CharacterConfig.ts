@@ -25,7 +25,7 @@ export interface CharacterDefinition {
  */
 export const PLAYABLE_CHARACTERS: CharacterDefinition[] = [
     { key: 'bear', displayName: 'Bear', frameWidth: 48, frameHeight: 48 },
-    { key: 'dog', displayName: 'Dog', frameWidth: 48, frameHeight: 48 },
+    { key: 'boy', displayName: 'Boy', frameWidth: 48, frameHeight: 48 },
     { key: 'lion', displayName: 'Lion', frameWidth: 48, frameHeight: 48 },
     { key: 'panda', displayName: 'Panda', frameWidth: 48, frameHeight: 48 },
     { key: 'rabit', displayName: 'Rabit', frameWidth: 48, frameHeight: 48 }

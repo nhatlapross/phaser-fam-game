@@ -3,6 +3,7 @@ import { EventBus } from '../EventBus';
 import { TOWN_SQUARE_MAP_DATA, TOWN_SQUARE_MAP_WIDTH, TOWN_SQUARE_MAP_HEIGHT } from './TownSquareMapData';
 import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType } from '../managers';
 import { GameDataService } from '../GameDataService';
+import { UserService } from '../UserService';
 import { LobbySocketService } from '../LobbySocketService';
 import { LobbyChatPayload, UserLobbyState, LobbyStatePayload, UserJoinedPayload, UserLeftPayload, UserMovedPayload } from '../types/LobbyTypes';
 import { useGameState } from '../hooks/useGameState';
@@ -471,7 +472,16 @@ export class TownSquare extends Scene {
             startY = this.MAP_HEIGHT / 2 * this.TILE_SIZE + 50;
         }
 
-        // Create player with default character from config
+        // Get character type from user data (1-5, maps to index 0-4)
+        const cachedData = GameDataService.getCachedData();
+        const user = cachedData?.user || UserService.getStoredUser();
+        const characterType = user?.characterType || 1;
+        const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
+        this.currentCharacterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || DEFAULT_CHARACTER;
+
+        console.log(`[TownSquare] Loading character: ${this.currentCharacterKey} (type: ${characterType})`);
+
+        // Create player with character from user data
         this.player = this.physics.add.sprite(startX, startY, this.currentCharacterKey, 0);
         this.player.setOrigin(0.5, 0.8);
         this.player.setCollideWorldBounds(false);
@@ -482,9 +492,8 @@ export class TownSquare extends Scene {
 
         this.player.play(`${this.currentCharacterKey}-idle-down`);
 
-        // Create player name text above player
-        const cachedData = GameDataService.getCachedData();
-        const fullName = cachedData?.user?.username || 'Player';
+        // Create player name text above player (reuse cachedData from above)
+        const fullName = user?.username || 'Player';
         const playerName = fullName.length > 9 ? fullName.substring(0, 9) + '...' : fullName;
         this.playerNameText = this.add.text(startX, startY - 18, playerName, {
             fontSize: '6px',

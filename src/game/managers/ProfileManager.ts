@@ -339,12 +339,12 @@ export class ProfileManager extends BaseManager {
      * Create tab buttons for Profile, Vouchers, and Badges
      */
     private createTabs(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
-        const tabY = modalY - modalHeight / 2 + 35;
+        const tabY = modalY - modalHeight / 2 + 75;
         const tabWidth = 75;
         const tabHeight = 26;
         const tabSpacing = 8;
         const totalWidth = tabWidth * 3 + tabSpacing * 2;
-        const startX = modalX - totalWidth / 2 + tabWidth / 2;
+        const startX = modalX - totalWidth / 2 + tabWidth / 2 + 10;
 
         // Profile tab
         const profileTabBg = this.scene.add.rectangle(
@@ -516,7 +516,7 @@ export class ProfileManager extends BaseManager {
 
     private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number, user: any): void {
         // Close button (always visible)
-        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 20, 'square-buttons', 7);
+        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 50, 'square-buttons', 7);
         closeBtnBg.setDisplaySize(24, 24);
         closeBtnBg.setDepth(5102);
         closeBtnBg.setAlpha(0);
@@ -524,7 +524,7 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(closeBtnBg);
         this.modalElements.push(closeBtnBg);
 
-        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 20, 'X', {
+        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 50, 'X', {
             fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -548,7 +548,7 @@ export class ProfileManager extends BaseManager {
         closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
 
         // Content area starts below tabs
-        const contentStartY = modalY - modalHeight / 2 + 60;
+        const contentStartY = modalY - modalHeight / 2 + 100;
         const contentHeight = modalHeight - 80;
 
         if (this.activeTab === 'profile') {
@@ -635,7 +635,7 @@ export class ProfileManager extends BaseManager {
         this.createReadOnlyField('Score:', user.reputationScore.toString(), labelX, valueX, fieldStartY + fieldSpacing * 3);
 
         // Logout button
-        const logoutY = contentStartY + contentHeight - 25;
+        const logoutY = contentStartY + contentHeight - 60;
         const logoutBg = this.scene.add.sprite(modalX, logoutY, 'square-buttons', 7);
         logoutBg.setDisplaySize(110, 34);
         logoutBg.setDepth(5102);

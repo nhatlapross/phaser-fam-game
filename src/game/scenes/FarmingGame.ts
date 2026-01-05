@@ -38,9 +38,11 @@ import {
     DEATH_TIMER_MS
 } from '../managers';
 import { InventoryService, InventoryItem } from '../InventoryService';
+import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 
 export class FarmingGame extends Scene {
     private player!: Phaser.Physics.Arcade.Sprite;
+    private currentCharacterKey: string = 'bear'; // Default character, will be set from user data
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private wasdKeys!: any;
 
@@ -1999,17 +2001,28 @@ export class FarmingGame extends Scene {
             spawnY = 25;
         }
 
-        // Create player sprite
+        // Get character type from user data (1-5, maps to index 0-4)
+        const cachedData = GameDataService.getCachedData();
+        const user = cachedData?.user || UserService.getStoredUser();
+        const characterType = user?.characterType || 1;
+
+        // Map characterType (1-5) to character index (0-4) and get character key
+        const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
+        this.currentCharacterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
+
+        console.log(`[FarmingGame] Loading character: ${this.currentCharacterKey} (type: ${characterType})`);
+
+        // Create player sprite with the selected character
         this.player = this.physics.add.sprite(
             spawnX * this.TILE_SIZE,
             spawnY * this.TILE_SIZE,
-            'player'
+            this.currentCharacterKey
         );
 
         this.player.setCollideWorldBounds(true);
         this.player.setDepth(this.player.y); // Dynamic depth based on Y position
 
-        // Create animations
+        // Create animations for the selected character
         this.createPlayerAnimations();
 
         // Play idle animation
@@ -2018,6 +2031,7 @@ export class FarmingGame extends Scene {
 
     private createPlayerAnimations() {
         const frameRate = 6;
+        const charKey = this.currentCharacterKey;
 
         // Spritesheet layout (4x4 grid, 16 frames total):
         // Frame 0-1: idle front (down)
@@ -2030,68 +2044,84 @@ export class FarmingGame extends Scene {
         // Frame 14-15: walk right
 
         // Idle front (down)
-        this.anims.create({
-            key: 'idle-down',
-            frames: this.anims.generateFrameNumbers('player', { start: 0, end: 1 }),
-            frameRate: 2,
-            repeat: -1
-        });
+        if (!this.anims.exists('idle-down')) {
+            this.anims.create({
+                key: 'idle-down',
+                frames: this.anims.generateFrameNumbers(charKey, { start: 0, end: 1 }),
+                frameRate: 2,
+                repeat: -1
+            });
+        }
 
         // Walk front (down)
-        this.anims.create({
-            key: 'walk-down',
-            frames: this.anims.generateFrameNumbers('player', { start: 2, end: 3 }),
-            frameRate: frameRate,
-            repeat: -1
-        });
+        if (!this.anims.exists('walk-down')) {
+            this.anims.create({
+                key: 'walk-down',
+                frames: this.anims.generateFrameNumbers(charKey, { start: 2, end: 3 }),
+                frameRate: frameRate,
+                repeat: -1
+            });
+        }
 
         // Idle back (up)
-        this.anims.create({
-            key: 'idle-up',
-            frames: this.anims.generateFrameNumbers('player', { start: 4, end: 5 }),
-            frameRate: 2,
-            repeat: -1
-        });
+        if (!this.anims.exists('idle-up')) {
+            this.anims.create({
+                key: 'idle-up',
+                frames: this.anims.generateFrameNumbers(charKey, { start: 4, end: 5 }),
+                frameRate: 2,
+                repeat: -1
+            });
+        }
 
         // Walk back (up)
-        this.anims.create({
-            key: 'walk-up',
-            frames: this.anims.generateFrameNumbers('player', { start: 6, end: 7 }),
-            frameRate: frameRate,
-            repeat: -1
-        });
+        if (!this.anims.exists('walk-up')) {
+            this.anims.create({
+                key: 'walk-up',
+                frames: this.anims.generateFrameNumbers(charKey, { start: 6, end: 7 }),
+                frameRate: frameRate,
+                repeat: -1
+            });
+        }
 
         // Idle left
-        this.anims.create({
-            key: 'idle-left',
-            frames: this.anims.generateFrameNumbers('player', { start: 8, end: 9 }),
-            frameRate: 2,
-            repeat: -1
-        });
+        if (!this.anims.exists('idle-left')) {
+            this.anims.create({
+                key: 'idle-left',
+                frames: this.anims.generateFrameNumbers(charKey, { start: 8, end: 9 }),
+                frameRate: 2,
+                repeat: -1
+            });
+        }
 
         // Walk left
-        this.anims.create({
-            key: 'walk-left',
-            frames: this.anims.generateFrameNumbers('player', { start: 10, end: 11 }),
-            frameRate: frameRate,
-            repeat: -1
-        });
+        if (!this.anims.exists('walk-left')) {
+            this.anims.create({
+                key: 'walk-left',
+                frames: this.anims.generateFrameNumbers(charKey, { start: 10, end: 11 }),
+                frameRate: frameRate,
+                repeat: -1
+            });
+        }
 
         // Idle right
-        this.anims.create({
-            key: 'idle-right',
-            frames: this.anims.generateFrameNumbers('player', { start: 12, end: 13 }),
-            frameRate: 2,
-            repeat: -1
-        });
+        if (!this.anims.exists('idle-right')) {
+            this.anims.create({
+                key: 'idle-right',
+                frames: this.anims.generateFrameNumbers(charKey, { start: 12, end: 13 }),
+                frameRate: 2,
+                repeat: -1
+            });
+        }
 
         // Walk right
-        this.anims.create({
-            key: 'walk-right',
-            frames: this.anims.generateFrameNumbers('player', { start: 14, end: 15 }),
-            frameRate: frameRate,
-            repeat: -1
-        });
+        if (!this.anims.exists('walk-right')) {
+            this.anims.create({
+                key: 'walk-right',
+                frames: this.anims.generateFrameNumbers(charKey, { start: 14, end: 15 }),
+                frameRate: frameRate,
+                repeat: -1
+            });
+        }
     }
 
     private setupControls() {

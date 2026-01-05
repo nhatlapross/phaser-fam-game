@@ -5,6 +5,7 @@ interface UserData {
     address: string; // The wallet address, internally represented as 'address'
     username: string | null;
     avatar: string | null;
+    characterType: number; // 1-5, maps to character index 0-4
     xp: number;
     reputationScore: number;
     landsCount: number;
@@ -22,6 +23,7 @@ interface LoginResponse {
         network: string;
         username: string | null;
         avatar: string | null;
+        characterType: number;
         xp: number;
         reputationScore: number;
         landsCount: number;
@@ -111,6 +113,7 @@ export class UserService {
                     address: data.user.walletAddress,
                     username: data.user.username,
                     avatar: data.user.avatar,
+                    characterType: data.user.characterType || 1,
                     xp: data.user.xp,
                     reputationScore: data.user.reputationScore,
                     landsCount: data.user.landsCount,
@@ -142,11 +145,13 @@ export class UserService {
      * Registers a new user.
      * @param walletAddress The wallet address of the user.
      * @param username The desired username.
+     * @param characterType The selected character type (1-5).
      * @returns A Promise that resolves to UserData of the newly registered user, otherwise null.
      */
     static async registerUser(
         walletAddress: string,
-        username: string
+        username: string,
+        characterType: number = 1
     ): Promise<UserData | null> {
         try {
             const response = await fetch(
@@ -159,6 +164,7 @@ export class UserService {
                     body: JSON.stringify({
                         walletAddress,
                         username,
+                        characterType,
                     }),
                 }
             );
@@ -172,6 +178,7 @@ export class UserService {
                     address: data.user.walletAddress,
                     username: data.user.username,
                     avatar: data.user.avatar,
+                    characterType: data.user.characterType || characterType,
                     xp: data.user.xp,
                     reputationScore: data.user.reputationScore,
                     landsCount: data.user.landsCount,
@@ -227,6 +234,7 @@ export class UserService {
                     address: data.walletAddress,
                     username: data.username,
                     avatar: data.avatar,
+                    characterType: data.characterType || 1,
                     xp: data.xp,
                     reputationScore: data.reputationScore,
                     landsCount: data._count?.lands || 0,
@@ -259,7 +267,7 @@ export class UserService {
      * @param updates Object containing fields to update
      * @returns Updated user data or null on failure
      */
-    static async updateUser(updates: { username?: string; avatar?: string }): Promise<UserData | null> {
+    static async updateUser(updates: { username?: string; avatar?: string; characterType?: number }): Promise<UserData | null> {
         const token = UserService.getAccessToken();
         if (!token) {
             console.error("No access token available");
@@ -289,6 +297,7 @@ export class UserService {
                         ...currentUser,
                         username: data.username ?? currentUser.username,
                         avatar: data.avatar ?? currentUser.avatar,
+                        characterType: data.characterType ?? currentUser.characterType,
                         xp: data.xp ?? currentUser.xp,
                         reputationScore: data.reputationScore ?? currentUser.reputationScore,
                         balanceGold: data.balanceGold ?? currentUser.balanceGold,

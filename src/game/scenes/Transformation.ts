@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { UserService } from '../UserService';
+import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 
 /**
  * Transformation Scene - Digimon-style transformation effect
@@ -202,16 +203,24 @@ export class Transformation extends Scene {
         const user = UserService.getStoredUser();
         const username = user?.username || 'Farmer';
 
+        // Get character type from user data (1-5, maps to index 0-4)
+        const characterType = user?.characterType || 1;
+        const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
+        const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
+
+        console.log(`[Transformation] Showing character: ${characterKey} (type: ${characterType})`);
+
         // Character appears with scale animation
-        this.characterSprite = this.add.sprite(centerX, centerY, 'player', 0);
+        this.characterSprite = this.add.sprite(centerX, centerY, characterKey, 0);
         this.characterSprite.setScale(0);
         this.characterSprite.setDepth(50);
 
-        // Create idle animation if not exists
-        if (!this.anims.exists('transform-idle')) {
+        // Create idle animation for the selected character
+        const animKey = `transform-${characterKey}-idle`;
+        if (!this.anims.exists(animKey)) {
             this.anims.create({
-                key: 'transform-idle',
-                frames: this.anims.generateFrameNumbers('player', { start: 0, end: 3 }),
+                key: animKey,
+                frames: this.anims.generateFrameNumbers(characterKey, { start: 0, end: 3 }),
                 frameRate: 6,
                 repeat: -1
             });
@@ -224,7 +233,7 @@ export class Transformation extends Scene {
             duration: 800,
             ease: 'Back.easeOut',
             onComplete: () => {
-                this.characterSprite.play('transform-idle');
+                this.characterSprite.play(animKey);
             }
         });
 

@@ -3,6 +3,7 @@ import { EventBus } from '../EventBus';
 import { UserService } from '../UserService';
 import { GameDataService } from '../GameDataService';
 import { BadgeService, AVAILABLE_BADGES, Badge } from '../BadgeService';
+import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 
 /**
  * Profile Scene - Main profile screen with navigation options
@@ -66,7 +67,7 @@ export class ProfileScene extends Scene {
         const panelTop = centerY - panelHeight / 2;
 
         // Title
-        const title = this.add.text(centerX, panelTop + 30, '👤 Profile', {
+        const title = this.add.text(centerX, panelTop + 60, 'Profile', {
             fontSize: '18px',
             fontFamily: 'PixelFont',
             color: '#FFD700',
@@ -76,18 +77,18 @@ export class ProfileScene extends Scene {
         title.setStroke('#5D4037', 3);
 
         // Character preview + name + wallets
-        this.createCharacterSection(centerX, panelTop + 85, panelWidth, user);
+        this.createCharacterSection(centerX, panelTop + 120, panelWidth, user);
 
         // Badges section (list format with unlock buttons) - only for NEW users
         if (this.isNewUser) {
-            this.createBadgesSection(centerX, panelTop + 240, panelWidth);
+            this.createBadgesSection(centerX, panelTop + 260, panelWidth);
         }
 
         // Navigation buttons
-        this.createNavigationButtons(centerX, panelTop + 405);
+        this.createNavigationButtons(centerX + 15, panelTop + 390);
 
         // Logout button (small, top right)
-        this.createLogoutButton(centerX + panelWidth / 2 - 30, panelTop + 25);
+        this.createLogoutButton(centerX + panelWidth / 2 - 30, panelTop + 60);
     }
 
     private createCharacterSection(centerX: number, y: number, panelWidth: number, user: any) {
@@ -96,20 +97,26 @@ export class ProfileScene extends Scene {
         frame.setDisplaySize(70, 70);
         frame.setTint(0x5D4037);
 
+        // Get character type from user data (1-5, maps to index 0-4)
+        const characterType = user?.characterType || 1;
+        const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
+        const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
+
         // Character sprite
-        this.characterSprite = this.add.sprite(centerX, y, 'player', 0);
+        this.characterSprite = this.add.sprite(centerX, y, characterKey, 0);
         this.characterSprite.setScale(3);
 
-        // Idle animation
-        if (!this.anims.exists('profile-idle')) {
+        // Idle animation for the selected character
+        const animKey = `profile-${characterKey}-idle`;
+        if (!this.anims.exists(animKey)) {
             this.anims.create({
-                key: 'profile-idle',
-                frames: this.anims.generateFrameNumbers('player', { start: 0, end: 3 }),
+                key: animKey,
+                frames: this.anims.generateFrameNumbers(characterKey, { start: 0, end: 3 }),
                 frameRate: 6,
                 repeat: -1
             });
         }
-        this.characterSprite.play('profile-idle');
+        this.characterSprite.play(animKey);
 
         // Username below character
         const nameText = this.add.text(centerX, y + 48, user.username || 'Farmer', {
@@ -135,19 +142,19 @@ export class ProfileScene extends Scene {
         const mockSuiAddress = '0x' + user.address.slice(2, 10) + '...' + 'sui' + user.address.slice(-10);
         const mockCardanoAddress = 'addr1' + user.address.slice(2, 12) + '...' + user.address.slice(-12);
 
-        // Wallet chains config
+        // Wallet chains config (no icons, cleaner look)
         const wallets = [
-            { chain: 'EVM', icon: '⟠', address: user.address, color: '#627EEA' },
-            { chain: 'Aptos', icon: '🔷', address: mockAptosAddress, color: '#2DD8A7' },
-            { chain: 'Sui', icon: '💧', address: mockSuiAddress, color: '#6FBCF0' },
-            { chain: 'Cardano', icon: '🔵', address: mockCardanoAddress, color: '#0033AD' }
+            { chain: 'EVM', address: user.address, color: '#5D4037' },
+            { chain: 'Aptos', address: mockAptosAddress, color: '#5D4037' },
+            { chain: 'Sui', address: mockSuiAddress, color: '#5D4037' },
+            { chain: 'Cardano', address: mockCardanoAddress, color: '#5D4037' }
         ];
 
         wallets.forEach((wallet, index) => {
             const y = startY + index * lineHeight;
-            
-            // Chain icon and name (left)
-            const chainLabel = this.add.text(leftX, y, `${wallet.icon} ${wallet.chain}:`, {
+
+            // Chain name (left) - no icon
+            const chainLabel = this.add.text(leftX, y, `${wallet.chain}:`, {
                 fontSize: '10px',
                 fontFamily: 'PixelFont',
                 color: wallet.color,
@@ -155,17 +162,17 @@ export class ProfileScene extends Scene {
             });
 
             if (wallet.address) {
-                // Shortened address (center)
+                // Shortened address (center) - darker color for better visibility
                 const shortAddr = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
-                const addrText = this.add.text(leftX + 90, y, shortAddr, {
+                const addrText = this.add.text(leftX + 70, y, shortAddr, {
                     fontSize: '10px',
                     fontFamily: 'PixelFont',
-                    color: '#BCAAA4',
+                    color: '#3E2723',
                     resolution: 2
                 });
 
                 // Copy button (right)
-                const copyBtn = this.add.text(leftX + 210, y, 'Copy', {
+                const copyBtn = this.add.text(leftX + 190, y, 'Copy', {
                     fontSize: '8px',
                     fontFamily: 'PixelFont',
                     color: '#4ade80',
@@ -191,7 +198,7 @@ export class ProfileScene extends Scene {
                 });
             } else {
                 // Not connected
-                const notConnected = this.add.text(leftX + 90, y, 'Not connected', {
+                const notConnected = this.add.text(leftX + 70, y, 'Not connected', {
                     fontSize: '10px',
                     fontFamily: 'PixelFont',
                     color: '#6b7280',

@@ -18,6 +18,7 @@ export interface UserData {
     address: string;
     username: string | null;
     avatar: string | null;
+    characterType: number; // 1-5, maps to character index 0-4
     xp: number;
     reputationScore: number;
     landsCount: number;

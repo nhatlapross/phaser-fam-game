@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { UserService } from '../UserService';
+import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 
 /**
  * Setup Profile Scene - Shown after new user registration
@@ -8,16 +9,13 @@ import { UserService } from '../UserService';
  */
 export class SetupProfile extends Scene {
     private walletAddress: string = '';
-    private selectedCharacter: number = 0;
-    private characterSprites: Phaser.GameObjects.Sprite[] = [];
+    private selectedCharacter: number = 1; // characterType 1-5 (maps to index 0-4)
     private nameInput: HTMLInputElement | null = null;
     private continueButton!: Phaser.GameObjects.Container;
     private characterPreview!: Phaser.GameObjects.Sprite;
-
-    // Character options (currently 1, expandable later)
-    private readonly CHARACTER_TYPES = [
-        { id: 'farmer', name: 'Farmer', sprite: 'player' }
-    ];
+    private characterNameText!: Phaser.GameObjects.Text;
+    private leftArrow!: Phaser.GameObjects.Container;
+    private rightArrow!: Phaser.GameObjects.Container;
 
     constructor() {
         super('SetupProfile');
@@ -36,7 +34,7 @@ export class SetupProfile extends Scene {
         bg.setDisplaySize(this.scale.width, this.scale.height);
 
         // Semi-transparent overlay
-        const overlay = this.add.rectangle(centerX, centerY, this.scale.width, this.scale.height, 0x000000, 0.5);
+        this.add.rectangle(centerX, centerY, this.scale.width, this.scale.height, 0x000000, 0.5);
 
         // Title
         const title = this.add.text(centerX, 60, 'Create Your Character', {
@@ -51,69 +49,56 @@ export class SetupProfile extends Scene {
         // Animate title
         this.tweens.add({
             targets: title,
-            y: 70,
+            y: 65,
             duration: 2000,
             ease: 'Sine.easeInOut',
             yoyo: true,
             repeat: -1
         });
 
-        // Character preview section
-        this.createCharacterPreview(centerX, centerY - 40);
+        // Character selection section (centered, with arrows)
+        this.createCharacterSelection(centerX, centerY - 50);
 
-        // Name input section
-        this.createNameInput(centerX, centerY + 80);
+        // Name input section (above Continue button)
+        this.createNameInput(centerX, centerY + 70);
 
         // Continue button
-        this.createContinueButton(centerX, centerY + 150);
+        this.createContinueButton(centerX, centerY + 130);
 
         // Instructions
-        const instructions = this.add.text(centerX, this.scale.height - 40, 'Enter your name and click Continue', {
-            fontSize: '10px',
+        const instructions = this.add.text(centerX, this.scale.height - 25, 'Use arrows to select character, enter name and click Continue', {
+            fontSize: '9px',
             fontFamily: 'PixelFont',
             color: '#BCAAA4',
             resolution: 2
         });
         instructions.setOrigin(0.5);
 
+        // Listen to resize for input repositioning
+        this.scale.on('resize', this.repositionInput, this);
+
         EventBus.emit('current-scene-ready', this);
     }
 
-    private createCharacterPreview(x: number, y: number) {
-        // Character frame background
-        const frameBg = this.add.sprite(x, y, 'square-buttons', 6);
-        frameBg.setDisplaySize(100, 100);
+    private createCharacterSelection(centerX: number, y: number) {
+        // Character frame background (large)
+        const frameSize = 90;
+        const frameBg = this.add.sprite(centerX, y, 'square-buttons', 6);
+        frameBg.setDisplaySize(frameSize + 12, frameSize + 12);
         frameBg.setTint(0x5D4037);
 
-        // Character preview sprite
-        this.characterPreview = this.add.sprite(x, y, 'player', 0);
-        this.characterPreview.setScale(4);
+        // Character preview sprite (large)
+        const currentChar = PLAYABLE_CHARACTERS[this.selectedCharacter - 1];
+        this.characterPreview = this.add.sprite(centerX, y, currentChar.key, 0);
+        this.characterPreview.setScale(2.5);
 
-        // Idle animation
-        if (!this.anims.exists('preview-idle')) {
-            this.anims.create({
-                key: 'preview-idle',
-                frames: this.anims.generateFrameNumbers('player', { start: 0, end: 3 }),
-                frameRate: 6,
-                repeat: -1
-            });
-        }
-        this.characterPreview.play('preview-idle');
-
-        // Character name label
-        const charName = this.add.text(x, y + 65, this.CHARACTER_TYPES[0].name, {
-            fontSize: '12px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
-        });
-        charName.setOrigin(0.5);
-        charName.setStroke('#5D4037', 2);
+        // Create idle animation for current character
+        this.playCharacterAnimation();
 
         // Glow effect around character
         const glow = this.add.graphics();
-        glow.lineStyle(2, 0xFFD700, 0.5);
-        glow.strokeCircle(x, y, 55);
+        glow.lineStyle(2, 0x4ade80, 0.6);
+        glow.strokeCircle(centerX, y, frameSize / 2 + 10);
 
         // Pulse animation for glow
         this.tweens.add({
@@ -125,47 +110,180 @@ export class SetupProfile extends Scene {
             repeat: -1
         });
 
-        // Sparkle particles around character
-        this.createSparkles(x, y);
+        // Character name below
+        this.characterNameText = this.add.text(centerX, y + frameSize / 2 + 18, currentChar.displayName, {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#4ade80',
+            resolution: 2
+        });
+        this.characterNameText.setOrigin(0.5);
+        this.characterNameText.setStroke('#2d5a3d', 2);
+
+        // Left arrow
+        this.leftArrow = this.createArrowButton(centerX - 80, y, '<', () => this.changeCharacter(-1));
+
+        // Right arrow
+        this.rightArrow = this.createArrowButton(centerX + 80, y, '>', () => this.changeCharacter(1));
+
+        // Character counter (e.g. "2/5")
+        const counterText = this.add.text(centerX, y + frameSize / 2 + 38, `${this.selectedCharacter}/${PLAYABLE_CHARACTERS.length}`, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#BCAAA4',
+            resolution: 2
+        });
+        counterText.setOrigin(0.5);
+        counterText.setName('counterText');
     }
 
-    private createSparkles(x: number, y: number) {
-        const colors = [0xFFD700, 0xFFF8E1, 0x4ade80];
-        
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const radius = 50;
-            const sparkle = this.add.circle(
-                x + Math.cos(angle) * radius,
-                y + Math.sin(angle) * radius,
-                2,
-                colors[i % colors.length],
-                0.8
-            );
+    private createArrowButton(x: number, y: number, text: string, onClick: () => void): Phaser.GameObjects.Container {
+        const container = this.add.container(x, y);
 
+        // Arrow background
+        const bg = this.add.sprite(0, 0, 'square-buttons', 6);
+        bg.setDisplaySize(40, 50);
+        bg.setTint(0x5D4037);
+        bg.setInteractive({ useHandCursor: true });
+
+        // Arrow text
+        const arrowText = this.add.text(0, 0, text, {
+            fontSize: '20px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        arrowText.setOrigin(0.5);
+        arrowText.setStroke('#3E2723', 2);
+
+        container.add([bg, arrowText]);
+
+        // Interactions
+        bg.on('pointerdown', onClick);
+        bg.on('pointerover', () => {
+            bg.setTint(0x8D6E63);
             this.tweens.add({
-                targets: sparkle,
-                alpha: 0.2,
-                scale: 0.5,
-                duration: 800 + i * 100,
-                ease: 'Sine.easeInOut',
-                yoyo: true,
-                repeat: -1,
-                delay: i * 100
+                targets: container,
+                scale: 1.1,
+                duration: 100
             });
+        });
+        bg.on('pointerout', () => {
+            bg.setTint(0x5D4037);
+            this.tweens.add({
+                targets: container,
+                scale: 1,
+                duration: 100
+            });
+        });
+
+        return container;
+    }
+
+    private changeCharacter(direction: number) {
+        // Calculate new character index (1-based, wrapping)
+        let newIndex = this.selectedCharacter + direction;
+        if (newIndex < 1) newIndex = PLAYABLE_CHARACTERS.length;
+        if (newIndex > PLAYABLE_CHARACTERS.length) newIndex = 1;
+
+        this.selectedCharacter = newIndex;
+
+        // Update character preview
+        const newChar = PLAYABLE_CHARACTERS[newIndex - 1];
+
+        // Animate out current character
+        this.tweens.add({
+            targets: this.characterPreview,
+            scale: 0,
+            alpha: 0,
+            duration: 100,
+            onComplete: () => {
+                // Change texture and animate in
+                this.characterPreview.setTexture(newChar.key, 0);
+                this.playCharacterAnimation();
+
+                this.tweens.add({
+                    targets: this.characterPreview,
+                    scale: 2.5,
+                    alpha: 1,
+                    duration: 150,
+                    ease: 'Back.easeOut'
+                });
+            }
+        });
+
+        // Update character name
+        this.characterNameText.setText(newChar.displayName);
+
+        // Update counter
+        const counterText = this.children.getByName('counterText') as Phaser.GameObjects.Text;
+        if (counterText) {
+            counterText.setText(`${newIndex}/${PLAYABLE_CHARACTERS.length}`);
+        }
+
+        // Play select sound (if available)
+        if (this.sound.get('click')) {
+            this.sound.play('click', { volume: 0.3 });
         }
     }
 
+    private playCharacterAnimation() {
+        const currentChar = PLAYABLE_CHARACTERS[this.selectedCharacter - 1];
+        const animKey = `${currentChar.key}-preview-idle`;
+
+        if (!this.anims.exists(animKey)) {
+            this.anims.create({
+                key: animKey,
+                frames: this.anims.generateFrameNumbers(currentChar.key, { start: 0, end: 3 }),
+                frameRate: 6,
+                repeat: -1
+            });
+        }
+
+        this.characterPreview.play(animKey);
+    }
+
     private createNameInput(x: number, y: number) {
-        // Label
-        const label = this.add.text(x, y - 25, 'Your Name', {
-            fontSize: '12px',
+        // Label "Your Name"
+        const label = this.add.text(x, y - 22, 'Your Name', {
+            fontSize: '11px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2
         });
         label.setOrigin(0.5);
         label.setStroke('#5D4037', 2);
+
+        // Create HTML input with proper scaling
+        this.createScaledInput(x, y);
+    }
+
+    private createScaledInput(gameX: number, gameY: number) {
+        // Remove existing input if any
+        if (this.nameInput) {
+            this.nameInput.remove();
+            this.nameInput = null;
+        }
+
+        // Get canvas rect and calculate scale factor
+        const canvas = this.game.canvas;
+        const canvasRect = canvas.getBoundingClientRect();
+
+        // Game dimensions vs actual canvas dimensions
+        const gameWidth = this.scale.width;  // 960
+        const gameHeight = this.scale.height; // 540
+        const scaleX = canvasRect.width / gameWidth;
+        const scaleY = canvasRect.height / gameHeight;
+
+        // Input dimensions in game units
+        const inputWidthGame = 180;
+        const inputHeightGame = 28;
+
+        // Convert to screen coordinates (centered on gameX, gameY)
+        const inputX = canvasRect.left + (gameX - inputWidthGame / 2) * scaleX;
+        const inputY = canvasRect.top + (gameY - inputHeightGame / 2) * scaleY;
+        const inputWidth = inputWidthGame * scaleX;
+        const inputHeight = inputHeightGame * scaleY;
 
         // Create HTML input
         this.nameInput = document.createElement('input');
@@ -174,25 +292,25 @@ export class SetupProfile extends Scene {
         this.nameInput.maxLength = 20;
         this.nameInput.style.cssText = `
             position: fixed;
-            left: 50%;
-            top: ${y + 60}px;
-            transform: translateX(-50%);
-            width: 200px;
-            padding: 12px 16px;
-            font-size: 16px;
-            font-family: 'PixelFont', monospace;
-            border: 3px solid #5D4037;
-            border-radius: 8px;
-            background-color: #FFF8E1;
-            color: #5D4037;
+            left: ${inputX}px;
+            top: ${inputY}px;
+            width: ${inputWidth}px;
+            height: ${inputHeight}px;
+            padding: 4px 10px;
+            font-family: 'PixelFont', Arial, sans-serif;
+            font-size: ${12 * scaleY}px;
+            background: #2A2A2A;
+            color: #FFFFFF;
+            border: 2px solid #5D4037;
+            border-radius: 6px;
             outline: none;
             text-align: center;
-            z-index: 10001;
+            z-index: 1000;
+            box-sizing: border-box;
         `;
-        document.body.appendChild(this.nameInput);
 
-        // Handle enter key
-        this.nameInput.addEventListener('keydown', (e) => {
+        // Handle Enter key
+        this.nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Enter') {
                 this.onContinue();
                 e.preventDefault();
@@ -202,10 +320,43 @@ export class SetupProfile extends Scene {
         this.nameInput.addEventListener('keyup', (e) => e.stopPropagation());
         this.nameInput.addEventListener('keypress', (e) => e.stopPropagation());
 
+        // Add to DOM
+        document.body.appendChild(this.nameInput);
+
         // Focus input after a short delay
         this.time.delayedCall(300, () => {
             this.nameInput?.focus();
         });
+    }
+
+    private repositionInput() {
+        if (!this.nameInput) return;
+
+        const canvas = this.game.canvas;
+        const canvasRect = canvas.getBoundingClientRect();
+
+        const gameWidth = this.scale.width;
+        const gameHeight = this.scale.height;
+        const scaleX = canvasRect.width / gameWidth;
+        const scaleY = canvasRect.height / gameHeight;
+
+        const centerX = gameWidth / 2;
+        const centerY = gameHeight / 2;
+        const gameY = centerY + 70; // Same Y as in createNameInput
+
+        const inputWidthGame = 180;
+        const inputHeightGame = 28;
+
+        const inputX = canvasRect.left + (centerX - inputWidthGame / 2) * scaleX;
+        const inputY = canvasRect.top + (gameY - inputHeightGame / 2) * scaleY;
+        const inputWidth = inputWidthGame * scaleX;
+        const inputHeight = inputHeightGame * scaleY;
+
+        this.nameInput.style.left = `${inputX}px`;
+        this.nameInput.style.top = `${inputY}px`;
+        this.nameInput.style.width = `${inputWidth}px`;
+        this.nameInput.style.height = `${inputHeight}px`;
+        this.nameInput.style.fontSize = `${12 * scaleY}px`;
     }
 
     private createContinueButton(x: number, y: number) {
@@ -213,7 +364,7 @@ export class SetupProfile extends Scene {
 
         // Button background
         const btnBg = this.add.sprite(0, 0, 'square-buttons', 6);
-        btnBg.setDisplaySize(140, 44);
+        btnBg.setDisplaySize(140, 40);
         btnBg.setTint(0x4ade80);
         btnBg.setInteractive({ useHandCursor: true });
 
@@ -271,8 +422,8 @@ export class SetupProfile extends Scene {
         this.continueButton.setAlpha(0.5);
 
         try {
-            // Register user with API
-            const user = await UserService.registerUser(this.walletAddress, name);
+            // Register user with API including selected character type
+            const user = await UserService.registerUser(this.walletAddress, name, this.selectedCharacter);
 
             if (user) {
                 // Set new user flag for transformation effect
@@ -303,8 +454,8 @@ export class SetupProfile extends Scene {
 
     private showError(message: string) {
         const centerX = this.scale.width / 2;
-        
-        const errorText = this.add.text(centerX, this.scale.height - 70, message, {
+
+        const errorText = this.add.text(centerX, this.scale.height - 55, message, {
             fontSize: '10px',
             fontFamily: 'PixelFont',
             color: '#ef4444',
@@ -333,6 +484,9 @@ export class SetupProfile extends Scene {
     }
 
     private cleanupInput() {
+        // Remove resize listener
+        this.scale.off('resize', this.repositionInput, this);
+
         if (this.nameInput && this.nameInput.parentNode) {
             this.nameInput.parentNode.removeChild(this.nameInput);
         }
