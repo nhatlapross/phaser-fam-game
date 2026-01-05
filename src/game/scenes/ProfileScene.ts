@@ -18,6 +18,26 @@ export class ProfileScene extends Scene {
     private codeInput: HTMLInputElement | null = null;
     private qrScannerContainer: HTMLDivElement | null = null;
     private currentBadge: Badge | null = null;
+    
+    // My Badges scrollable
+    private myBadgesContainer!: Phaser.GameObjects.Container;
+    private myBadgesMask!: Phaser.GameObjects.Graphics;
+    private myBadgesScrollY: number = 0;
+    private myBadgesMaxScrollY: number = 0;
+    private myBadgesBounds: { x: number; y: number; width: number; height: number } | null = null;
+    
+    // Unlock Badges scrollable
+    private unlockBadgesContainer!: Phaser.GameObjects.Container;
+    private unlockBadgesMask!: Phaser.GameObjects.Graphics;
+    private unlockBadgesScrollY: number = 0;
+    private unlockBadgesMaxScrollY: number = 0;
+    private unlockBadgesBounds: { x: number; y: number; width: number; height: number } | null = null;
+    
+    // Scroll state
+    private activeScrollArea: 'myBadges' | 'unlockBadges' | null = null;
+    private isDragging: boolean = false;
+    private dragStartY: number = 0;
+    private scrollStartY: number = 0;
 
     constructor() {
         super('ProfileScene');
@@ -208,107 +228,352 @@ export class ProfileScene extends Scene {
         });
     }
 
-    private createBadgesSection(centerX: number, startY: number, panelWidth: number) {
-        const leftX = centerX - panelWidth / 2 + 55;
-        const rowHeight = 38;
-        
-        // Get only claimable badges for the list
-        const claimableBadges = BadgeService.getClaimableBadges();
+    /**
+     * Create "My Badges" section with scrollable grid
+     */
+    private createMyBadgesSection(centerX: number, startY: number, panelWidth: number) {
+        const viewportWidth = panelWidth - 40;
+        const viewportHeight = 55; // Compact height for owned badges
+        const leftX = centerX - viewportWidth / 2;
 
-        claimableBadges.forEach((badge, index) => {
-            const y = startY + index * rowHeight;
-            this.createBadgeRow(leftX, y, panelWidth - 90, badge, index);
+        // Section title
+        const title = this.add.text(leftX + 10, startY, '🏆 My Badges', {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
         });
+        title.setStroke('#5D4037', 2);
+
+        const contentStartY = startY + 16;
+
+        // Create mask
+        this.myBadgesMask = this.add.graphics();
+        this.myBadgesMask.fillRect(leftX, contentStartY, viewportWidth, viewportHeight);
+        const mask = this.myBadgesMask.createGeometryMask();
+
+        // Create container
+        this.myBadgesContainer = this.add.container(0, 0);
+        this.myBadgesContainer.setMask(mask);
+
+        const claimedBadges = AVAILABLE_BADGES.filter(b => BadgeService.isBadgeClaimed(b.id));
+        
+        if (claimedBadges.length === 0) {
+            const noBadges = this.add.text(centerX, contentStartY + viewportHeight / 2, 'No badges yet', {
+                fontSize: '8px',
+                fontFamily: 'PixelFont',
+                color: '#6b7280',
+                resolution: 2
+            });
+            noBadges.setOrigin(0.5);
+            this.myBadgesContainer.add(noBadges);
+        } else {
+            // Grid of owned badges
+            const columns = 7;
+            const cellSize = 28;
+            const cellSpacing = 5;
+            const gridStartX = leftX + 15;
+            let contentHeight = 0;
+
+            claimedBadges.forEach((badge, index) => {
+                const col = index % columns;
+                const row = Math.floor(index / columns);
+                const x = gridStartX + col * (cellSize + cellSpacing) + cellSize / 2;
+                const y = contentStartY + row * (cellSize + cellSpacing) + cellSize / 2;
+
+                const badgeBg = this.add.rectangle(x, y, cellSize, cellSize, 0x2d5a3d, 0.8);
+                badgeBg.setStrokeStyle(2, 0x4ade80);
+                badgeBg.setInteractive({ useHandCursor: true });
+                this.myBadgesContainer.add(badgeBg);
+                this.badgeElements.push(badgeBg);
+
+                const badgeIcon = this.add.text(x, y, badge.icon, {
+                    fontSize: '14px',
+                    resolution: 2
+                });
+                badgeIcon.setOrigin(0.5);
+                this.myBadgesContainer.add(badgeIcon);
+                this.badgeElements.push(badgeIcon);
+
+                badgeBg.on('pointerover', () => {
+                    badgeBg.setStrokeStyle(2, 0xFFD700);
+                    this.showBadgeTooltip(x, y - cellSize / 2 - 20 + this.myBadgesScrollY, badge);
+                });
+                badgeBg.on('pointerout', () => {
+                    badgeBg.setStrokeStyle(2, 0x4ade80);
+                    this.hideBadgeTooltip();
+                });
+
+                contentHeight = (row + 1) * (cellSize + cellSpacing);
+            });
+
+            this.myBadgesMaxScrollY = Math.max(0, contentHeight - viewportHeight);
+        }
+
+        // Store bounds for scroll detection
+        this.myBadgesBounds = { x: leftX, y: contentStartY, width: viewportWidth, height: viewportHeight };
     }
 
-    private createBadgeRow(leftX: number, y: number, width: number, badge: Badge, index: number) {
-        const isClaimed = BadgeService.isBadgeClaimed(badge.id);
+    /**
+     * Create "Unlock Badges" section with scrollable list
+     */
+    private createUnlockBadgesSection(centerX: number, startY: number, panelWidth: number) {
+        const viewportWidth = panelWidth - 40;
+        const viewportHeight = 70; // Height for unlock badges list
+        const leftX = centerX - viewportWidth / 2;
 
-        // Row background
-        const rowBg = this.add.rectangle(
-            leftX + width / 2,
-            y + 15,
-            width,
-            34,
-            isClaimed ? 0x2d5a3d : 0x3E2723,
-            0.7
-        );
-        rowBg.setStrokeStyle(1, isClaimed ? 0x4ade80 : 0x5D4037);
-        this.badgeElements.push(rowBg);
+        const unclaimedBadges = BadgeService.getClaimableBadges().filter(b => !BadgeService.isBadgeClaimed(b.id));
 
-        // Badge icon
-        const icon = this.add.text(leftX + 20, y + 15, badge.icon, {
-            fontSize: '18px',
-            resolution: 2
-        });
-        icon.setOrigin(0.5);
-        icon.setAlpha(isClaimed ? 1 : 0.5);
-        this.badgeElements.push(icon);
-
-        // Badge name
-        const name = this.add.text(leftX + 45, y + 8, badge.name, {
-            fontSize: '10px',
+        // Section title
+        const title = this.add.text(leftX + 10, startY, `🔓 Unlock Badges (${unclaimedBadges.length})`, {
+            fontSize: '9px',
             fontFamily: 'PixelFont',
-            color: isClaimed ? '#4ade80' : '#FFFFFF',
+            color: '#FFD700',
             resolution: 2
         });
-        name.setStroke('#5D4037', 1);
-        this.badgeElements.push(name);
+        title.setStroke('#5D4037', 2);
 
-        // Badge description/requirement
-        const desc = this.add.text(leftX + 45, y + 22, badge.requirement, {
-            fontSize: '7px',
-            fontFamily: 'PixelFont',
-            color: '#BCAAA4',
-            resolution: 2
-        });
-        this.badgeElements.push(desc);
-
-        // Unlock button or Claimed status
-        const btnX = leftX + width - 35;
-
-        if (isClaimed) {
-            const claimedText = this.add.text(btnX, y + 15, '✓ Claimed', {
+        if (unclaimedBadges.length === 0) {
+            const allClaimed = this.add.text(centerX, startY + 40, 'All badges claimed! 🎉', {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
                 color: '#4ade80',
                 resolution: 2
             });
-            claimedText.setOrigin(0.5);
-            this.badgeElements.push(claimedText);
-        } else {
-            // Unlock button
-            const unlockBtnBg = this.add.sprite(btnX, y + 15, 'square-buttons', 6);
-            unlockBtnBg.setDisplaySize(55, 24);
-            unlockBtnBg.setTint(0x4ade80);
-            unlockBtnBg.setInteractive({ useHandCursor: true });
-            this.badgeElements.push(unlockBtnBg);
-
-            const unlockText = this.add.text(btnX, y + 15, 'Unlock', {
-                fontSize: '8px',
-                fontFamily: 'PixelFont',
-                color: '#FFFFFF',
-                resolution: 2
-            });
-            unlockText.setOrigin(0.5);
-            unlockText.setStroke('#166534', 1);
-            this.badgeElements.push(unlockText);
-
-            unlockBtnBg.on('pointerdown', () => this.openClaimForm(badge));
-            unlockBtnBg.on('pointerover', () => unlockBtnBg.setTint(0x86efac));
-            unlockBtnBg.on('pointerout', () => unlockBtnBg.setTint(0x4ade80));
+            allClaimed.setOrigin(0.5);
+            return;
         }
 
-        // Animate row entrance
-        [rowBg, icon, name, desc].forEach(el => {
-            (el as any).setAlpha(0);
-            this.tweens.add({
-                targets: el,
-                alpha: (el === icon && !isClaimed) ? 0.5 : ((el as any).alpha !== undefined ? 1 : 0.7),
-                duration: 200,
-                delay: 100 + index * 50
-            });
+        const contentStartY = startY + 16;
+
+        // Create mask
+        this.unlockBadgesMask = this.add.graphics();
+        this.unlockBadgesMask.fillRect(leftX, contentStartY, viewportWidth, viewportHeight);
+        const mask = this.unlockBadgesMask.createGeometryMask();
+
+        // Create container
+        this.unlockBadgesContainer = this.add.container(0, 0);
+        this.unlockBadgesContainer.setMask(mask);
+
+        // Create rows for each unclaimed badge
+        const rowHeight = 32;
+        unclaimedBadges.forEach((badge, index) => {
+            const y = contentStartY + index * rowHeight;
+            this.createUnlockBadgeRow(leftX + 10, y, viewportWidth - 20, badge);
         });
+
+        const totalContentHeight = unclaimedBadges.length * rowHeight;
+        this.unlockBadgesMaxScrollY = Math.max(0, totalContentHeight - viewportHeight);
+
+        // Scroll indicator if needed
+        if (this.unlockBadgesMaxScrollY > 0) {
+            const scrollHint = this.add.text(centerX + viewportWidth / 2 - 15, startY, '↕', {
+                fontSize: '8px',
+                fontFamily: 'PixelFont',
+                color: '#6b7280',
+                resolution: 2
+            });
+            scrollHint.setAlpha(0.6);
+        }
+
+        // Store bounds for scroll detection (used in setupScrollHandlers)
+        this.unlockBadgesBounds = { x: leftX, y: contentStartY, width: viewportWidth, height: viewportHeight };
+    }
+
+    private createUnlockBadgeRow(leftX: number, y: number, width: number, badge: Badge) {
+        // Store original Y for visibility check
+        const originalY = y;
+        
+        // Row background
+        const rowBg = this.add.rectangle(leftX + width / 2, y + 12, width, 28, 0x3E2723, 0.7);
+        rowBg.setStrokeStyle(1, 0x5D4037);
+        this.unlockBadgesContainer.add(rowBg);
+        this.badgeElements.push(rowBg);
+
+        // Badge icon
+        const icon = this.add.text(leftX + 18, y + 12, badge.icon, {
+            fontSize: '14px',
+            resolution: 2
+        });
+        icon.setOrigin(0.5);
+        icon.setAlpha(0.5);
+        this.unlockBadgesContainer.add(icon);
+        this.badgeElements.push(icon);
+
+        // Badge name
+        const name = this.add.text(leftX + 38, y + 6, badge.name, {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        name.setStroke('#5D4037', 1);
+        this.unlockBadgesContainer.add(name);
+        this.badgeElements.push(name);
+
+        // Badge requirement
+        const desc = this.add.text(leftX + 38, y + 18, badge.requirement, {
+            fontSize: '6px',
+            fontFamily: 'PixelFont',
+            color: '#BCAAA4',
+            resolution: 2
+        });
+        this.unlockBadgesContainer.add(desc);
+        this.badgeElements.push(desc);
+
+        // Unlock button
+        const btnX = leftX + width - 30;
+        const unlockBtnBg = this.add.sprite(btnX, y + 12, 'square-buttons', 6);
+        unlockBtnBg.setDisplaySize(50, 22);
+        unlockBtnBg.setTint(0x4ade80);
+        unlockBtnBg.setInteractive({ useHandCursor: true });
+        this.unlockBadgesContainer.add(unlockBtnBg);
+        this.badgeElements.push(unlockBtnBg);
+
+        const unlockText = this.add.text(btnX, y + 12, 'Unlock', {
+            fontSize: '7px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        unlockText.setOrigin(0.5);
+        unlockText.setStroke('#166534', 1);
+        this.unlockBadgesContainer.add(unlockText);
+        this.badgeElements.push(unlockText);
+
+        // Helper to check if button is visible
+        const isButtonVisible = (): boolean => {
+            if (!this.unlockBadgesBounds) return true;
+            const visibleY = originalY - this.unlockBadgesScrollY;
+            const bounds = this.unlockBadgesBounds;
+            return visibleY + 12 >= bounds.y && visibleY + 12 <= bounds.y + bounds.height;
+        };
+
+        unlockBtnBg.on('pointerdown', () => {
+            if (isButtonVisible()) {
+                this.openClaimForm(badge);
+            }
+        });
+        unlockBtnBg.on('pointerover', () => {
+            if (isButtonVisible()) {
+                unlockBtnBg.setTint(0x86efac);
+            }
+        });
+        unlockBtnBg.on('pointerout', () => unlockBtnBg.setTint(0x4ade80));
+    }
+
+    private setupScrollHandlers() {
+        // Mouse wheel scroll
+        this.input.on('wheel', (pointer: Phaser.Input.Pointer, _gameObjects: any[], _deltaX: number, deltaY: number) => {
+            // Check if pointer is within myBadges bounds
+            if (this.myBadgesBounds && this.myBadgesMaxScrollY > 0) {
+                const b = this.myBadgesBounds;
+                if (pointer.x >= b.x && pointer.x <= b.x + b.width &&
+                    pointer.y >= b.y && pointer.y <= b.y + b.height) {
+                    this.myBadgesScrollY = Phaser.Math.Clamp(this.myBadgesScrollY + deltaY * 0.5, 0, this.myBadgesMaxScrollY);
+                    this.myBadgesContainer.setY(-this.myBadgesScrollY);
+                    return;
+                }
+            }
+            
+            // Check if pointer is within unlockBadges bounds
+            if (this.unlockBadgesBounds && this.unlockBadgesMaxScrollY > 0) {
+                const b = this.unlockBadgesBounds;
+                if (pointer.x >= b.x && pointer.x <= b.x + b.width &&
+                    pointer.y >= b.y && pointer.y <= b.y + b.height) {
+                    this.unlockBadgesScrollY = Phaser.Math.Clamp(this.unlockBadgesScrollY + deltaY * 0.5, 0, this.unlockBadgesMaxScrollY);
+                    this.unlockBadgesContainer.setY(-this.unlockBadgesScrollY);
+                }
+            }
+        });
+
+        // Touch/drag scroll - detect area on pointerdown
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            // Check myBadges area
+            if (this.myBadgesBounds) {
+                const b = this.myBadgesBounds;
+                if (pointer.x >= b.x && pointer.x <= b.x + b.width &&
+                    pointer.y >= b.y && pointer.y <= b.y + b.height) {
+                    this.activeScrollArea = 'myBadges';
+                    this.isDragging = true;
+                    this.dragStartY = pointer.y;
+                    this.scrollStartY = this.myBadgesScrollY;
+                    return;
+                }
+            }
+            
+            // Check unlockBadges area
+            if (this.unlockBadgesBounds) {
+                const b = this.unlockBadgesBounds;
+                if (pointer.x >= b.x && pointer.x <= b.x + b.width &&
+                    pointer.y >= b.y && pointer.y <= b.y + b.height) {
+                    this.activeScrollArea = 'unlockBadges';
+                    this.isDragging = true;
+                    this.dragStartY = pointer.y;
+                    this.scrollStartY = this.unlockBadgesScrollY;
+                }
+            }
+        });
+
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            if (!this.isDragging) return;
+            
+            const deltaY = this.dragStartY - pointer.y;
+            
+            if (this.activeScrollArea === 'myBadges' && this.myBadgesMaxScrollY > 0) {
+                this.myBadgesScrollY = Phaser.Math.Clamp(this.scrollStartY + deltaY, 0, this.myBadgesMaxScrollY);
+                this.myBadgesContainer.setY(-this.myBadgesScrollY);
+            } else if (this.activeScrollArea === 'unlockBadges' && this.unlockBadgesMaxScrollY > 0) {
+                this.unlockBadgesScrollY = Phaser.Math.Clamp(this.scrollStartY + deltaY, 0, this.unlockBadgesMaxScrollY);
+                this.unlockBadgesContainer.setY(-this.unlockBadgesScrollY);
+            }
+        });
+
+        this.input.on('pointerup', () => {
+            this.isDragging = false;
+            this.activeScrollArea = null;
+        });
+    }
+
+    private badgeTooltip: Phaser.GameObjects.Container | null = null;
+
+    private showBadgeTooltip(x: number, y: number, badge: Badge): void {
+        this.hideBadgeTooltip();
+
+        const container = this.add.container(x, y);
+        container.setDepth(50);
+
+        const bg = this.add.rectangle(0, 0, 90, 28, 0x3E2723, 0.95);
+        bg.setStrokeStyle(1, 0x5D4037);
+        container.add(bg);
+
+        const nameText = this.add.text(0, 0, badge.name, {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#4ade80',
+            resolution: 2
+        });
+        nameText.setOrigin(0.5);
+        container.add(nameText);
+
+        this.badgeTooltip = container;
+
+        container.setAlpha(0);
+        container.setScale(0.8);
+        this.tweens.add({
+            targets: container,
+            alpha: 1,
+            scale: 1,
+            duration: 100,
+            ease: 'Back.easeOut'
+        });
+    }
+
+    private hideBadgeTooltip(): void {
+        if (this.badgeTooltip) {
+            this.badgeTooltip.destroy();
+            this.badgeTooltip = null;
+        }
     }
 
     private openClaimForm(badge: Badge) {
@@ -631,18 +896,34 @@ export class ProfileScene extends Scene {
         this.badgeElements.forEach(el => (el as any)?.destroy?.());
         this.badgeElements = [];
 
-        // Recreate badges section
+        // Destroy old containers and masks
+        if (this.myBadgesContainer) {
+            this.myBadgesContainer.destroy();
+        }
+        if (this.myBadgesMask) {
+            this.myBadgesMask.destroy();
+        }
+        if (this.unlockBadgesContainer) {
+            this.unlockBadgesContainer.destroy();
+        }
+        if (this.unlockBadgesMask) {
+            this.unlockBadgesMask.destroy();
+        }
+
+        // Reset scroll
+        this.myBadgesScrollY = 0;
+        this.myBadgesMaxScrollY = 0;
+        this.unlockBadgesScrollY = 0;
+        this.unlockBadgesMaxScrollY = 0;
+
+        // Recreate badges sections
         const centerX = this.scale.width / 2;
         const panelWidth = 320;
         const panelHeight = 450;
-        const startY = this.scale.height / 2 - panelHeight / 2 + 220;
-        const leftX = centerX - panelWidth / 2 + 25;
+        const panelTop = this.scale.height / 2 - panelHeight / 2;
 
-        const claimableBadges = BadgeService.getClaimableBadges();
-        claimableBadges.forEach((badge, index) => {
-            const y = startY + index * 38;
-            this.createBadgeRow(leftX, y, panelWidth - 50, badge, index);
-        });
+        this.createMyBadgesSection(centerX, panelTop + 215, panelWidth);
+        this.createUnlockBadgesSection(centerX, panelTop + 295, panelWidth);
     }
 
     private showToast(message: string, color: number) {

@@ -16,11 +16,17 @@ import { PlantType } from './types/GameTypes';
 export interface UserData {
     id: string;
     address: string;
+    walletAddress?: string;
+    walletAddressSui?: string;
+    walletAddressAptos?: string;
+    walletAddressCardano?: string;
     username: string | null;
     avatar: string | null;
     characterType: number; // 1-5, maps to character index 0-4
     xp: number;
     reputationScore: number;
+    gold?: number;
+    gem?: number;
     landsCount: number;
     plantsCount: number;
     network: string;
@@ -142,8 +148,26 @@ export class GameDataService {
         onProgress?.(80);
 
         // Extract results with fallbacks
+        // Get stored user data (from login) which contains wallet addresses
+        const storedUser = UserService.getStoredUser();
+        const profileUser = userResult.status === 'fulfilled' ? userResult.value : null;
+        
+        // Merge user data: profile data + wallet addresses from login
+        let mergedUser: UserData | null = null;
+        if (profileUser) {
+            mergedUser = {
+                ...profileUser,
+                // Preserve wallet addresses from stored user (login response)
+                walletAddressSui: profileUser.walletAddressSui || storedUser?.walletAddressSui,
+                walletAddressAptos: profileUser.walletAddressAptos || storedUser?.walletAddressAptos,
+                walletAddressCardano: profileUser.walletAddressCardano || storedUser?.walletAddressCardano,
+            };
+        } else if (storedUser) {
+            mergedUser = storedUser;
+        }
+
         const gameData: GameData = {
-            user: userResult.status === 'fulfilled' ? userResult.value : null,
+            user: mergedUser,
             garden: gardenResult.status === 'fulfilled' ? gardenResult.value : [],
             seeds: seedsResult.status === 'fulfilled' ? seedsResult.value : [],
             fertilizers: fertilizersResult.status === 'fulfilled' ? fertilizersResult.value : null,
