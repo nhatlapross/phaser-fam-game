@@ -23,97 +23,6 @@ export interface Mission {
     updatedAt: string;
 }
 
-// Mock missions for testing - set to true to use mock data
-const USE_MOCK_MISSIONS = true;
-
-const MOCK_MISSIONS: Mission[] = [
-    {
-        id: "mission-social-twitter-001",
-        type: "social",
-        name: "Share on Twitter",
-        description: "Share a screenshot of your farm on Twitter with hashtag #FarmGame and submit the link or image as proof.",
-        progress: 0,
-        target: 1,
-        status: "active",
-        reward: {
-            xp: 50,
-            reputation: 10,
-            items: [
-                { type: "gold", amount: 100 },
-                { type: "gem", amount: 5 }
-            ]
-        },
-        resetPeriod: "weekly",
-        createdAt: "2026-01-06T00:00:00.000Z",
-        updatedAt: "2026-01-06T00:00:00.000Z"
-    },
-    {
-        id: "mission-social-discord-001",
-        type: "social",
-        name: "Join Discord",
-        description: "Join our Discord server and post your introduction in #welcome channel. Submit screenshot as proof.",
-        progress: 0,
-        target: 1,
-        status: "active",
-        reward: {
-            xp: 30,
-            reputation: 5,
-            items: [{ type: "gold", amount: 50 }]
-        },
-        resetPeriod: "once",
-        createdAt: "2026-01-06T00:00:00.000Z",
-        updatedAt: "2026-01-06T00:00:00.000Z"
-    },
-    {
-        id: "mission-daily-water-001",
-        type: "farming",
-        name: "Daily Watering",
-        description: "Water 5 plants today",
-        progress: 2,
-        target: 5,
-        status: "active",
-        reward: {
-            xp: 20,
-            items: [{ type: "gold", amount: 30 }]
-        },
-        resetPeriod: "daily",
-        createdAt: "2026-01-06T00:00:00.000Z",
-        updatedAt: "2026-01-06T00:00:00.000Z"
-    },
-    {
-        id: "mission-social-completed-001",
-        type: "social",
-        name: "Follow on Twitter",
-        description: "Follow @FarmGame on Twitter",
-        progress: 1,
-        target: 1,
-        status: "completed",
-        reward: {
-            xp: 25,
-            items: [{ type: "gem", amount: 3 }]
-        },
-        resetPeriod: "once",
-        createdAt: "2026-01-06T00:00:00.000Z",
-        updatedAt: "2026-01-06T00:00:00.000Z"
-    },
-    {
-        id: "mission-claimed-001",
-        type: "farming",
-        name: "First Harvest",
-        description: "Harvest your first plant",
-        progress: 1,
-        target: 1,
-        status: "claimed",
-        reward: {
-            xp: 10,
-            items: [{ type: "gold", amount: 20 }]
-        },
-        resetPeriod: "once",
-        createdAt: "2026-01-06T00:00:00.000Z",
-        updatedAt: "2026-01-06T00:00:00.000Z"
-    }
-];
-
 export class MissionService {
     private static API_BASE_URL =
         process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
@@ -123,12 +32,6 @@ export class MissionService {
      * @returns Array of missions or null on failure
      */
     static async getMissions(): Promise<Mission[] | null> {
-        // Return mock data if enabled
-        if (USE_MOCK_MISSIONS) {
-            console.log('[MissionService] Using mock missions');
-            return [...MOCK_MISSIONS];
-        }
-
         const token = this.getAccessToken();
         if (!token) {
             console.error("No access token available");
@@ -170,20 +73,6 @@ export class MissionService {
      * @returns Updated mission or null on failure
      */
     static async updateMissionProgress(missionId: string, progress: number): Promise<Mission | null> {
-        // Mock update if enabled
-        if (USE_MOCK_MISSIONS) {
-            console.log('[MissionService] Mock updating mission:', missionId, 'progress:', progress);
-            const mission = MOCK_MISSIONS.find(m => m.id === missionId);
-            if (mission) {
-                mission.progress = progress;
-                if (mission.progress >= mission.target) {
-                    mission.status = 'completed';
-                }
-                return { ...mission };
-            }
-            return null;
-        }
-
         const token = this.getAccessToken();
         if (!token) {
             console.error("No access token available");
@@ -226,17 +115,6 @@ export class MissionService {
      * @returns Updated mission or null on failure
      */
     static async claimMissionReward(missionId: string): Promise<Mission | null> {
-        // Mock claim if enabled
-        if (USE_MOCK_MISSIONS) {
-            console.log('[MissionService] Mock claiming mission:', missionId);
-            const mission = MOCK_MISSIONS.find(m => m.id === missionId);
-            if (mission && mission.status === 'completed') {
-                mission.status = 'claimed';
-                return { ...mission };
-            }
-            return null;
-        }
-
         const token = this.getAccessToken();
         if (!token) {
             console.error("No access token available");
@@ -278,18 +156,6 @@ export class MissionService {
      * @returns Updated mission or null on failure
      */
     static async submitProof(missionId: string, proof: string): Promise<Mission | null> {
-        // Mock submit if enabled
-        if (USE_MOCK_MISSIONS) {
-            console.log('[MissionService] Mock submitting proof:', missionId, proof);
-            const mission = MOCK_MISSIONS.find(m => m.id === missionId);
-            if (mission && mission.status === 'active') {
-                mission.progress = mission.target;
-                mission.status = 'completed';
-                return { ...mission };
-            }
-            return null;
-        }
-
         const token = this.getAccessToken();
         if (!token) {
             console.error("No access token available");
