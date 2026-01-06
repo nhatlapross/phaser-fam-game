@@ -101,7 +101,7 @@ export class ProfileScene extends Scene {
 
         // Badges section (list format with unlock buttons) - only for NEW users
         if (this.isNewUser) {
-            this.createBadgesSection(centerX, panelTop + 260, panelWidth);
+            this.createMyBadgesSection(centerX, panelTop + 260, panelWidth);
         }
 
         // Navigation buttons
