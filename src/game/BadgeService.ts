@@ -2,7 +2,7 @@
 
 import { UserService } from './UserService';
 
-// Badge definition
+// Badge definition (for predefined badges)
 export interface Badge {
     id: string;
     name: string;
@@ -13,7 +13,7 @@ export interface Badge {
     isClaimable: boolean; // Can be claimed with code/QR
 }
 
-// User's badge status
+// User's badge status (legacy format for local storage)
 export interface UserBadge {
     badgeId: string;
     claimed: boolean;
@@ -21,7 +21,47 @@ export interface UserBadge {
     code?: string; // Code used to claim (if applicable)
 }
 
-// Available badges in the game
+// Soulbound Token from API
+export interface SoulboundToken {
+    id: string;
+    userId: string;
+    name: string;
+    metadata: {
+        rarity: 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+        category: string;
+        description: string;
+        badgeType?: string;
+        inputCode?: string;
+    };
+    issuedAt: string;
+}
+
+// API Response for fetching tokens
+export interface SoulboundTokensResponse {
+    tokens: SoulboundToken[];
+    total: number;
+    byCategory: Record<string, SoulboundToken[]>;
+}
+
+// Rarity colors
+const RARITY_COLORS: Record<string, string> = {
+    'COMMON': '#9CA3AF',
+    'UNCOMMON': '#22C55E',
+    'RARE': '#3B82F6',
+    'EPIC': '#A855F7',
+    'LEGENDARY': '#F59E0B'
+};
+
+// Rarity icons
+const RARITY_ICONS: Record<string, string> = {
+    'COMMON': '⚪',
+    'UNCOMMON': '🟢',
+    'RARE': '🔵',
+    'EPIC': '🟣',
+    'LEGENDARY': '🟡'
+};
+
+// Available badges in the game (predefined, for unlock section)
 export const AVAILABLE_BADGES: Badge[] = [
     {
         id: 'early_adopter',
@@ -98,12 +138,16 @@ export const AVAILABLE_BADGES: Badge[] = [
 ];
 
 const STORAGE_KEY_BADGES = 'fam_game_user_badges';
+const STORAGE_KEY_TOKENS = 'fam_game_soulbound_tokens';
 
 export class BadgeService {
     private static API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+    
+    // Cached tokens from API
+    private static cachedTokens: SoulboundToken[] = [];
 
     /**
-     * Get user's badges from local storage (cached)
+     * Get user's badges from local storage (cached) - legacy format
      */
     static getStoredBadges(): UserBadge[] {
         if (typeof window === 'undefined') return [];
@@ -127,14 +171,44 @@ export class BadgeService {
     }
 
     /**
-     * Fetch user's badges from API
+     * Get cached soulbound tokens
      */
-    static async fetchUserBadges(): Promise<UserBadge[]> {
+    static getCachedTokens(): SoulboundToken[] {
+        if (this.cachedTokens.length > 0) return this.cachedTokens;
+        
+        // Try to load from localStorage
+        if (typeof window === 'undefined') return [];
+        const data = localStorage.getItem(STORAGE_KEY_TOKENS);
+        if (data) {
+            try {
+                this.cachedTokens = JSON.parse(data);
+                return this.cachedTokens;
+            } catch {
+                return [];
+            }
+        }
+        return [];
+    }
+
+    /**
+     * Save tokens to local storage
+     */
+    private static saveTokens(tokens: SoulboundToken[]): void {
+        this.cachedTokens = tokens;
+        if (typeof window === 'undefined') return;
+        localStorage.setItem(STORAGE_KEY_TOKENS, JSON.stringify(tokens));
+    }
+
+    /**
+     * Fetch user's soulbound tokens from API
+     * GET /soulbound-tokens
+     */
+    static async fetchSoulboundTokens(): Promise<SoulboundToken[]> {
         const token = UserService.getAccessToken();
-        if (!token) return [];
+        if (!token) return this.getCachedTokens();
 
         try {
-            const response = await fetch(`${BadgeService.API_BASE_URL}/user/badges`, {
+            const response = await fetch(`${BadgeService.API_BASE_URL}/soulbound-tokens`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -142,16 +216,38 @@ export class BadgeService {
             });
 
             if (response.ok) {
-                const data = await response.json();
-                const badges: UserBadge[] = data.badges || [];
-                BadgeService.saveBadges(badges);
-                return badges;
+                const data: SoulboundTokensResponse = await response.json();
+                const tokens = data.tokens || [];
+                
+                // Save to cache and localStorage
+                this.saveTokens(tokens);
+                
+                // Also update legacy UserBadge format for backward compatibility
+                const userBadges: UserBadge[] = tokens.map(t => ({
+                    badgeId: t.metadata?.badgeType?.toLowerCase() || t.id,
+                    claimed: true,
+                    claimedAt: t.issuedAt
+                }));
+                this.saveBadges(userBadges);
+                
+                console.log(`[BadgeService] Fetched ${tokens.length} soulbound tokens`);
+                return tokens;
+            } else {
+                console.error('Error fetching soulbound tokens:', response.statusText);
             }
         } catch (error) {
-            console.error('Error fetching badges:', error);
+            console.error('Network error fetching soulbound tokens:', error);
         }
 
-        return BadgeService.getStoredBadges();
+        return this.getCachedTokens();
+    }
+
+    /**
+     * Fetch user's badges from API (legacy - redirects to fetchSoulboundTokens)
+     */
+    static async fetchUserBadges(): Promise<UserBadge[]> {
+        await this.fetchSoulboundTokens();
+        return this.getStoredBadges();
     }
 
     /**
@@ -178,12 +274,19 @@ export class BadgeService {
 
             if (response.ok && data.success) {
                 // Extract badge info from response
-                const tokenData = data.token;
+                const tokenData = data.token as SoulboundToken;
                 const claimedBadgeId = tokenData?.metadata?.badgeType?.toLowerCase() || badgeId;
                 const badgeName = tokenData?.name || 'Badge';
 
-                // Update local storage
-                const badges = BadgeService.getStoredBadges();
+                // Update cached tokens
+                if (tokenData) {
+                    const tokens = this.getCachedTokens();
+                    tokens.push(tokenData);
+                    this.saveTokens(tokens);
+                }
+
+                // Update legacy local storage
+                const badges = this.getStoredBadges();
                 const existingIndex = badges.findIndex(b => b.badgeId === claimedBadgeId);
                 const newBadge: UserBadge = {
                     badgeId: claimedBadgeId,
@@ -197,7 +300,7 @@ export class BadgeService {
                 } else {
                     badges.push(newBadge);
                 }
-                BadgeService.saveBadges(badges);
+                this.saveBadges(badges);
 
                 return { 
                     success: true, 
@@ -217,7 +320,16 @@ export class BadgeService {
      * Check if a badge is claimed by the user
      */
     static isBadgeClaimed(badgeId: string): boolean {
-        const badges = BadgeService.getStoredBadges();
+        // Check in cached tokens first
+        const tokens = this.getCachedTokens();
+        const foundInTokens = tokens.some(t => 
+            t.metadata?.badgeType?.toLowerCase() === badgeId.toLowerCase() ||
+            t.id === badgeId
+        );
+        if (foundInTokens) return true;
+
+        // Fallback to legacy storage
+        const badges = this.getStoredBadges();
         return badges.some(b => b.badgeId === badgeId && b.claimed);
     }
 
@@ -236,10 +348,26 @@ export class BadgeService {
     }
 
     /**
+     * Get rarity color for a token
+     */
+    static getRarityColor(rarity: string): string {
+        return RARITY_COLORS[rarity] || RARITY_COLORS['COMMON'];
+    }
+
+    /**
+     * Get rarity icon for a token
+     */
+    static getRarityIcon(rarity: string): string {
+        return RARITY_ICONS[rarity] || RARITY_ICONS['COMMON'];
+    }
+
+    /**
      * Clear badges data (on logout)
      */
     static clearBadges(): void {
+        this.cachedTokens = [];
         if (typeof window === 'undefined') return;
         localStorage.removeItem(STORAGE_KEY_BADGES);
+        localStorage.removeItem(STORAGE_KEY_TOKENS);
     }
 }
