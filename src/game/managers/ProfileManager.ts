@@ -6,6 +6,7 @@ import { EventBus } from '../EventBus';
 import { useGameState } from '../hooks/useGameState';
 import { NFTVoucherManager, SAMPLE_VOUCHERS } from './NFTVoucherManager';
 import { BadgeService, AVAILABLE_BADGES, Badge } from '../BadgeService';
+import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 
 interface ProfileCallbacks {
     onLogout: () => void;
@@ -92,12 +93,17 @@ export class ProfileManager extends BaseManager {
         if (user.avatar) {
             this.loadExternalAvatar(user.avatar, avatarBgX, avatarBgY, avatarSize);
         } else {
-            const avatar = this.scene.add.image(avatarBgX, avatarBgY, 'default-avatar');
+            // Use character sprite as default avatar based on characterType
+            const characterType = user.characterType || 1;
+            const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
+            const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
+            
+            const avatar = this.scene.add.sprite(avatarBgX, avatarBgY, characterKey, 0);
             avatar.setDisplaySize(avatarSize, avatarSize);
             avatar.setDepth(5022);
             this.scene.cameras.main.ignore(avatar);
             this.profileElements.push(avatar);
-            this.avatarImage = avatar;
+            this.avatarImage = avatar as unknown as Phaser.GameObjects.Image;
         }
 
         // Info section
@@ -582,7 +588,12 @@ export class ProfileManager extends BaseManager {
         if (user.avatar) {
             this.loadModalAvatar(user.avatar, modalX, avatarY, avatarSize);
         } else {
-            const modalAvatar = this.scene.add.image(modalX, avatarY, 'default-avatar');
+            // Use character sprite as default avatar based on characterType
+            const characterType = user.characterType || 1;
+            const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
+            const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
+            
+            const modalAvatar = this.scene.add.sprite(modalX, avatarY, characterKey, 0);
             modalAvatar.setDisplaySize(avatarSize, avatarSize);
             modalAvatar.setDepth(5103);
             modalAvatar.setAlpha(0);
@@ -740,6 +751,8 @@ export class ProfileManager extends BaseManager {
         this.badgesContainer.setMask(mask);
         this.badgesMask = maskGraphics;
         this.scene.cameras.main.ignore(maskGraphics);
+        // Hide the mask graphics - it should only be used for masking, not visible
+        maskGraphics.setVisible(false);
 
         // Get all badges
         const allBadges = AVAILABLE_BADGES;

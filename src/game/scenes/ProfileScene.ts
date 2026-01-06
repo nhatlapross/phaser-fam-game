@@ -79,6 +79,8 @@ export class ProfileScene extends Scene {
         const cachedData = GameDataService.getCachedData();
         const user = cachedData?.user || UserService.getStoredUser();
 
+        console.log('[ProfileScene] User data:', JSON.stringify(user, null, 2));
+
         if (!user) {
             this.scene.start('Login');
             return;
@@ -125,6 +127,8 @@ export class ProfileScene extends Scene {
         const characterType = user?.characterType || 1;
         const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
         const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
+
+        console.log(`[ProfileScene] Character: ${characterKey} (type: ${characterType}, index: ${characterIndex})`);
 
         // Character sprite
         this.characterSprite = this.add.sprite(centerX, y, characterKey, 0);

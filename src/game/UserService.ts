@@ -251,8 +251,12 @@ export class UserService {
             if (response.ok) {
                 const data = await response.json();
 
-                // Get existing stored user to preserve wallet addresses
+                // Get existing stored user to preserve wallet addresses and characterType
                 const existingUser = UserService.getStoredUser();
+
+                // For characterType: prefer existingUser (from register/login) over profile API
+                // because profile API may return default value (1) even if user selected different character
+                const characterType = existingUser?.characterType || data.characterType || 1;
 
                 // Map API response to UserData, preserving wallet addresses from login
                 const userData: UserData = {
@@ -265,7 +269,7 @@ export class UserService {
                     walletAddressCardano: data.walletAddressCardano || existingUser?.walletAddressCardano,
                     username: data.username,
                     avatar: data.avatar,
-                    characterType: data.characterType || 1,
+                    characterType,
                     xp: data.xp,
                     reputationScore: data.reputationScore,
                     gold: data.gold,
