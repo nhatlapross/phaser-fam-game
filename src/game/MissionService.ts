@@ -150,6 +150,49 @@ export class MissionService {
     }
 
     /**
+     * Submit proof for a mission (link or image URL)
+     * @param missionId The mission ID
+     * @param proof The proof URL (social link or IPFS image URL)
+     * @returns Updated mission or null on failure
+     */
+    static async submitProof(missionId: string, proof: string): Promise<Mission | null> {
+        const token = this.getAccessToken();
+        if (!token) {
+            console.error("No access token available");
+            return null;
+        }
+
+        try {
+            const response = await fetch(
+                `${MissionService.API_BASE_URL}/missions/${missionId}/proof`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ proof }),
+                }
+            );
+
+            if (response.ok) {
+                const mission: Mission = await response.json();
+                return mission;
+            } else {
+                console.error(
+                    "Error submitting mission proof:",
+                    response.statusText,
+                    await response.text()
+                );
+                return null;
+            }
+        } catch (error) {
+            console.error("Network error submitting mission proof:", error);
+            return null;
+        }
+    }
+
+    /**
      * Gets the stored access token from UserService
      */
     private static getAccessToken(): string | null {

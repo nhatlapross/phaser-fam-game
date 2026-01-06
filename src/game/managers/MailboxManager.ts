@@ -13,6 +13,9 @@ interface MailboxCallbacks {
     // Note: UI refresh is now handled by GameDataService.refreshAndUpdateUI()
 }
 
+// Submission type for missions
+type SubmissionType = 'link' | 'image';
+
 /**
  * Manages the mailbox/mission system
  * Handles missions display, redeem codes, and QR scanner
@@ -28,6 +31,9 @@ export class MailboxManager extends BaseManager {
     private qrScannerContainer: HTMLDivElement | null = null;
     private redeemInput: HTMLInputElement | null = null;
     private socialLinkInput: HTMLInputElement | null = null;
+    private imageFileInput: HTMLInputElement | null = null;
+    private uploadedImageUrl: string | null = null;
+    private currentSubmissionType: SubmissionType = 'link';
     private shouldCloseMailbox: boolean = false;
     private tileSize: number;
 
@@ -728,7 +734,7 @@ export class MailboxManager extends BaseManager {
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
         const modalWidth = 280;
-        const modalHeight = mission.type === 'social' ? 240 : 200;
+        const modalHeight = mission.type === 'social' ? 340 : 200;
 
         // Overlay
         const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.7);
@@ -815,8 +821,8 @@ export class MailboxManager extends BaseManager {
             this.scene.cameras.main.ignore(typeText);
             this.missionDetailElements.push(typeText);
 
-            // Description
-            const description = this.scene.add.text(modalX, modalY - 25, mission.description, {
+            // Description - position closer to type badge
+            const description = this.scene.add.text(modalX, modalY - modalHeight / 2 + 95, mission.description, {
                 fontSize: '9px',
                 fontFamily: 'PixelFont',
                 color: '#FFF8E1',
@@ -824,7 +830,7 @@ export class MailboxManager extends BaseManager {
                 wordWrap: { width: modalWidth - 40 },
                 align: 'center'
             });
-            description.setOrigin(0.5);
+            description.setOrigin(0.5, 0);
             description.setDepth(5402);
             description.setStroke('#5D4037', 1);
             this.scene.cameras.main.ignore(description);
@@ -885,84 +891,9 @@ export class MailboxManager extends BaseManager {
             this.scene.cameras.main.ignore(rewardLabel);
             this.missionDetailElements.push(rewardLabel);
 
-            // For social missions, add input for link submission
+            // For social missions, add submission options (link or image)
             if (mission.type === 'social' && mission.status === 'active') {
-                const inputLabel = this.scene.add.text(modalX, barY + 48, 'Submit your social link:', {
-                    fontSize: '9px',
-                    fontFamily: 'PixelFont',
-                    color: '#FFFFFF',
-                    resolution: 2
-                });
-                inputLabel.setOrigin(0.5);
-                inputLabel.setDepth(5402);
-                inputLabel.setStroke('#5D4037', 1);
-                this.scene.cameras.main.ignore(inputLabel);
-                this.missionDetailElements.push(inputLabel);
-
-                // Create HTML input for social link - responsive positioning
-                this.socialLinkInput = document.createElement('input');
-                this.socialLinkInput.type = 'text';
-                this.socialLinkInput.placeholder = 'Paste your link here...';
-
-                // Get game canvas position for accurate placement
-                const socialCanvas = this.scene.game.canvas;
-                const socialCanvasRect = socialCanvas.getBoundingClientRect();
-                const socialInputWidth = Math.min(200, socialCanvasRect.width * 0.55); // Max 200px or 55% of canvas
-                const socialInputLeft = socialCanvasRect.left + socialCanvasRect.width / 2;
-                const socialInputTop = socialCanvasRect.top + socialCanvasRect.height / 2 + 35;
-
-                this.socialLinkInput.style.cssText = `
-                    position: fixed;
-                    left: ${socialInputLeft}px;
-                    top: ${socialInputTop}px;
-                    transform: translateX(-50%);
-                    width: ${socialInputWidth}px;
-                    max-width: calc(100vw - 80px);
-                    padding: 6px 10px;
-                    font-size: 10px;
-                    font-family: 'PixelFont', monospace;
-                    border: 2px solid #5D4037;
-                    border-radius: 6px;
-                    background-color: #FFF8E1;
-                    color: #5D4037;
-                    outline: none;
-                    text-align: center;
-                    z-index: 10001;
-                    box-sizing: border-box;
-                `;
-                document.body.appendChild(this.socialLinkInput);
-                this.socialLinkInput.focus();
-
-                // Submit button
-                const submitBtnBg = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 30, 'square-buttons', 6);
-                submitBtnBg.setDisplaySize(100, 28);
-                submitBtnBg.setDepth(5402);
-                submitBtnBg.setInteractive({ useHandCursor: true });
-                this.scene.cameras.main.ignore(submitBtnBg);
-                this.missionDetailElements.push(submitBtnBg);
-
-                const submitText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, 'Submit', {
-                    fontSize: '11px',
-                    fontFamily: 'PixelFont',
-                    color: '#FFFFFF',
-                    resolution: 2
-                });
-                submitText.setOrigin(0.5);
-                submitText.setDepth(5403);
-                submitText.setStroke('#5D4037', 2);
-                this.scene.cameras.main.ignore(submitText);
-                this.missionDetailElements.push(submitText);
-
-                submitBtnBg.on('pointerdown', () => {
-                    const link = this.socialLinkInput?.value.trim();
-                    if (link) {
-                        this.submitSocialLink(mission.id, link);
-                    } else {
-                        this.callbacks.showToastMessage('Please enter a valid link', 0xef4444);
-                    }
-                });
-                submitBtnBg.on('pointerover', () => submitBtnBg.setTint(0xcccccc));
-                submitBtnBg.on('pointerout', () => submitBtnBg.clearTint());
+                this.createSubmissionForm(modalX, modalY, modalWidth, modalHeight, barY, mission.id);
             } else if (mission.status === 'completed') {
                 // Claim button for completed missions
                 const claimBtnBg = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 30, 'square-buttons', 6);
@@ -1013,6 +944,14 @@ export class MailboxManager extends BaseManager {
         }
         this.socialLinkInput = null;
 
+        // Cleanup image file input
+        if (this.imageFileInput && this.imageFileInput.parentNode) {
+            this.imageFileInput.parentNode.removeChild(this.imageFileInput);
+        }
+        this.imageFileInput = null;
+        this.uploadedImageUrl = null;
+        this.currentSubmissionType = 'link';
+
         // Destroy all mission detail elements
         this.missionDetailElements.forEach(el => {
             if (el && el.destroy) el.destroy();
@@ -1020,16 +959,328 @@ export class MailboxManager extends BaseManager {
         this.missionDetailElements = [];
     }
 
-    private async submitSocialLink(missionId: string, link: string): Promise<void> {
-        this.callbacks.showToastMessage('Submitting...', 0x4a90e2);
+    /**
+     * Create submission form with tabs for Link or Image upload
+     */
+    private createSubmissionForm(
+        modalX: number, 
+        modalY: number, 
+        modalWidth: number, 
+        modalHeight: number, 
+        barY: number, 
+        missionId: string
+    ): void {
+        // Reset state
+        this.currentSubmissionType = 'link';
+        this.uploadedImageUrl = null;
+
+        // Tab buttons for Link / Image - position below rewards
+        const tabY = barY + 55;
+        const tabWidth = 70;
+        const tabHeight = 22;
+        const tabSpacing = 10;
+
+        // Link tab
+        const linkTabBg = this.scene.add.rectangle(
+            modalX - tabWidth / 2 - tabSpacing / 2,
+            tabY,
+            tabWidth,
+            tabHeight,
+            0x4ade80
+        );
+        linkTabBg.setDepth(5402);
+        linkTabBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(linkTabBg);
+        this.missionDetailElements.push(linkTabBg);
+
+        const linkTabText = this.scene.add.text(modalX - tabWidth / 2 - tabSpacing / 2, tabY, '🔗 Link', {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        linkTabText.setOrigin(0.5);
+        linkTabText.setDepth(5403);
+        this.scene.cameras.main.ignore(linkTabText);
+        this.missionDetailElements.push(linkTabText);
+
+        // Image tab
+        const imageTabBg = this.scene.add.rectangle(
+            modalX + tabWidth / 2 + tabSpacing / 2,
+            tabY,
+            tabWidth,
+            tabHeight,
+            0x5D4037
+        );
+        imageTabBg.setDepth(5402);
+        imageTabBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(imageTabBg);
+        this.missionDetailElements.push(imageTabBg);
+
+        const imageTabText = this.scene.add.text(modalX + tabWidth / 2 + tabSpacing / 2, tabY, '📷 Image', {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        imageTabText.setOrigin(0.5);
+        imageTabText.setDepth(5403);
+        this.scene.cameras.main.ignore(imageTabText);
+        this.missionDetailElements.push(imageTabText);
+
+        // Content area - below tabs
+        const contentY = tabY + 30;
+
+        // Create link input (default visible)
+        const linkInputContainer = this.createLinkInput(modalX, contentY);
+
+        // Create image upload area (hidden by default)
+        const imageUploadContainer = this.createImageUploadArea(modalX, contentY);
+        imageUploadContainer.setVisible(false);
+
+        // Tab click handlers
+        linkTabBg.on('pointerdown', () => {
+            this.currentSubmissionType = 'link';
+            linkTabBg.setFillStyle(0x4ade80);
+            imageTabBg.setFillStyle(0x5D4037);
+            linkInputContainer.setVisible(true);
+            imageUploadContainer.setVisible(false);
+            // Show/hide HTML input
+            if (this.socialLinkInput) this.socialLinkInput.style.display = 'block';
+        });
+
+        imageTabBg.on('pointerdown', () => {
+            this.currentSubmissionType = 'image';
+            linkTabBg.setFillStyle(0x5D4037);
+            imageTabBg.setFillStyle(0x4ade80);
+            linkInputContainer.setVisible(false);
+            imageUploadContainer.setVisible(true);
+            // Hide HTML input when on image tab
+            if (this.socialLinkInput) this.socialLinkInput.style.display = 'none';
+        });
+
+        // Submit button - at bottom of modal
+        const submitBtnBg = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 28, 'square-buttons', 6);
+        submitBtnBg.setDisplaySize(100, 28);
+        submitBtnBg.setDepth(5402);
+        submitBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(submitBtnBg);
+        this.missionDetailElements.push(submitBtnBg);
+
+        const submitText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 28, 'Submit', {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        submitText.setOrigin(0.5);
+        submitText.setDepth(5403);
+        submitText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(submitText);
+        this.missionDetailElements.push(submitText);
+
+        submitBtnBg.on('pointerdown', () => {
+            if (this.currentSubmissionType === 'link') {
+                const link = this.socialLinkInput?.value.trim();
+                if (link) {
+                    this.submitMissionProof(missionId, 'link', link);
+                } else {
+                    this.callbacks.showToastMessage('Please enter a valid link', 0xef4444);
+                }
+            } else {
+                if (this.uploadedImageUrl) {
+                    this.submitMissionProof(missionId, 'image', this.uploadedImageUrl);
+                } else {
+                    this.callbacks.showToastMessage('Please upload an image first', 0xef4444);
+                }
+            }
+        });
+        submitBtnBg.on('pointerover', () => submitBtnBg.setTint(0xcccccc));
+        submitBtnBg.on('pointerout', () => submitBtnBg.clearTint());
+    }
+
+    /**
+     * Create link input field
+     */
+    private createLinkInput(modalX: number, contentY: number): Phaser.GameObjects.Container {
+        const container = this.scene.add.container(0, 0);
+        container.setDepth(5402);
+        this.scene.cameras.main.ignore(container);
+        this.missionDetailElements.push(container);
+
+        // Label
+        const label = this.scene.add.text(modalX, contentY, 'Paste your link:', {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#BCAAA4',
+            resolution: 2
+        });
+        label.setOrigin(0.5);
+        this.scene.cameras.main.ignore(label);
+        container.add(label);
+
+        // Input background placeholder (visual guide)
+        const inputBg = this.scene.add.rectangle(modalX, contentY + 25, 180, 28, 0xFFF8E1);
+        inputBg.setStrokeStyle(2, 0x5D4037);
+        this.scene.cameras.main.ignore(inputBg);
+        container.add(inputBg);
+
+        // Create HTML input - position relative to contentY
+        this.socialLinkInput = document.createElement('input');
+        this.socialLinkInput.type = 'text';
+        this.socialLinkInput.placeholder = 'https://...';
+
+        const canvas = this.scene.game.canvas;
+        const canvasRect = canvas.getBoundingClientRect();
+        const scaleX = canvasRect.width / this.scene.scale.width;
+        const scaleY = canvasRect.height / this.scene.scale.height;
+        
+        const inputWidth = 176 * scaleX;
+        const inputLeft = canvasRect.left + modalX * scaleX;
+        const inputTop = canvasRect.top + (contentY + 25) * scaleY;
+
+        this.socialLinkInput.style.cssText = `
+            position: fixed;
+            left: ${inputLeft}px;
+            top: ${inputTop}px;
+            transform: translate(-50%, -50%);
+            width: ${inputWidth}px;
+            padding: 6px 10px;
+            font-size: 10px;
+            font-family: 'PixelFont', monospace;
+            border: none;
+            background-color: transparent;
+            color: #5D4037;
+            outline: none;
+            text-align: center;
+            z-index: 10001;
+            box-sizing: border-box;
+        `;
+        document.body.appendChild(this.socialLinkInput);
+        this.socialLinkInput.focus();
+
+        return container;
+    }
+
+    /**
+     * Create image upload area
+     */
+    private createImageUploadArea(modalX: number, contentY: number): Phaser.GameObjects.Container {
+        const container = this.scene.add.container(0, 0);
+        container.setDepth(5402);
+        this.scene.cameras.main.ignore(container);
+        this.missionDetailElements.push(container);
+
+        // Upload button/area
+        const uploadBg = this.scene.add.rectangle(modalX, contentY + 5, 160, 40, 0x3E2723, 0.8);
+        uploadBg.setStrokeStyle(2, 0x5D4037, 1);
+        uploadBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(uploadBg);
+        container.add(uploadBg);
+
+        const uploadText = this.scene.add.text(modalX, contentY + 5, '📤 Click to upload image', {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        uploadText.setOrigin(0.5);
+        this.scene.cameras.main.ignore(uploadText);
+        container.add(uploadText);
+
+        // Status text
+        const statusText = this.scene.add.text(modalX, contentY + 35, '', {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#4ade80',
+            resolution: 2
+        });
+        statusText.setOrigin(0.5);
+        this.scene.cameras.main.ignore(statusText);
+        container.add(statusText);
+
+        // Hidden file input
+        this.imageFileInput = document.createElement('input');
+        this.imageFileInput.type = 'file';
+        this.imageFileInput.accept = 'image/*';
+        this.imageFileInput.style.display = 'none';
+        document.body.appendChild(this.imageFileInput);
+
+        // Handle file selection
+        this.imageFileInput.addEventListener('change', async (e) => {
+            const target = e.target as HTMLInputElement;
+            const file = target.files?.[0];
+            if (!file) return;
+
+            // Validate file
+            if (!file.type.startsWith('image/')) {
+                this.callbacks.showToastMessage('Please select an image file', 0xef4444);
+                return;
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                this.callbacks.showToastMessage('Image must be less than 5MB', 0xef4444);
+                return;
+            }
+
+            // Show uploading status
+            uploadText.setText('⏳ Uploading...');
+            statusText.setText('Please wait...');
+            uploadBg.setFillStyle(0x5D4037, 0.5); // Dim while uploading
+
+            try {
+                const { IPFSService } = await import('../../services/ipfsService');
+                const ipfsUrl = await IPFSService.uploadImage(file);
+                
+                this.uploadedImageUrl = ipfsUrl;
+                uploadText.setText('✅ Image uploaded!');
+                uploadBg.setFillStyle(0x166534, 0.8); // Green background on success
+                statusText.setText(file.name.length > 25 ? file.name.slice(0, 22) + '...' : file.name);
+                statusText.setColor('#4ade80');
+                this.callbacks.showToastMessage('Image uploaded successfully!', 0x4ade80);
+            } catch (error: any) {
+                console.error('Upload error:', error);
+                uploadText.setText('❌ Upload failed');
+                uploadBg.setFillStyle(0x7f1d1d, 0.8); // Red background on error
+                statusText.setText('Click to try again');
+                statusText.setColor('#ef4444');
+                
+                // Show specific error message
+                const errorMsg = error?.message || 'Failed to upload image';
+                this.callbacks.showToastMessage(errorMsg, 0xef4444);
+                
+                // Reset after 3 seconds
+                this.scene.time.delayedCall(3000, () => {
+                    uploadText.setText('📤 Click to upload image');
+                    uploadBg.setFillStyle(0x3E2723, 0.8);
+                    statusText.setText('');
+                });
+            }
+        });
+
+        // Click handler
+        uploadBg.on('pointerdown', () => {
+            this.imageFileInput?.click();
+        });
+        uploadBg.on('pointerover', () => uploadBg.setStrokeStyle(2, 0x4ade80, 1));
+        uploadBg.on('pointerout', () => uploadBg.setStrokeStyle(2, 0x5D4037, 1));
+
+        return container;
+    }
+
+    /**
+     * Submit mission proof (link or image URL)
+     */
+    private async submitMissionProof(missionId: string, type: SubmissionType, proof: string): Promise<void> {
+        const isImage = type === 'image';
+        this.callbacks.showToastMessage(isImage ? 'Submitting image proof...' : 'Submitting link...', 0x4a90e2);
 
         try {
-            // TODO: Call API to submit social link
-            // For now, just update progress
-            const result = await MissionService.updateMissionProgress(missionId, 1);
+            // Call API to submit proof
+            const result = await MissionService.submitProof(missionId, proof);
 
             if (result) {
-                this.callbacks.showToastMessage('Link submitted successfully!', 0x22c55e);
+                this.callbacks.showToastMessage('✅ Proof submitted! Mission completed.', 0x22c55e);
                 this.callbacks.playSuccessSound();
                 this.closeMissionDetails();
                 this.refreshCache();
@@ -1037,11 +1288,20 @@ export class MailboxManager extends BaseManager {
                 this.close();
                 this.open();
             } else {
-                this.callbacks.showToastMessage('Failed to submit link', 0xef4444);
+                // API returned null - submission failed
+                this.callbacks.showToastMessage('❌ Failed to submit. Please try again.', 0xef4444);
             }
-        } catch {
-            this.callbacks.showToastMessage('Error submitting link', 0xef4444);
+        } catch (error: any) {
+            console.error('Error submitting proof:', error);
+            // Show specific error message if available
+            const errorMsg = error?.message || 'Network error. Please check your connection.';
+            this.callbacks.showToastMessage(`❌ ${errorMsg}`, 0xef4444);
         }
+    }
+
+    private async submitSocialLink(missionId: string, link: string): Promise<void> {
+        // Redirect to submitMissionProof for consistency
+        await this.submitMissionProof(missionId, 'link', link);
     }
 
     private async claimMissionReward(missionId: string): Promise<void> {

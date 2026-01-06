@@ -79,6 +79,8 @@ export class ProfileScene extends Scene {
         const cachedData = GameDataService.getCachedData();
         const user = cachedData?.user || UserService.getStoredUser();
 
+        console.log('[ProfileScene] User data:', JSON.stringify(user, null, 2));
+
         if (!user) {
             this.scene.start('Login');
             return;
@@ -87,7 +89,7 @@ export class ProfileScene extends Scene {
         const panelTop = centerY - panelHeight / 2;
 
         // Title
-        const title = this.add.text(centerX, panelTop + 60, 'Profile', {
+        const title = this.add.text(centerX, panelTop + 30, '👤 Profile', {
             fontSize: '18px',
             fontFamily: 'PixelFont',
             color: '#FFD700',
@@ -97,18 +99,22 @@ export class ProfileScene extends Scene {
         title.setStroke('#5D4037', 3);
 
         // Character preview + name + wallets
-        this.createCharacterSection(centerX, panelTop + 120, panelWidth, user);
+        this.createCharacterSection(centerX, panelTop + 80, panelWidth, user);
 
-        // Badges section (list format with unlock buttons) - only for NEW users
-        if (this.isNewUser) {
-            this.createMyBadgesSection(centerX, panelTop + 260, panelWidth);
-        }
+        // My Badges section (scrollable grid)
+        this.createMyBadgesSection(centerX + 10, panelTop + 220, panelWidth - 30);
 
-        // Navigation buttons
-        this.createNavigationButtons(centerX + 15, panelTop + 390);
+        // Unlock Badges section (scrollable list)
+        this.createUnlockBadgesSection(centerX + 10, panelTop + 295, panelWidth - 30);
+
+        // Navigation buttons - at bottom
+        this.createNavigationButtons(centerX, panelTop + 410);
 
         // Logout button (small, top right)
-        this.createLogoutButton(centerX + panelWidth / 2 - 30, panelTop + 60);
+        this.createLogoutButton(centerX + panelWidth / 2 - 30, panelTop + 25);
+        
+        // Setup global scroll handlers
+        this.setupScrollHandlers();
     }
 
     private createCharacterSection(centerX: number, y: number, panelWidth: number, user: any) {
@@ -121,6 +127,8 @@ export class ProfileScene extends Scene {
         const characterType = user?.characterType || 1;
         const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
         const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
+
+        console.log(`[ProfileScene] Character: ${characterKey} (type: ${characterType}, index: ${characterIndex})`);
 
         // Character sprite
         this.characterSprite = this.add.sprite(centerX, y, characterKey, 0);
@@ -157,24 +165,20 @@ export class ProfileScene extends Scene {
         const leftX = centerX - panelWidth / 2 + 55;
         const lineHeight = 18;
 
-        // Mock addresses for demo - will be replaced with real data from API
-        const mockAptosAddress = '0x' + user.address.slice(2, 10) + '...' + 'aptos' + user.address.slice(-8);
-        const mockSuiAddress = '0x' + user.address.slice(2, 10) + '...' + 'sui' + user.address.slice(-10);
-        const mockCardanoAddress = 'addr1' + user.address.slice(2, 12) + '...' + user.address.slice(-12);
-
-        // Wallet chains config (no icons, cleaner look)
+        // Use real wallet addresses from API response
+        // API returns: walletAddress (EVM), walletAddressSui, walletAddressAptos, walletAddressCardano
         const wallets = [
-            { chain: 'EVM', address: user.address, color: '#5D4037' },
-            { chain: 'Aptos', address: mockAptosAddress, color: '#5D4037' },
-            { chain: 'Sui', address: mockSuiAddress, color: '#5D4037' },
-            { chain: 'Cardano', address: mockCardanoAddress, color: '#5D4037' }
+            { chain: 'EVM', icon: '⟠', address: user.walletAddress || user.address, color: '#627EEA' },
+            { chain: 'Aptos', icon: '🔷', address: user.walletAddressAptos, color: '#2DD8A7' },
+            { chain: 'Sui', icon: '💧', address: user.walletAddressSui, color: '#6FBCF0' },
+            { chain: 'Cardano', icon: '🔵', address: user.walletAddressCardano, color: '#0033AD' }
         ];
 
         wallets.forEach((wallet, index) => {
             const y = startY + index * lineHeight;
-
-            // Chain name (left) - no icon
-            const chainLabel = this.add.text(leftX, y, `${wallet.chain}:`, {
+            
+            // Chain icon and name (left)
+            const chainLabel = this.add.text(leftX, y, `${wallet.icon} ${wallet.chain}:`, {
                 fontSize: '10px',
                 fontFamily: 'PixelFont',
                 color: wallet.color,
@@ -182,17 +186,17 @@ export class ProfileScene extends Scene {
             });
 
             if (wallet.address) {
-                // Shortened address (center) - darker color for better visibility
+                // Shortened address (center)
                 const shortAddr = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
-                const addrText = this.add.text(leftX + 70, y, shortAddr, {
+                const addrText = this.add.text(leftX + 90, y, shortAddr, {
                     fontSize: '10px',
                     fontFamily: 'PixelFont',
-                    color: '#3E2723',
+                    color: '#BCAAA4',
                     resolution: 2
                 });
 
                 // Copy button (right)
-                const copyBtn = this.add.text(leftX + 190, y, 'Copy', {
+                const copyBtn = this.add.text(leftX + 210, y, 'Copy', {
                     fontSize: '8px',
                     fontFamily: 'PixelFont',
                     color: '#4ade80',
@@ -217,8 +221,8 @@ export class ProfileScene extends Scene {
                     if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
                 });
             } else {
-                // Not connected
-                const notConnected = this.add.text(leftX + 70, y, 'Not connected', {
+                // Not linked yet
+                this.add.text(leftX + 90, y, 'Not linked', {
                     fontSize: '10px',
                     fontFamily: 'PixelFont',
                     color: '#6b7280',
@@ -761,15 +765,20 @@ export class ProfileScene extends Scene {
             return;
         }
 
+        // Show loading state
+        this.showToast('⏳ Verifying code...', 0x4a90e2);
+
         const result = await BadgeService.claimBadgeWithCode(badge.id, code);
 
         if (result.success) {
-            this.showToast(`🎉 ${badge.name} unlocked!`, 0x4ade80);
+            // Use badge name from API response if available
+            const badgeName = result.badgeName || badge.name;
+            this.showToast(`🎉 "${badgeName}" unlocked!`, 0x4ade80);
             this.closeClaimForm();
             // Refresh badges display
             this.refreshBadgesDisplay();
         } else {
-            this.showToast(result.message, 0xef4444);
+            this.showToast(`❌ ${result.message}`, 0xef4444);
         }
     }
 

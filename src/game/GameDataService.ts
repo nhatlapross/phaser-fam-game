@@ -152,16 +152,26 @@ export class GameDataService {
         const storedUser = UserService.getStoredUser();
         const profileUser = userResult.status === 'fulfilled' ? userResult.value : null;
         
-        // Merge user data: profile data + wallet addresses from login
+        // Merge user data: profile data + wallet addresses from login + characterType
         let mergedUser: UserData | null = null;
         if (profileUser) {
+            // For characterType: prefer storedUser (from register/login) over profile API
+            // because profile API may return default value (1) even if user selected different character
+            // Only use profileUser.characterType if storedUser doesn't have one
+            const characterType = storedUser?.characterType || profileUser.characterType || 1;
+            
             mergedUser = {
                 ...profileUser,
                 // Preserve wallet addresses from stored user (login response)
                 walletAddressSui: profileUser.walletAddressSui || storedUser?.walletAddressSui,
                 walletAddressAptos: profileUser.walletAddressAptos || storedUser?.walletAddressAptos,
                 walletAddressCardano: profileUser.walletAddressCardano || storedUser?.walletAddressCardano,
+                // Use the determined characterType
+                characterType,
             };
+            
+            console.log('[GameDataService] Merged user characterType:', characterType, 
+                '(stored:', storedUser?.characterType, ', profile:', profileUser.characterType, ')');
         } else if (storedUser) {
             mergedUser = storedUser;
         }
