@@ -765,15 +765,20 @@ export class ProfileScene extends Scene {
             return;
         }
 
+        // Show loading state
+        this.showToast('⏳ Verifying code...', 0x4a90e2);
+
         const result = await BadgeService.claimBadgeWithCode(badge.id, code);
 
         if (result.success) {
-            this.showToast(`🎉 ${badge.name} unlocked!`, 0x4ade80);
+            // Use badge name from API response if available
+            const badgeName = result.badgeName || badge.name;
+            this.showToast(`🎉 "${badgeName}" unlocked!`, 0x4ade80);
             this.closeClaimForm();
             // Refresh badges display
             this.refreshBadgesDisplay();
         } else {
-            this.showToast(result.message, 0xef4444);
+            this.showToast(`❌ ${result.message}`, 0xef4444);
         }
     }
 

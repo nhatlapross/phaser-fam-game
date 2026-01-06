@@ -156,33 +156,39 @@ export class BadgeService {
 
     /**
      * Claim a badge using a code
+     * Calls POST /soulbound-tokens/claim
      */
-    static async claimBadgeWithCode(badgeId: string, code: string): Promise<{ success: boolean; message: string }> {
+    static async claimBadgeWithCode(badgeId: string, code: string): Promise<{ success: boolean; message: string; badgeName?: string }> {
         const token = UserService.getAccessToken();
         if (!token) {
             return { success: false, message: 'Not authenticated' };
         }
 
         try {
-            const response = await fetch(`${BadgeService.API_BASE_URL}/user/badges/claim`, {
+            const response = await fetch(`${BadgeService.API_BASE_URL}/soulbound-tokens/claim`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ badgeId, code })
+                body: JSON.stringify({ code })
             });
 
             const data = await response.json();
 
-            if (response.ok) {
+            if (response.ok && data.success) {
+                // Extract badge info from response
+                const tokenData = data.token;
+                const claimedBadgeId = tokenData?.metadata?.badgeType?.toLowerCase() || badgeId;
+                const badgeName = tokenData?.name || 'Badge';
+
                 // Update local storage
                 const badges = BadgeService.getStoredBadges();
-                const existingIndex = badges.findIndex(b => b.badgeId === badgeId);
+                const existingIndex = badges.findIndex(b => b.badgeId === claimedBadgeId);
                 const newBadge: UserBadge = {
-                    badgeId,
+                    badgeId: claimedBadgeId,
                     claimed: true,
-                    claimedAt: new Date().toISOString(),
+                    claimedAt: tokenData?.issuedAt || new Date().toISOString(),
                     code
                 };
 
@@ -193,9 +199,13 @@ export class BadgeService {
                 }
                 BadgeService.saveBadges(badges);
 
-                return { success: true, message: data.message || 'Badge claimed successfully!' };
+                return { 
+                    success: true, 
+                    message: data.message || `Badge "${badgeName}" claimed successfully!`,
+                    badgeName 
+                };
             } else {
-                return { success: false, message: data.message || 'Failed to claim badge' };
+                return { success: false, message: data.message || 'Invalid code or badge already claimed' };
             }
         } catch (error) {
             console.error('Error claiming badge:', error);
