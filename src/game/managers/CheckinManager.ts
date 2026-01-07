@@ -741,6 +741,7 @@ export class CheckinManager extends BaseManager {
                     currentStreak: number;
                     rewards: { gold: number; ruby: number; items: string[] };
                     message: string;
+                    nextCheckinAt?: string;
                 };
 
                 // Update with actual streak from API
@@ -770,6 +771,9 @@ export class CheckinManager extends BaseManager {
                 if (rewardParts.length > 0) {
                     this.showCheckinReward(rewardParts.join(', ') + '!', 0x4ade80);
                 }
+
+                // Update the "Check In Day X" button to show "Come back" message
+                this.updateCheckinButtonAfterSuccess(successResult);
 
                 // Also refresh from API to sync with server (runs in background)
                 GameDataService.refreshAndUpdateUI();
@@ -818,6 +822,67 @@ export class CheckinManager extends BaseManager {
         // Clear cached data so fresh data is fetched when modal reopens
         this.cachedStreakStatus = null;
         this.cachedStreakHistory = null;
+    }
+
+    /**
+     * Update the "Check In Day X" button after successful check-in from day box click
+     */
+    private updateCheckinButtonAfterSuccess(result: { nextCheckinAt?: string; streakDay: number }): void {
+        // Find the check-in button and its text in elements
+        // The button text contains "Check In Day" 
+        let checkinBtn: Phaser.GameObjects.Sprite | null = null;
+        let checkinBtnText: Phaser.GameObjects.Text | null = null;
+
+        this.elements.forEach(element => {
+            if (element instanceof Phaser.GameObjects.Text) {
+                const text = element.text;
+                if (text.includes('Check In Day')) {
+                    checkinBtnText = element;
+                }
+            }
+        });
+
+        // Find the button sprite near the text
+        if (checkinBtnText) {
+            const textX = checkinBtnText.x;
+            const textY = checkinBtnText.y;
+            
+            this.elements.forEach(element => {
+                if (element instanceof Phaser.GameObjects.Sprite && 
+                    Math.abs(element.x - textX) < 10 && 
+                    Math.abs(element.y - textY) < 10 &&
+                    element.texture.key === 'square-buttons') {
+                    checkinBtn = element;
+                }
+            });
+        }
+
+        if (checkinBtn && checkinBtnText) {
+            // Disable the button
+            checkinBtn.disableInteractive();
+            checkinBtn.setTint(0x888888);
+
+            // Calculate countdown for next check-in
+            let countdownText = 'Come back tomorrow!';
+            if (result.nextCheckinAt) {
+                const nextCheckinDate = new Date(result.nextCheckinAt);
+                const now = new Date();
+                const diffMs = nextCheckinDate.getTime() - now.getTime();
+                
+                if (diffMs > 0) {
+                    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                    if (hours > 0) {
+                        countdownText = `Come back in ${hours}h ${mins}m`;
+                    } else {
+                        countdownText = `Come back in ${mins}m`;
+                    }
+                }
+            }
+
+            checkinBtnText.setText(countdownText);
+            checkinBtnText.setColor('#FFA726');
+        }
     }
 
     private showCheckinReward(text: string, color: number): void {
