@@ -367,6 +367,7 @@ export class MailboxManager extends BaseManager {
             missions.forEach((mission, index) => {
                 const baseY = scrollAreaTop + 20 + index * cardSpacing;
                 const isDone = mission.status === 'completed' || mission.status === 'claimed';
+                const isPending = mission.status === 'pending';
                 const progressPercent = (mission.progress / mission.target) * 100;
 
                 const cardWidth = 230;
@@ -391,9 +392,10 @@ export class MailboxManager extends BaseManager {
                 contentElements.push(cardBg);
                 (cardBg as any).originalY = baseY;
 
-                // Status icon
+                // Status icon - different colors for different states
                 const iconX = cardX - cardWidth / 2 + 15;
-                const iconBg = this.scene.add.circle(iconX, baseY, 8, isDone ? 0x4ade80 : 0xfbbf24);
+                const iconColor = isDone ? 0x4ade80 : (isPending ? 0xfbbf24 : 0x3b82f6);
+                const iconBg = this.scene.add.circle(iconX, baseY, 8, iconColor);
                 iconBg.setDepth(5304);
                 iconBg.setMask(scrollMask);
                 this.scene.cameras.main.ignore(iconBg);
@@ -401,7 +403,8 @@ export class MailboxManager extends BaseManager {
                 contentElements.push(iconBg);
                 (iconBg as any).originalY = baseY;
 
-                const statusIcon = this.scene.add.text(iconX, baseY, isDone ? '✓' : '!', {
+                const statusIconText = isDone ? '✓' : (isPending ? '⏳' : '!');
+                const statusIcon = this.scene.add.text(iconX, baseY, statusIconText, {
                     fontSize: '10px',
                     fontFamily: 'Arial',
                     color: '#FFFFFF',
@@ -415,13 +418,14 @@ export class MailboxManager extends BaseManager {
                 contentElements.push(statusIcon);
                 (statusIcon as any).originalY = baseY;
 
-                // Mission name
+                // Mission name - different colors for different states
                 const nameX = cardX - cardWidth / 2 + 30;
                 const nameY = baseY - 8;
+                const nameColor = isDone ? '#16a34a' : (isPending ? '#d97706' : '#5D4037');
                 const missionName = this.scene.add.text(nameX, nameY, mission.name, {
                     fontSize: '9px',
                     fontFamily: 'PixelFont',
-                    color: isDone ? '#16a34a' : '#5D4037',
+                    color: nameColor,
                     resolution: 2
                 });
                 missionName.setOrigin(0, 0.5);
@@ -904,22 +908,22 @@ export class MailboxManager extends BaseManager {
                 }
                 // For non-social active missions, no action button needed (progress tracked automatically)
             } else if (mission.status === 'completed') {
-                // Completed mission - show status and claim button
+                // Completed mission - admin approved, show claim button
                 const statusY = barY + 50;
                 
-                // Show "Submitted" status for social missions
+                // Show "Approved" status for social missions
                 if (mission.type === 'social') {
-                    const submittedLabel = this.scene.add.text(modalX, statusY, '✅ Proof Submitted', {
+                    const approvedLabel = this.scene.add.text(modalX, statusY, '✅ Approved', {
                         fontSize: '10px',
                         fontFamily: 'PixelFont',
                         color: '#4ade80',
                         resolution: 2
                     });
-                    submittedLabel.setOrigin(0.5);
-                    submittedLabel.setDepth(5402);
-                    submittedLabel.setStroke('#166534', 2);
-                    this.scene.cameras.main.ignore(submittedLabel);
-                    this.missionDetailElements.push(submittedLabel);
+                    approvedLabel.setOrigin(0.5);
+                    approvedLabel.setDepth(5402);
+                    approvedLabel.setStroke('#166534', 2);
+                    this.scene.cameras.main.ignore(approvedLabel);
+                    this.missionDetailElements.push(approvedLabel);
                 }
 
                 // Claim button
@@ -946,6 +950,35 @@ export class MailboxManager extends BaseManager {
                 claimBtnBg.on('pointerdown', () => this.claimMissionReward(mission.id));
                 claimBtnBg.on('pointerover', () => claimBtnBg.setTint(0x86efac));
                 claimBtnBg.on('pointerout', () => claimBtnBg.setTint(0x4ade80));
+            } else if (mission.status === 'pending') {
+                // Pending mission - proof submitted, waiting for review
+                const statusY = barY + 50;
+                
+                const pendingLabel = this.scene.add.text(modalX, statusY, '⏳ Pending Review', {
+                    fontSize: '10px',
+                    fontFamily: 'PixelFont',
+                    color: '#fbbf24',
+                    resolution: 2
+                });
+                pendingLabel.setOrigin(0.5);
+                pendingLabel.setDepth(5402);
+                pendingLabel.setStroke('#92400e', 2);
+                this.scene.cameras.main.ignore(pendingLabel);
+                this.missionDetailElements.push(pendingLabel);
+
+                // Show submitted proof if available
+                if (mission.proof) {
+                    const proofLabel = this.scene.add.text(modalX, statusY + 20, 'Proof submitted ✓', {
+                        fontSize: '8px',
+                        fontFamily: 'PixelFont',
+                        color: '#a3a3a3',
+                        resolution: 2
+                    });
+                    proofLabel.setOrigin(0.5);
+                    proofLabel.setDepth(5402);
+                    this.scene.cameras.main.ignore(proofLabel);
+                    this.missionDetailElements.push(proofLabel);
+                }
             } else if (mission.status === 'claimed') {
                 // Already claimed - show completed status
                 const claimedLabel = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, '✅ Reward Claimed', {
