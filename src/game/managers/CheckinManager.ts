@@ -829,32 +829,34 @@ export class CheckinManager extends BaseManager {
      */
     private updateCheckinButtonAfterSuccess(result: { nextCheckinAt?: string; streakDay: number }): void {
         // Find the check-in button and its text in elements
-        // The button text contains "Check In Day" 
+        // The button text contains "Check In Day"
         let checkinBtn: Phaser.GameObjects.Sprite | null = null;
         let checkinBtnText: Phaser.GameObjects.Text | null = null;
 
-        this.elements.forEach(element => {
+        for (const element of this.elements) {
             if (element instanceof Phaser.GameObjects.Text) {
                 const text = element.text;
                 if (text.includes('Check In Day')) {
                     checkinBtnText = element;
+                    break;
                 }
             }
-        });
+        }
 
         // Find the button sprite near the text
-        if (checkinBtnText) {
-            const textX = checkinBtnText.x;
-            const textY = checkinBtnText.y;
-            
-            this.elements.forEach(element => {
-                if (element instanceof Phaser.GameObjects.Sprite && 
-                    Math.abs(element.x - textX) < 10 && 
+        if (checkinBtnText !== null) {
+            const textX = (checkinBtnText as Phaser.GameObjects.Text).x;
+            const textY = (checkinBtnText as Phaser.GameObjects.Text).y;
+
+            for (const element of this.elements) {
+                if (element instanceof Phaser.GameObjects.Sprite &&
+                    Math.abs(element.x - textX) < 10 &&
                     Math.abs(element.y - textY) < 10 &&
                     element.texture.key === 'square-buttons') {
                     checkinBtn = element;
+                    break;
                 }
-            });
+            }
         }
 
         if (checkinBtn && checkinBtnText) {

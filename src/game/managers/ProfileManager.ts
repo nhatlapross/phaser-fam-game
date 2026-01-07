@@ -95,17 +95,28 @@ export class ProfileManager extends BaseManager {
         if (user.avatar) {
             this.loadExternalAvatar(user.avatar, avatarBgX, avatarBgY, avatarSize);
         } else {
-            // Use character sprite as default avatar based on characterType
+            // Use character avatar image based on characterType
             const characterType = user.characterType || 1;
             const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
             const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
-            
-            const avatar = this.scene.add.sprite(avatarBgX, avatarBgY, characterKey, 0);
-            avatar.setDisplaySize(avatarSize, avatarSize);
-            avatar.setDepth(5022);
-            this.scene.cameras.main.ignore(avatar);
-            this.profileElements.push(avatar);
-            this.avatarImage = avatar as unknown as Phaser.GameObjects.Image;
+            const avatarKey = `${characterKey}-avatar`;
+
+            // Use character avatar image if available, fallback to sprite
+            if (this.scene.textures.exists(avatarKey)) {
+                const avatar = this.scene.add.image(avatarBgX, avatarBgY, avatarKey);
+                avatar.setDisplaySize(avatarSize, avatarSize);
+                avatar.setDepth(5022);
+                this.scene.cameras.main.ignore(avatar);
+                this.profileElements.push(avatar);
+                this.avatarImage = avatar;
+            } else {
+                const avatar = this.scene.add.sprite(avatarBgX, avatarBgY, characterKey, 0);
+                avatar.setDisplaySize(avatarSize, avatarSize);
+                avatar.setDepth(5022);
+                this.scene.cameras.main.ignore(avatar);
+                this.profileElements.push(avatar);
+                this.avatarImage = avatar as unknown as Phaser.GameObjects.Image;
+            }
         }
 
         // Info section
@@ -590,18 +601,30 @@ export class ProfileManager extends BaseManager {
         if (user.avatar) {
             this.loadModalAvatar(user.avatar, modalX, avatarY, avatarSize);
         } else {
-            // Use character sprite as default avatar based on characterType
+            // Use character avatar image based on characterType
             const characterType = user.characterType || 1;
             const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
             const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
-            
-            const modalAvatar = this.scene.add.sprite(modalX, avatarY, characterKey, 0);
-            modalAvatar.setDisplaySize(avatarSize, avatarSize);
-            modalAvatar.setDepth(5103);
-            modalAvatar.setAlpha(0);
-            this.scene.cameras.main.ignore(modalAvatar);
-            this.profileContentElements.push(modalAvatar);
-            this.scene.tweens.add({ targets: modalAvatar, alpha: 1, duration: 150 });
+            const avatarKey = `${characterKey}-avatar`;
+
+            // Use character avatar image if available, fallback to sprite
+            if (this.scene.textures.exists(avatarKey)) {
+                const modalAvatar = this.scene.add.image(modalX, avatarY, avatarKey);
+                modalAvatar.setDisplaySize(avatarSize, avatarSize);
+                modalAvatar.setDepth(5103);
+                modalAvatar.setAlpha(0);
+                this.scene.cameras.main.ignore(modalAvatar);
+                this.profileContentElements.push(modalAvatar);
+                this.scene.tweens.add({ targets: modalAvatar, alpha: 1, duration: 150 });
+            } else {
+                const modalAvatar = this.scene.add.sprite(modalX, avatarY, characterKey, 0);
+                modalAvatar.setDisplaySize(avatarSize, avatarSize);
+                modalAvatar.setDepth(5103);
+                modalAvatar.setAlpha(0);
+                this.scene.cameras.main.ignore(modalAvatar);
+                this.profileContentElements.push(modalAvatar);
+                this.scene.tweens.add({ targets: modalAvatar, alpha: 1, duration: 150 });
+            }
         }
 
         // Edit avatar button

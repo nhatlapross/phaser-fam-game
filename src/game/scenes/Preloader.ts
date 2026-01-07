@@ -83,6 +83,8 @@ export class Preloader extends Scene
                 frameWidth: char.frameWidth,
                 frameHeight: char.frameHeight
             });
+            // Load character avatar image
+            this.load.image(`${char.key}-avatar`, `characters/${char.key}/avatar.png`);
         });
 
         // Tilesets
