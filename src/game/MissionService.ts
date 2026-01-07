@@ -16,7 +16,7 @@ export interface Mission {
     description: string;
     progress: number;
     target: number;
-    status: 'active' | 'completed' | 'claimed';
+    status: 'active' | 'pending' | 'completed' | 'claimed';
     reward: MissionReward;
     resetPeriod: 'daily' | 'weekly' | 'monthly' | 'once';
     proof?: string | null; // URL of submitted proof (link or IPFS image)

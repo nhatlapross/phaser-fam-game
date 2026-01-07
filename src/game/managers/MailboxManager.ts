@@ -4,6 +4,8 @@ import { PlantType, FertilizerType, GAME_CONSTANTS } from '../types/GameTypes';
 import { MissionService, Mission } from '../MissionService';
 import { RedeemService } from '../RedeemService';
 import { GameDataService } from '../GameDataService';
+import { getMissionSocketService, MissionUpdatedPayload } from '../MissionSocketService';
+import { EventBus } from '../EventBus';
 
 interface MailboxCallbacks {
     getSeedCounts: () => Record<PlantType, number>;
@@ -367,6 +369,7 @@ export class MailboxManager extends BaseManager {
             missions.forEach((mission, index) => {
                 const baseY = scrollAreaTop + 20 + index * cardSpacing;
                 const isDone = mission.status === 'completed' || mission.status === 'claimed';
+                const isPending = mission.status === 'pending';
                 const progressPercent = (mission.progress / mission.target) * 100;
 
                 const cardWidth = 230;
@@ -391,9 +394,10 @@ export class MailboxManager extends BaseManager {
                 contentElements.push(cardBg);
                 (cardBg as any).originalY = baseY;
 
-                // Status icon
+                // Status icon - different colors for different states
                 const iconX = cardX - cardWidth / 2 + 15;
-                const iconBg = this.scene.add.circle(iconX, baseY, 8, isDone ? 0x4ade80 : 0xfbbf24);
+                const iconColor = isDone ? 0x4ade80 : (isPending ? 0xfbbf24 : 0x3b82f6);
+                const iconBg = this.scene.add.circle(iconX, baseY, 8, iconColor);
                 iconBg.setDepth(5304);
                 iconBg.setMask(scrollMask);
                 this.scene.cameras.main.ignore(iconBg);
@@ -401,7 +405,8 @@ export class MailboxManager extends BaseManager {
                 contentElements.push(iconBg);
                 (iconBg as any).originalY = baseY;
 
-                const statusIcon = this.scene.add.text(iconX, baseY, isDone ? '✓' : '!', {
+                const statusIconText = isDone ? '✓' : (isPending ? '⏳' : '!');
+                const statusIcon = this.scene.add.text(iconX, baseY, statusIconText, {
                     fontSize: '10px',
                     fontFamily: 'Arial',
                     color: '#FFFFFF',
@@ -415,13 +420,14 @@ export class MailboxManager extends BaseManager {
                 contentElements.push(statusIcon);
                 (statusIcon as any).originalY = baseY;
 
-                // Mission name
+                // Mission name - different colors for different states
                 const nameX = cardX - cardWidth / 2 + 30;
                 const nameY = baseY - 8;
+                const nameColor = isDone ? '#16a34a' : (isPending ? '#d97706' : '#5D4037');
                 const missionName = this.scene.add.text(nameX, nameY, mission.name, {
                     fontSize: '9px',
                     fontFamily: 'PixelFont',
-                    color: isDone ? '#16a34a' : '#5D4037',
+                    color: nameColor,
                     resolution: 2
                 });
                 missionName.setOrigin(0, 0.5);
@@ -904,22 +910,22 @@ export class MailboxManager extends BaseManager {
                 }
                 // For non-social active missions, no action button needed (progress tracked automatically)
             } else if (mission.status === 'completed') {
-                // Completed mission - show status and claim button
+                // Completed mission - admin approved, show claim button
                 const statusY = barY + 50;
                 
-                // Show "Submitted" status for social missions
+                // Show "Approved" status for social missions
                 if (mission.type === 'social') {
-                    const submittedLabel = this.scene.add.text(modalX, statusY, '✅ Proof Submitted', {
+                    const approvedLabel = this.scene.add.text(modalX, statusY, '✅ Approved', {
                         fontSize: '10px',
                         fontFamily: 'PixelFont',
                         color: '#4ade80',
                         resolution: 2
                     });
-                    submittedLabel.setOrigin(0.5);
-                    submittedLabel.setDepth(5402);
-                    submittedLabel.setStroke('#166534', 2);
-                    this.scene.cameras.main.ignore(submittedLabel);
-                    this.missionDetailElements.push(submittedLabel);
+                    approvedLabel.setOrigin(0.5);
+                    approvedLabel.setDepth(5402);
+                    approvedLabel.setStroke('#166534', 2);
+                    this.scene.cameras.main.ignore(approvedLabel);
+                    this.missionDetailElements.push(approvedLabel);
                 }
 
                 // Claim button
@@ -946,6 +952,35 @@ export class MailboxManager extends BaseManager {
                 claimBtnBg.on('pointerdown', () => this.claimMissionReward(mission.id));
                 claimBtnBg.on('pointerover', () => claimBtnBg.setTint(0x86efac));
                 claimBtnBg.on('pointerout', () => claimBtnBg.setTint(0x4ade80));
+            } else if (mission.status === 'pending') {
+                // Pending mission - proof submitted, waiting for review
+                const statusY = barY + 50;
+                
+                const pendingLabel = this.scene.add.text(modalX, statusY, '⏳ Pending Review', {
+                    fontSize: '10px',
+                    fontFamily: 'PixelFont',
+                    color: '#fbbf24',
+                    resolution: 2
+                });
+                pendingLabel.setOrigin(0.5);
+                pendingLabel.setDepth(5402);
+                pendingLabel.setStroke('#92400e', 2);
+                this.scene.cameras.main.ignore(pendingLabel);
+                this.missionDetailElements.push(pendingLabel);
+
+                // Show submitted proof if available
+                if (mission.proof) {
+                    const proofLabel = this.scene.add.text(modalX, statusY + 20, 'Proof submitted ✓', {
+                        fontSize: '8px',
+                        fontFamily: 'PixelFont',
+                        color: '#a3a3a3',
+                        resolution: 2
+                    });
+                    proofLabel.setOrigin(0.5);
+                    proofLabel.setDepth(5402);
+                    this.scene.cameras.main.ignore(proofLabel);
+                    this.missionDetailElements.push(proofLabel);
+                }
             } else if (mission.status === 'claimed') {
                 // Already claimed - show completed status
                 const claimedLabel = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, '✅ Reward Claimed', {
@@ -1297,36 +1332,84 @@ export class MailboxManager extends BaseManager {
     }
 
     /**
-     * Submit mission proof (link or image URL)
+     * Submit mission proof (link or image URL) via WebSocket
      */
     private async submitMissionProof(missionId: string, type: SubmissionType, proof: string): Promise<void> {
         const isImage = type === 'image';
         this.callbacks.showToastMessage(isImage ? 'Submitting image proof...' : 'Submitting link...', 0x4a90e2);
 
-        try {
-            // Call API to submit proof
-            const result = await MissionService.submitProof(missionId, proof);
+        const missionSocketService = getMissionSocketService();
 
-            if (result) {
-                this.callbacks.showToastMessage('✅ Proof submitted! Mission completed.', 0x22c55e);
-                this.callbacks.playSuccessSound();
-                this.closeMissionDetails();
-                
-                // Refresh missions from API before reopening
-                await this.preloadMissions();
-                
-                // Refresh missions list
-                this.close();
-                this.open();
-            } else {
-                // API returned null - submission failed
-                this.callbacks.showToastMessage('❌ Failed to submit. Please try again.', 0xef4444);
+        // Try WebSocket first
+        if (missionSocketService.isConnected()) {
+            console.log('[MailboxManager] Submitting proof via WebSocket');
+            
+            // Setup one-time listener for mission update response
+            const handleMissionUpdated = (payload: MissionUpdatedPayload) => {
+                if (payload.id === missionId || payload.missionId === missionId) {
+                    // Remove listener after receiving response
+                    EventBus.off('mission_socket:mission_updated', handleMissionUpdated);
+                    
+                    if (payload.status === 'pending') {
+                        this.callbacks.showToastMessage('✅ Proof submitted! Pending review.', 0x22c55e);
+                        this.callbacks.playSuccessSound();
+                        this.closeMissionDetails();
+                        
+                        // Update cached mission
+                        if (this.cachedMissions) {
+                            const index = this.cachedMissions.findIndex(m => m.id === missionId);
+                            if (index !== -1) {
+                                this.cachedMissions[index] = {
+                                    ...this.cachedMissions[index],
+                                    status: payload.status,
+                                    proof: payload.proof,
+                                };
+                            }
+                        }
+                        
+                        // Refresh missions list
+                        this.close();
+                        this.open();
+                    } else {
+                        this.callbacks.showToastMessage('❌ Failed to submit. Please try again.', 0xef4444);
+                    }
+                }
+            };
+
+            EventBus.on('mission_socket:mission_updated', handleMissionUpdated);
+            
+            // Set timeout to remove listener if no response
+            this.scene.time.delayedCall(10000, () => {
+                EventBus.off('mission_socket:mission_updated', handleMissionUpdated);
+            });
+
+            // Emit submit proof event
+            missionSocketService.submitProof(missionId, proof);
+        } else {
+            // Fallback to REST API
+            console.log('[MailboxManager] WebSocket not connected, using REST API');
+            try {
+                const result = await MissionService.submitProof(missionId, proof);
+
+                if (result) {
+                    this.callbacks.showToastMessage('✅ Proof submitted! Pending review.', 0x22c55e);
+                    this.callbacks.playSuccessSound();
+                    this.closeMissionDetails();
+                    
+                    // Refresh missions from API before reopening
+                    await this.preloadMissions();
+                    
+                    // Refresh missions list
+                    this.close();
+                    this.open();
+                } else {
+                    this.callbacks.showToastMessage('❌ Failed to submit. Please try again.', 0xef4444);
+                }
+            } catch (error: any) {
+                console.error('Error submitting proof:', error);
+                const errorMsg = error?.message || 'Network error. Please check your connection.';
+                this.callbacks.showToastMessage(`❌ ${errorMsg}`, 0xef4444);
             }
-        } catch (error: any) {
-            console.error('Error submitting proof:', error);
-            // Show specific error message if available
-            const errorMsg = error?.message || 'Network error. Please check your connection.';
-            this.callbacks.showToastMessage(`❌ ${errorMsg}`, 0xef4444);
         }
     }
 
