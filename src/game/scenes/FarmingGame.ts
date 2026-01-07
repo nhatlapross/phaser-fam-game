@@ -9,6 +9,7 @@ import { FruitService } from '../FruitService';
 import { GameDataService } from '../GameDataService';
 import { ShopService } from '../ShopService';
 import { getSocketService, SocketService } from '../SocketService';
+import { getMissionSocketService, MissionSocketService } from '../MissionSocketService';
 
 // Import game state hook
 import { useGameState, GameStateHook, PlantUpdateHandler } from '../hooks';
@@ -173,6 +174,7 @@ export class FarmingGame extends Scene {
 
     // ========== SOCKET & REAL-TIME ==========
     private socketService!: SocketService;
+    private missionSocketService!: MissionSocketService;
     private plantUpdateHandler!: PlantUpdateHandler;
 
     // Global game state (single source of truth)
@@ -486,6 +488,7 @@ export class FarmingGame extends Scene {
     private initializeSocketConnection(): void {
         // Get socket service singleton
         this.socketService = getSocketService();
+        this.missionSocketService = getMissionSocketService();
 
         // Initialize plant update handler with callbacks
         this.plantUpdateHandler = new PlantUpdateHandler(this, {
@@ -515,6 +518,9 @@ export class FarmingGame extends Scene {
 
         // Connect to socket server
         this.socketService.connect();
+        
+        // Connect to mission socket server
+        this.missionSocketService.connect();
 
         // Listen for socket connection events
         EventBus.on('socket:connected', this.onSocketConnected, this);
@@ -3455,6 +3461,9 @@ export class FarmingGame extends Scene {
         }
         if (this.socketService) {
             this.socketService.disconnect();
+        }
+        if (this.missionSocketService) {
+            this.missionSocketService.disconnect();
         }
         EventBus.off('socket:connected', this.onSocketConnected, this);
         EventBus.off('socket:disconnected', this.onSocketDisconnected, this);

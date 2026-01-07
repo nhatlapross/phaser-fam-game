@@ -4,6 +4,8 @@ import { PlantType, FertilizerType, GAME_CONSTANTS } from '../types/GameTypes';
 import { MissionService, Mission } from '../MissionService';
 import { RedeemService } from '../RedeemService';
 import { GameDataService } from '../GameDataService';
+import { getMissionSocketService, MissionUpdatedPayload } from '../MissionSocketService';
+import { EventBus } from '../EventBus';
 
 interface MailboxCallbacks {
     getSeedCounts: () => Record<PlantType, number>;
@@ -1330,36 +1332,84 @@ export class MailboxManager extends BaseManager {
     }
 
     /**
-     * Submit mission proof (link or image URL)
+     * Submit mission proof (link or image URL) via WebSocket
      */
     private async submitMissionProof(missionId: string, type: SubmissionType, proof: string): Promise<void> {
         const isImage = type === 'image';
         this.callbacks.showToastMessage(isImage ? 'Submitting image proof...' : 'Submitting link...', 0x4a90e2);
 
-        try {
-            // Call API to submit proof
-            const result = await MissionService.submitProof(missionId, proof);
+        const missionSocketService = getMissionSocketService();
 
-            if (result) {
-                this.callbacks.showToastMessage('✅ Proof submitted! Mission completed.', 0x22c55e);
-                this.callbacks.playSuccessSound();
-                this.closeMissionDetails();
-                
-                // Refresh missions from API before reopening
-                await this.preloadMissions();
-                
-                // Refresh missions list
-                this.close();
-                this.open();
-            } else {
-                // API returned null - submission failed
-                this.callbacks.showToastMessage('❌ Failed to submit. Please try again.', 0xef4444);
+        // Try WebSocket first
+        if (missionSocketService.isConnected()) {
+            console.log('[MailboxManager] Submitting proof via WebSocket');
+            
+            // Setup one-time listener for mission update response
+            const handleMissionUpdated = (payload: MissionUpdatedPayload) => {
+                if (payload.id === missionId || payload.missionId === missionId) {
+                    // Remove listener after receiving response
+                    EventBus.off('mission_socket:mission_updated', handleMissionUpdated);
+                    
+                    if (payload.status === 'pending') {
+                        this.callbacks.showToastMessage('✅ Proof submitted! Pending review.', 0x22c55e);
+                        this.callbacks.playSuccessSound();
+                        this.closeMissionDetails();
+                        
+                        // Update cached mission
+                        if (this.cachedMissions) {
+                            const index = this.cachedMissions.findIndex(m => m.id === missionId);
+                            if (index !== -1) {
+                                this.cachedMissions[index] = {
+                                    ...this.cachedMissions[index],
+                                    status: payload.status,
+                                    proof: payload.proof,
+                                };
+                            }
+                        }
+                        
+                        // Refresh missions list
+                        this.close();
+                        this.open();
+                    } else {
+                        this.callbacks.showToastMessage('❌ Failed to submit. Please try again.', 0xef4444);
+                    }
+                }
+            };
+
+            EventBus.on('mission_socket:mission_updated', handleMissionUpdated);
+            
+            // Set timeout to remove listener if no response
+            this.scene.time.delayedCall(10000, () => {
+                EventBus.off('mission_socket:mission_updated', handleMissionUpdated);
+            });
+
+            // Emit submit proof event
+            missionSocketService.submitProof(missionId, proof);
+        } else {
+            // Fallback to REST API
+            console.log('[MailboxManager] WebSocket not connected, using REST API');
+            try {
+                const result = await MissionService.submitProof(missionId, proof);
+
+                if (result) {
+                    this.callbacks.showToastMessage('✅ Proof submitted! Pending review.', 0x22c55e);
+                    this.callbacks.playSuccessSound();
+                    this.closeMissionDetails();
+                    
+                    // Refresh missions from API before reopening
+                    await this.preloadMissions();
+                    
+                    // Refresh missions list
+                    this.close();
+                    this.open();
+                } else {
+                    this.callbacks.showToastMessage('❌ Failed to submit. Please try again.', 0xef4444);
+                }
+            } catch (error: any) {
+                console.error('Error submitting proof:', error);
+                const errorMsg = error?.message || 'Network error. Please check your connection.';
+                this.callbacks.showToastMessage(`❌ ${errorMsg}`, 0xef4444);
             }
-        } catch (error: any) {
-            console.error('Error submitting proof:', error);
-            // Show specific error message if available
-            const errorMsg = error?.message || 'Network error. Please check your connection.';
-            this.callbacks.showToastMessage(`❌ ${errorMsg}`, 0xef4444);
         }
     }
 
