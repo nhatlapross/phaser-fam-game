@@ -5,7 +5,7 @@ import { GameDataService } from '../GameDataService';
 import { EventBus } from '../EventBus';
 import { useGameState } from '../hooks/useGameState';
 import { NFTVoucherManager, SAMPLE_VOUCHERS } from './NFTVoucherManager';
-import { BadgeService, AVAILABLE_BADGES, Badge } from '../BadgeService';
+import { BadgeService, AVAILABLE_BADGES, Badge, SoulboundToken } from '../BadgeService';
 import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 
 interface ProfileCallbacks {
@@ -38,6 +38,8 @@ export class ProfileManager extends BaseManager {
     private badgesScrollY: number = 0;
     private badgesContainer: Phaser.GameObjects.Container | null = null;
     private badgesMask: Phaser.GameObjects.Graphics | null = null;
+    private badgesLoading: boolean = false;
+    private userBadges: SoulboundToken[] = [];
 
     constructor(scene: Phaser.Scene, callbacks: ProfileCallbacks) {
         super(scene);
@@ -718,11 +720,36 @@ export class ProfileManager extends BaseManager {
     }
 
     /**
-     * Create badges tab content - Grid of all badges (6 columns, scrollable)
+     * Create badges tab content - Grid of user's badges from API (scrollable)
      */
-    private createBadgesTabContent(modalX: number, contentStartY: number, modalWidth: number, contentHeight: number): void {
+    private async createBadgesTabContent(modalX: number, contentStartY: number, modalWidth: number, contentHeight: number): Promise<void> {
         // Reset scroll position
         this.badgesScrollY = 0;
+
+        // Show loading state
+        const loadingText = this.scene.add.text(modalX, contentStartY + contentHeight / 2, 'Loading badges...', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#BCAAA4',
+            resolution: 2
+        });
+        loadingText.setOrigin(0.5);
+        loadingText.setDepth(5151);
+        this.scene.cameras.main.ignore(loadingText);
+        this.profileContentElements.push(loadingText);
+
+        // Fetch badges from API
+        this.badgesLoading = true;
+        try {
+            this.userBadges = await BadgeService.fetchSoulboundTokens();
+        } catch (error) {
+            console.error('[ProfileManager] Error fetching badges:', error);
+            this.userBadges = BadgeService.getCachedTokens();
+        }
+        this.badgesLoading = false;
+
+        // Remove loading text
+        loadingText.destroy();
 
         // Grid configuration
         const columns = 5;
@@ -754,54 +781,81 @@ export class ProfileManager extends BaseManager {
         // Hide the mask graphics - it should only be used for masking, not visible
         maskGraphics.setVisible(false);
 
-        // Get all badges
-        const allBadges = AVAILABLE_BADGES;
-        const rows = Math.ceil(allBadges.length / columns);
+        // Title
+        const title = this.scene.add.text(modalX, contentStartY + 5, 'My Badges', {
+            fontSize: '12px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(5151);
+        title.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(title);
+        this.profileContentElements.push(title);
 
-        allBadges.forEach((badge, index) => {
+        // Check if user has any badges
+        if (this.userBadges.length === 0) {
+            const noBadgesText = this.scene.add.text(modalX, contentStartY + contentHeight / 2, 'No badges yet', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#BCAAA4',
+                resolution: 2,
+                align: 'center'
+            });
+            noBadgesText.setOrigin(0.5);
+            noBadgesText.setDepth(5151);
+            this.scene.cameras.main.ignore(noBadgesText);
+            this.profileContentElements.push(noBadgesText);
+            return;
+        }
+
+        // Display user's badges from API
+        const rows = Math.ceil(this.userBadges.length / columns);
+
+        this.userBadges.forEach((token, index) => {
             const col = index % columns;
             const row = Math.floor(index / columns);
             const x = startX + col * (cellSize + cellSpacing);
             const y = startY + row * (cellSize + cellSpacing);
 
-            const isClaimed = BadgeService.isBadgeClaimed(badge.id);
+            // Get rarity color
+            const rarityColor = BadgeService.getRarityColor(token.metadata?.rarity || 'COMMON');
+            const rarityColorHex = parseInt(rarityColor.replace('#', ''), 16);
 
-            // Badge background
-            const badgeBg = this.scene.add.rectangle(x, y, cellSize, cellSize, isClaimed ? 0x2d5a3d : 0x3E2723, 0.8);
-            badgeBg.setStrokeStyle(2, isClaimed ? 0x4ade80 : 0x5D4037);
+            // Badge background with rarity color
+            const badgeBg = this.scene.add.rectangle(x, y, cellSize, cellSize, rarityColorHex, 0.3);
+            badgeBg.setStrokeStyle(2, rarityColorHex);
             badgeBg.setInteractive({ useHandCursor: true });
             this.badgesContainer!.add(badgeBg);
 
-            // Badge icon
-            const badgeIcon = this.scene.add.text(x, y - 3, badge.icon, {
+            // Badge icon (use rarity icon or category-based icon)
+            const badgeIcon = this.scene.add.text(x, y - 3, BadgeService.getRarityIcon(token.metadata?.rarity || 'COMMON'), {
                 fontSize: '18px',
                 resolution: 2
             });
             badgeIcon.setOrigin(0.5);
-            badgeIcon.setAlpha(isClaimed ? 1 : 0.4);
             this.badgesContainer!.add(badgeIcon);
 
             // Hover tooltip
             badgeBg.on('pointerover', () => {
-                this.showBadgeTooltip(x, y - cellSize / 2 + 10, badge, isClaimed);
+                this.showSoulboundTokenTooltip(x, y - cellSize / 2 + 10, token);
                 badgeBg.setStrokeStyle(2, 0xFFD700);
             });
             badgeBg.on('pointerout', () => {
                 this.hideBadgeTooltip();
-                badgeBg.setStrokeStyle(2, isClaimed ? 0x4ade80 : 0x5D4037);
+                badgeBg.setStrokeStyle(2, rarityColorHex);
             });
 
-            // Glow animation for claimed badges
-            if (isClaimed) {
-                this.scene.tweens.add({
-                    targets: badgeIcon,
-                    scale: 1.1,
-                    duration: 800,
-                    yoyo: true,
-                    repeat: -1,
-                    ease: 'Sine.easeInOut'
-                });
-            }
+            // Glow animation for badges
+            this.scene.tweens.add({
+                targets: badgeIcon,
+                scale: 1.1,
+                duration: 800,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
         });
 
         // Calculate if scrolling is needed
@@ -845,22 +899,8 @@ export class ProfileManager extends BaseManager {
             });
         }
 
-        // Title
-        const title = this.scene.add.text(modalX, contentStartY + 5, 'All Badges', {
-            fontSize: '12px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
-        });
-        title.setOrigin(0.5);
-        title.setDepth(5151);
-        title.setStroke('#5D4037', 2);
-        this.scene.cameras.main.ignore(title);
-        this.profileContentElements.push(title);
-
         // Stats
-        const claimedCount = allBadges.filter(b => BadgeService.isBadgeClaimed(b.id)).length;
-        const statsText = this.scene.add.text(modalX, contentStartY + contentHeight - 10, `${claimedCount}/${allBadges.length} Collected`, {
+        const statsText = this.scene.add.text(modalX, contentStartY + contentHeight - 10, `${this.userBadges.length} Badge${this.userBadges.length !== 1 ? 's' : ''} Collected`, {
             fontSize: '9px',
             fontFamily: 'PixelFont',
             color: '#4ade80',
@@ -870,6 +910,64 @@ export class ProfileManager extends BaseManager {
         statsText.setDepth(5151);
         this.scene.cameras.main.ignore(statsText);
         this.profileContentElements.push(statsText);
+    }
+
+    /**
+     * Show tooltip for soulbound token from API
+     */
+    private showSoulboundTokenTooltip(x: number, y: number, token: SoulboundToken): void {
+        this.hideBadgeTooltip();
+
+        const container = this.scene.add.container(x, y);
+        container.setDepth(5200);
+        this.scene.cameras.main.ignore(container);
+
+        const bg = this.scene.add.rectangle(0, 0, 120, 50, 0x3E2723, 0.95);
+        bg.setStrokeStyle(1, 0x5D4037);
+        container.add(bg);
+
+        // Token name
+        const nameText = this.scene.add.text(0, -14, token.name, {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        nameText.setOrigin(0.5);
+        container.add(nameText);
+
+        // Rarity
+        const rarityText = this.scene.add.text(0, 0, token.metadata?.rarity || 'COMMON', {
+            fontSize: '7px',
+            fontFamily: 'PixelFont',
+            color: BadgeService.getRarityColor(token.metadata?.rarity || 'COMMON'),
+            resolution: 2
+        });
+        rarityText.setOrigin(0.5);
+        container.add(rarityText);
+
+        // Category
+        const categoryText = this.scene.add.text(0, 12, token.metadata?.category || 'Badge', {
+            fontSize: '6px',
+            fontFamily: 'PixelFont',
+            color: '#BCAAA4',
+            resolution: 2
+        });
+        categoryText.setOrigin(0.5);
+        container.add(categoryText);
+
+        this.badgeTooltip = container;
+        this.profileContentElements.push(container);
+
+        container.setAlpha(0);
+        container.setScale(0.8);
+        this.scene.tweens.add({
+            targets: container,
+            alpha: 1,
+            scale: 1,
+            duration: 100,
+            ease: 'Back.easeOut'
+        });
     }
 
     private badgeTooltip: Phaser.GameObjects.Container | null = null;
