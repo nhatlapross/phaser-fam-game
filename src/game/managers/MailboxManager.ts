@@ -675,8 +675,8 @@ export class MailboxManager extends BaseManager {
         redeemTabBg.on('pointerout', () => redeemTabBg.clearTint());
 
         // Refresh handler
-        refreshBtnBg.on('pointerdown', () => {
-            this.refreshCache();
+        refreshBtnBg.on('pointerdown', async () => {
+            // Show loading animation
             this.scene.tweens.add({
                 targets: refreshBtn,
                 angle: 360,
@@ -684,6 +684,11 @@ export class MailboxManager extends BaseManager {
                 ease: 'Power2',
                 onComplete: () => refreshBtn.setAngle(0)
             });
+            
+            // Fetch fresh missions from API
+            await this.preloadMissions();
+            
+            // Refresh content
             if (this.activeTab === 'missions') {
                 showMissionsContent();
             }
@@ -891,19 +896,42 @@ export class MailboxManager extends BaseManager {
             this.scene.cameras.main.ignore(rewardLabel);
             this.missionDetailElements.push(rewardLabel);
 
-            // For social missions, add submission options (link or image)
-            if (mission.type === 'social' && mission.status === 'active') {
-                this.createSubmissionForm(modalX, modalY, modalWidth, modalHeight, barY, mission.id);
+            // Handle different mission states
+            if (mission.status === 'active') {
+                // Active mission - show submission form for social missions
+                if (mission.type === 'social') {
+                    this.createSubmissionForm(modalX, modalY, modalWidth, modalHeight, barY, mission.id);
+                }
+                // For non-social active missions, no action button needed (progress tracked automatically)
             } else if (mission.status === 'completed') {
-                // Claim button for completed missions
+                // Completed mission - show status and claim button
+                const statusY = barY + 50;
+                
+                // Show "Submitted" status for social missions
+                if (mission.type === 'social') {
+                    const submittedLabel = this.scene.add.text(modalX, statusY, '✅ Proof Submitted', {
+                        fontSize: '10px',
+                        fontFamily: 'PixelFont',
+                        color: '#4ade80',
+                        resolution: 2
+                    });
+                    submittedLabel.setOrigin(0.5);
+                    submittedLabel.setDepth(5402);
+                    submittedLabel.setStroke('#166534', 2);
+                    this.scene.cameras.main.ignore(submittedLabel);
+                    this.missionDetailElements.push(submittedLabel);
+                }
+
+                // Claim button
                 const claimBtnBg = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 30, 'square-buttons', 6);
-                claimBtnBg.setDisplaySize(100, 28);
+                claimBtnBg.setDisplaySize(120, 30);
+                claimBtnBg.setTint(0x4ade80);
                 claimBtnBg.setDepth(5402);
                 claimBtnBg.setInteractive({ useHandCursor: true });
                 this.scene.cameras.main.ignore(claimBtnBg);
                 this.missionDetailElements.push(claimBtnBg);
 
-                const claimText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, 'Claim Reward', {
+                const claimText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, '🎁 Claim Reward', {
                     fontSize: '10px',
                     fontFamily: 'PixelFont',
                     color: '#FFFFFF',
@@ -911,16 +939,16 @@ export class MailboxManager extends BaseManager {
                 });
                 claimText.setOrigin(0.5);
                 claimText.setDepth(5403);
-                claimText.setStroke('#5D4037', 2);
+                claimText.setStroke('#166534', 2);
                 this.scene.cameras.main.ignore(claimText);
                 this.missionDetailElements.push(claimText);
 
                 claimBtnBg.on('pointerdown', () => this.claimMissionReward(mission.id));
-                claimBtnBg.on('pointerover', () => claimBtnBg.setTint(0xcccccc));
-                claimBtnBg.on('pointerout', () => claimBtnBg.clearTint());
+                claimBtnBg.on('pointerover', () => claimBtnBg.setTint(0x86efac));
+                claimBtnBg.on('pointerout', () => claimBtnBg.setTint(0x4ade80));
             } else if (mission.status === 'claimed') {
-                // Already claimed label
-                const claimedLabel = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, '✓ Claimed', {
+                // Already claimed - show completed status
+                const claimedLabel = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, '✅ Reward Claimed', {
                     fontSize: '11px',
                     fontFamily: 'PixelFont',
                     color: '#22c55e',
@@ -928,7 +956,7 @@ export class MailboxManager extends BaseManager {
                 });
                 claimedLabel.setOrigin(0.5);
                 claimedLabel.setDepth(5402);
-                claimedLabel.setStroke('#5D4037', 2);
+                claimedLabel.setStroke('#166534', 2);
                 this.scene.cameras.main.ignore(claimedLabel);
                 this.missionDetailElements.push(claimedLabel);
             }
@@ -1283,7 +1311,10 @@ export class MailboxManager extends BaseManager {
                 this.callbacks.showToastMessage('✅ Proof submitted! Mission completed.', 0x22c55e);
                 this.callbacks.playSuccessSound();
                 this.closeMissionDetails();
-                this.refreshCache();
+                
+                // Refresh missions from API before reopening
+                await this.preloadMissions();
+                
                 // Refresh missions list
                 this.close();
                 this.open();
@@ -1311,19 +1342,23 @@ export class MailboxManager extends BaseManager {
             const result = await MissionService.claimMissionReward(missionId);
 
             if (result) {
-                this.callbacks.showToastMessage('Reward claimed!', 0x22c55e);
+                this.callbacks.showToastMessage('🎉 Reward claimed!', 0x22c55e);
                 this.closeMissionDetails();
-                this.refreshCache();
+                
+                // Refresh missions from API before reopening
+                await this.preloadMissions();
+                
                 // Refresh all data and UI via GameDataService
                 GameDataService.refreshAndUpdateUI();
+                
                 // Refresh missions list
                 this.close();
                 this.open();
             } else {
-                this.callbacks.showToastMessage('Failed to claim reward', 0xef4444);
+                this.callbacks.showToastMessage('❌ Failed to claim reward', 0xef4444);
             }
         } catch {
-            this.callbacks.showToastMessage('Error claiming reward', 0xef4444);
+            this.callbacks.showToastMessage('❌ Error claiming reward', 0xef4444);
         }
     }
 
