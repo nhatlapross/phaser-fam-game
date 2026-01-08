@@ -1141,14 +1141,19 @@ export class TownSquare extends Scene {
             return;
         }
 
-        // Create sprite using default character from config
-        const sprite = this.add.sprite(user.x, user.y, DEFAULT_CHARACTER, 0);
+        // Get character key from characterType (1-5 maps to index 0-4)
+        const characterType = user.characterType || 1;
+        const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
+        const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || DEFAULT_CHARACTER;
+
+        // Create sprite using character from user data
+        const sprite = this.add.sprite(user.x, user.y, characterKey, 0);
         sprite.setOrigin(0.5, 0.8); // Same origin as main player
         sprite.setDepth(user.y); // Depth based on Y position for proper layering
 
-        // Play idle animation (use default character for other players)
-        if (this.anims.exists(`${DEFAULT_CHARACTER}-idle-down`)) {
-            sprite.play(`${DEFAULT_CHARACTER}-idle-down`);
+        // Play idle animation with correct character
+        if (this.anims.exists(`${characterKey}-idle-down`)) {
+            sprite.play(`${characterKey}-idle-down`);
         }
 
         // Create name text above sprite
@@ -1181,7 +1186,7 @@ export class TownSquare extends Scene {
             isMoving: false
         });
 
-        console.log(`🎮 [TownSquare] Created player: ${user.username} at (${user.x}, ${user.y})`);
+        console.log(`🎮 [TownSquare] Created player: ${user.username} (char: ${characterKey}) at (${user.x}, ${user.y})`);
     }
 
     /**

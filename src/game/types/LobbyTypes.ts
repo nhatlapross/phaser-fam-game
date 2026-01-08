@@ -13,6 +13,7 @@ export interface UserLobbyState {
     x: number;
     y: number;
     zone?: string;
+    characterType: number;
 }
 
 /**
