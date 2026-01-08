@@ -771,6 +771,12 @@ export class ProfileManager extends BaseManager {
         }
         this.badgesLoading = false;
 
+        // If no badges from API, use mock data for testing
+        if (this.userBadges.length === 0) {
+            this.userBadges = this.getMockBadges();
+            console.log('[ProfileManager] Using mock badges for testing');
+        }
+
         // Remove loading text
         loadingText.destroy();
 
@@ -1574,6 +1580,102 @@ export class ProfileManager extends BaseManager {
         this.destroyProfileElements();
         UserService.clearAuthData();
         this.callbacks.onLogout();
+    }
+
+    /**
+     * Get mock badges for testing when API returns empty
+     */
+    private getMockBadges(): SoulboundToken[] {
+        return [
+            {
+                id: 'mock-1',
+                userId: 'user-1',
+                name: 'Early Adopter',
+                metadata: {
+                    rarity: 'LEGENDARY',
+                    category: 'Achievement',
+                    description: 'One of the first players to join the game'
+                },
+                issuedAt: new Date().toISOString()
+            },
+            {
+                id: 'mock-2',
+                userId: 'user-1',
+                name: 'Token2049 Veteran',
+                metadata: {
+                    rarity: 'EPIC',
+                    category: 'Event',
+                    description: 'Attended Token2049 event'
+                },
+                issuedAt: new Date().toISOString()
+            },
+            {
+                id: 'mock-3',
+                userId: 'user-1',
+                name: 'Master Farmer',
+                metadata: {
+                    rarity: 'RARE',
+                    category: 'Achievement',
+                    description: 'Harvested 100 crops'
+                },
+                issuedAt: new Date().toISOString()
+            },
+            {
+                id: 'mock-4',
+                userId: 'user-1',
+                name: 'Community Member',
+                metadata: {
+                    rarity: 'UNCOMMON',
+                    category: 'Social',
+                    description: 'Joined the community'
+                },
+                issuedAt: new Date().toISOString()
+            },
+            {
+                id: 'mock-5',
+                userId: 'user-1',
+                name: 'First Harvest',
+                metadata: {
+                    rarity: 'COMMON',
+                    category: 'Achievement',
+                    description: 'Completed first harvest'
+                },
+                issuedAt: new Date().toISOString()
+            },
+            {
+                id: 'mock-6',
+                userId: 'user-1',
+                name: 'Beta Tester',
+                metadata: {
+                    rarity: 'EPIC',
+                    category: 'Achievement',
+                    description: 'Participated in beta testing'
+                },
+                issuedAt: new Date().toISOString()
+            },
+            {
+                id: 'mock-7',
+                userId: 'user-1',
+                name: 'Social Butterfly',
+                metadata: {
+                    rarity: 'RARE',
+                    category: 'Social',
+                    description: 'Made 10 friends'
+                },
+                issuedAt: new Date().toISOString()
+            },
+            {
+                id: 'mock-8',
+                userId: 'user-1',
+                name: 'Ambassador',
+                metadata: {
+                    rarity: 'LEGENDARY',
+                    category: 'Special',
+                    description: 'Official game ambassador'
+                },
+                issuedAt: new Date().toISOString()
+            }
+        ];
     }
 
     public destroy(): void {

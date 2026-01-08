@@ -745,7 +745,8 @@ export class MailboxManager extends BaseManager {
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
         const modalWidth = 280;
-        const modalHeight = mission.type === 'social' ? 340 : 200;
+        // Increase height to fit rewards section
+        const modalHeight = mission.type === 'social' ? 380 : 280;
 
         // Overlay
         const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.7);
@@ -877,45 +878,121 @@ export class MailboxManager extends BaseManager {
             this.scene.cameras.main.ignore(progressText);
             this.missionDetailElements.push(progressText);
 
-            // Reward info
-            let rewardText = 'Rewards: ';
-            if (mission.reward) {
-                if (mission.reward.xp) rewardText += `${mission.reward.xp} XP `;
-                if (mission.reward.reputation) rewardText += `${mission.reward.reputation} Rep `;
-                if (mission.reward.items) {
-                    mission.reward.items.forEach(item => {
-                        rewardText += `${item.amount} ${item.type} `;
-                    });
-                }
-            }
-            if (rewardText === 'Rewards: ') rewardText = 'Complete to earn rewards!';
+            // Reward section - compact styled box with icons
+            const rewardSectionY = barY + 25;
+            
+            // Reward section background - smaller
+            const rewardBg = this.scene.add.rectangle(modalX, rewardSectionY + 20, modalWidth - 40, 50, 0x3E2723, 0.8);
+            rewardBg.setStrokeStyle(2, 0x5D4037);
+            rewardBg.setDepth(5402);
+            this.scene.cameras.main.ignore(rewardBg);
+            this.missionDetailElements.push(rewardBg);
 
-            const rewardLabel = this.scene.add.text(modalX, barY + 25, rewardText.trim(), {
+            // Reward title
+            const rewardTitle = this.scene.add.text(modalX, rewardSectionY + 2, '🎁 Rewards', {
                 fontSize: '9px',
                 fontFamily: 'PixelFont',
                 color: '#fbbf24',
                 resolution: 2
             });
-            rewardLabel.setOrigin(0.5);
-            rewardLabel.setDepth(5402);
-            rewardLabel.setStroke('#5D4037', 1);
-            this.scene.cameras.main.ignore(rewardLabel);
-            this.missionDetailElements.push(rewardLabel);
+            rewardTitle.setOrigin(0.5);
+            rewardTitle.setDepth(5403);
+            rewardTitle.setStroke('#5D4037', 2);
+            this.scene.cameras.main.ignore(rewardTitle);
+            this.missionDetailElements.push(rewardTitle);
+
+            // Display rewards with icons
+            const rewardItems: { icon: string; text: string; color: string }[] = [];
+            
+            if (mission.reward) {
+                if (mission.reward.xp && mission.reward.xp > 0) {
+                    rewardItems.push({ icon: '⭐', text: `${mission.reward.xp} XP`, color: '#a855f7' });
+                }
+                if (mission.reward.reputation && mission.reward.reputation > 0) {
+                    rewardItems.push({ icon: '🏆', text: `${mission.reward.reputation} Rep`, color: '#f59e0b' });
+                }
+                if (mission.reward.items && mission.reward.items.length > 0) {
+                    mission.reward.items.forEach(item => {
+                        const itemIcon = this.getItemIcon(item.type);
+                        rewardItems.push({ icon: itemIcon, text: `${item.amount} ${item.type}`, color: '#4ade80' });
+                    });
+                }
+            }
+
+            if (rewardItems.length === 0) {
+                const noRewardText = this.scene.add.text(modalX, rewardSectionY + 22, 'Complete to earn rewards!', {
+                    fontSize: '8px',
+                    fontFamily: 'PixelFont',
+                    color: '#a3a3a3',
+                    resolution: 2
+                });
+                noRewardText.setOrigin(0.5);
+                noRewardText.setDepth(5403);
+                this.scene.cameras.main.ignore(noRewardText);
+                this.missionDetailElements.push(noRewardText);
+            } else {
+                // Calculate layout for reward items (horizontal layout) - compact
+                const itemSpacing = Math.min(60, (modalWidth - 60) / rewardItems.length);
+                const totalWidth = (rewardItems.length - 1) * itemSpacing;
+                const startX = modalX - totalWidth / 2;
+
+                rewardItems.forEach((item, index) => {
+                    const itemX = startX + index * itemSpacing;
+                    const itemY = rewardSectionY + 22;
+
+                    // Icon - smaller
+                    const iconText = this.scene.add.text(itemX, itemY - 3, item.icon, {
+                        fontSize: '14px',
+                        resolution: 2
+                    });
+                    iconText.setOrigin(0.5);
+                    iconText.setDepth(5403);
+                    this.scene.cameras.main.ignore(iconText);
+                    this.missionDetailElements.push(iconText);
+
+                    // Value text - smaller
+                    const valueText = this.scene.add.text(itemX, itemY + 12, item.text, {
+                        fontSize: '7px',
+                        fontFamily: 'PixelFont',
+                        color: item.color,
+                        resolution: 2
+                    });
+                    valueText.setOrigin(0.5);
+                    valueText.setDepth(5403);
+                    valueText.setStroke('#000000', 1);
+                    this.scene.cameras.main.ignore(valueText);
+                    this.missionDetailElements.push(valueText);
+                });
+            }
+
+            // Adjust positions for status/action buttons - after rewards
+            const actionY = rewardSectionY + 55;
 
             // Handle different mission states
             if (mission.status === 'active') {
                 // Active mission - show submission form for social missions
                 if (mission.type === 'social') {
-                    this.createSubmissionForm(modalX, modalY, modalWidth, modalHeight, barY, mission.id);
+                    this.createSubmissionForm(modalX, modalY, modalWidth, modalHeight, actionY, mission.id);
+                } else {
+                    // For non-social active missions, show "In Progress" status
+                    const inProgressLabel = this.scene.add.text(modalX, actionY, '🔄 In Progress', {
+                        fontSize: '10px',
+                        fontFamily: 'PixelFont',
+                        color: '#3b82f6',
+                        resolution: 2
+                    });
+                    inProgressLabel.setOrigin(0.5);
+                    inProgressLabel.setDepth(5402);
+                    inProgressLabel.setStroke('#1e3a8a', 2);
+                    this.scene.cameras.main.ignore(inProgressLabel);
+                    this.missionDetailElements.push(inProgressLabel);
                 }
-                // For non-social active missions, no action button needed (progress tracked automatically)
             } else if (mission.status === 'completed') {
                 // Completed mission - admin approved, show claim button
-                const statusY = barY + 50;
                 
                 // Show "Approved" status for social missions
                 if (mission.type === 'social') {
-                    const approvedLabel = this.scene.add.text(modalX, statusY, '✅ Approved', {
+                    const approvedLabel = this.scene.add.text(modalX, actionY, '✅ Approved', {
                         fontSize: '10px',
                         fontFamily: 'PixelFont',
                         color: '#4ade80',
@@ -954,9 +1031,7 @@ export class MailboxManager extends BaseManager {
                 claimBtnBg.on('pointerout', () => claimBtnBg.setTint(0x4ade80));
             } else if (mission.status === 'pending') {
                 // Pending mission - proof submitted, waiting for review
-                const statusY = barY + 50;
-                
-                const pendingLabel = this.scene.add.text(modalX, statusY, '⏳ Pending Review', {
+                const pendingLabel = this.scene.add.text(modalX, actionY, '⏳ Pending Review', {
                     fontSize: '10px',
                     fontFamily: 'PixelFont',
                     color: '#fbbf24',
@@ -970,7 +1045,7 @@ export class MailboxManager extends BaseManager {
 
                 // Show submitted proof if available
                 if (mission.proof) {
-                    const proofLabel = this.scene.add.text(modalX, statusY + 20, 'Proof submitted ✓', {
+                    const proofLabel = this.scene.add.text(modalX, actionY + 20, 'Proof submitted ✓', {
                         fontSize: '8px',
                         fontFamily: 'PixelFont',
                         color: '#a3a3a3',
@@ -983,7 +1058,7 @@ export class MailboxManager extends BaseManager {
                 }
             } else if (mission.status === 'claimed') {
                 // Already claimed - show completed status
-                const claimedLabel = this.scene.add.text(modalX, modalY + modalHeight / 2 - 30, '✅ Reward Claimed', {
+                const claimedLabel = this.scene.add.text(modalX, actionY, '✅ Reward Claimed', {
                     fontSize: '11px',
                     fontFamily: 'PixelFont',
                     color: '#22c55e',
@@ -998,6 +1073,44 @@ export class MailboxManager extends BaseManager {
         });
 
         overlay.on('pointerdown', () => this.closeMissionDetails());
+    }
+
+    /**
+     * Get icon for item type
+     */
+    private getItemIcon(itemType: string): string {
+        const iconMap: Record<string, string> = {
+            'gold': '💰',
+            'gem': '💎',
+            'ruby': '💎',
+            'seed': '🌱',
+            'water': '💧',
+            'fertilizer': '🧪',
+            'glove': '🧤',
+            'pesticide': '🧴',
+            'algae-seed': '🌿',
+            'mushroom-seed': '🍄',
+            'carrot-seed': '🥕',
+            'tomato-seed': '🍅',
+            'fruit': '🍎',
+            'xp': '⭐',
+            'reputation': '🏆',
+        };
+        
+        // Try exact match first
+        const lowerType = itemType.toLowerCase();
+        if (iconMap[lowerType]) {
+            return iconMap[lowerType];
+        }
+        
+        // Try partial match
+        for (const [key, icon] of Object.entries(iconMap)) {
+            if (lowerType.includes(key)) {
+                return icon;
+            }
+        }
+        
+        return '🎁'; // Default icon
     }
 
     private closeMissionDetails(): void {
@@ -1030,15 +1143,15 @@ export class MailboxManager extends BaseManager {
         modalY: number, 
         modalWidth: number, 
         modalHeight: number, 
-        barY: number, 
+        actionY: number, 
         missionId: string
     ): void {
         // Reset state
         this.currentSubmissionType = 'link';
         this.uploadedImageUrl = null;
 
-        // Tab buttons for Link / Image - position below rewards
-        const tabY = barY + 55;
+        // Tab buttons for Link / Image - position at actionY
+        const tabY = actionY;
         const tabWidth = 70;
         const tabHeight = 22;
         const tabSpacing = 10;
