@@ -93,6 +93,7 @@ export class TownSquare extends Scene {
     // Lobby WebSocket service
     private lobbySocketService!: LobbySocketService;
 
+
     // Multiplayer - other players
     private otherPlayers: Map<string, {
         sprite: Phaser.GameObjects.Sprite;
@@ -103,6 +104,7 @@ export class TownSquare extends Scene {
         lastX: number;
         lastY: number;
         isMoving: boolean;
+        characterKey: string;
     }> = new Map();
     private lastPositionSent: { x: number; y: number; time: number } = { x: 0, y: 0, time: 0 };
     private readonly POSITION_SEND_THROTTLE = 100; // ms between position updates
@@ -1183,7 +1185,8 @@ export class TownSquare extends Scene {
             targetY: user.y,
             lastX: user.x,
             lastY: user.y,
-            isMoving: false
+            isMoving: false,
+            characterKey: characterKey
         });
 
         console.log(`🎮 [TownSquare] Created player: ${user.username} (char: ${characterKey}) at (${user.x}, ${user.y})`);
@@ -1236,6 +1239,7 @@ export class TownSquare extends Scene {
         this.otherPlayers.forEach((player) => {
             const currentX = player.sprite.x;
             const currentY = player.sprite.y;
+            const charKey = player.characterKey || DEFAULT_CHARACTER;
 
             // Calculate distance to target
             const dx = player.targetX - currentX;
@@ -1264,8 +1268,8 @@ export class TownSquare extends Scene {
                     direction = dy > 0 ? 'down' : 'up';
                 }
 
-                // Play walk animation if not already playing (use default character for other players)
-                const walkAnim = `${DEFAULT_CHARACTER}-walk-${direction}`;
+                // Play walk animation with correct character key
+                const walkAnim = `${charKey}-walk-${direction}`;
                 if (this.anims.exists(walkAnim)) {
                     const currentAnim = player.sprite.anims.currentAnim?.key;
                     if (currentAnim !== walkAnim) {
@@ -1286,7 +1290,7 @@ export class TownSquare extends Scene {
                     else if (currentAnim.includes('left')) idleDirection = 'left';
                     else if (currentAnim.includes('right')) idleDirection = 'right';
 
-                    const idleAnim = `${DEFAULT_CHARACTER}-idle-${idleDirection}`;
+                    const idleAnim = `${charKey}-idle-${idleDirection}`;
                     if (this.anims.exists(idleAnim)) {
                         player.sprite.play(idleAnim, true);
                     }
