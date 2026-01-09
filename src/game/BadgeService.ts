@@ -251,8 +251,19 @@ export class BadgeService {
     }
 
     /**
-     * Claim a badge using a code
-     * Calls POST /soulbound-tokens/claim
+     * Claim a badge using a redemption code
+     * Calls POST /redemption/claim
+     * 
+     * Response format:
+     * {
+     *   "success": true,
+     *   "type": "BADGE",
+     *   "reward": { "badgeType": "COMMUNITY_HERO" },
+     *   "data": {
+     *     "token": { id, userId, name, issuedAt, metadata: { rarity, category, badgeType, inputCode, description } },
+     *     "message": "🎖️ Badge \"Community Hero\" issued!"
+     *   }
+     * }
      */
     static async claimBadgeWithCode(badgeId: string, code: string): Promise<{ success: boolean; message: string; badgeName?: string }> {
         const token = UserService.getAccessToken();
@@ -260,55 +271,71 @@ export class BadgeService {
             return { success: false, message: 'Not authenticated' };
         }
 
+        // Get userId from stored user data
+        const user = UserService.getStoredUser();
+        if (!user?.id) {
+            return { success: false, message: 'User not found' };
+        }
+
         try {
-            const response = await fetch(`${BadgeService.API_BASE_URL}/soulbound-tokens/claim`, {
+            const response = await fetch(`${BadgeService.API_BASE_URL}/redemption/claim`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ code })
+                body: JSON.stringify({ 
+                    userId: user.id,
+                    code: code 
+                })
             });
 
             const data = await response.json();
 
             if (response.ok && data.success) {
-                // Extract badge info from response
-                const tokenData = data.token as SoulboundToken;
-                const claimedBadgeId = tokenData?.metadata?.badgeType?.toLowerCase() || badgeId;
-                const badgeName = tokenData?.name || 'Badge';
+                // Handle BADGE type response
+                if (data.type === 'BADGE' && data.data?.token) {
+                    const tokenData = data.data.token as SoulboundToken;
+                    const claimedBadgeId = tokenData?.metadata?.badgeType?.toLowerCase() || badgeId;
+                    const badgeName = tokenData?.name || 'Badge';
 
-                // Update cached tokens
-                if (tokenData) {
+                    // Update cached tokens
                     const tokens = this.getCachedTokens();
                     tokens.push(tokenData);
                     this.saveTokens(tokens);
+
+                    // Update legacy local storage
+                    const badges = this.getStoredBadges();
+                    const existingIndex = badges.findIndex(b => b.badgeId === claimedBadgeId);
+                    const newBadge: UserBadge = {
+                        badgeId: claimedBadgeId,
+                        claimed: true,
+                        claimedAt: tokenData?.issuedAt || new Date().toISOString(),
+                        code
+                    };
+
+                    if (existingIndex >= 0) {
+                        badges[existingIndex] = newBadge;
+                    } else {
+                        badges.push(newBadge);
+                    }
+                    this.saveBadges(badges);
+
+                    return { 
+                        success: true, 
+                        message: data.data.message || `Badge "${badgeName}" unlocked!`,
+                        badgeName 
+                    };
                 }
 
-                // Update legacy local storage
-                const badges = this.getStoredBadges();
-                const existingIndex = badges.findIndex(b => b.badgeId === claimedBadgeId);
-                const newBadge: UserBadge = {
-                    badgeId: claimedBadgeId,
-                    claimed: true,
-                    claimedAt: tokenData?.issuedAt || new Date().toISOString(),
-                    code
-                };
-
-                if (existingIndex >= 0) {
-                    badges[existingIndex] = newBadge;
-                } else {
-                    badges.push(newBadge);
-                }
-                this.saveBadges(badges);
-
+                // Handle other reward types (future-proof)
                 return { 
                     success: true, 
-                    message: data.message || `Badge "${badgeName}" claimed successfully!`,
-                    badgeName 
+                    message: data.data?.message || data.message || 'Code redeemed successfully!',
+                    badgeName: data.data?.token?.name
                 };
             } else {
-                return { success: false, message: data.message || 'Invalid code or badge already claimed' };
+                return { success: false, message: data.message || 'Invalid code or already redeemed' };
             }
         } catch (error) {
             console.error('Error claiming badge:', error);
