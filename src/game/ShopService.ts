@@ -558,4 +558,30 @@ export class ShopService {
         socketService.buyLand();
         return true;
     }
+
+    /**
+     * Buy shop item via WebSocket (fire-and-forget)
+     * Uses the game gateway: ws://localhost:3000/game
+     * Emit: 'buy_shop_item', { shopType: "GOLD" | "GEM", itemKey: string }
+     * Response comes via:
+     * - 'action_success' with purchase details
+     * - 'currency_update' with new balances
+     * - 'inventory_update' if item has rewards (seeds/tools)
+     * - 'land_update' if land plot was unlocked (GEM shop)
+     * @param shopType - "GOLD" or "GEM"
+     * @param itemKey - The item key to purchase
+     * @returns true if WebSocket was used, false if not connected
+     */
+    static buyShopItemWS(shopType: 'GOLD' | 'GEM', itemKey: string): boolean {
+        const socketService = getSocketService();
+        
+        if (!socketService.isConnected()) {
+            console.log('[ShopService] WebSocket not connected for buy_shop_item');
+            return false;
+        }
+
+        console.log(`[ShopService] Buying ${shopType} shop item via WebSocket:`, itemKey);
+        socketService.buyShopItem(shopType, itemKey);
+        return true;
+    }
 }

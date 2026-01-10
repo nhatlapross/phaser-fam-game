@@ -125,6 +125,15 @@ export interface HarvestPlantPayload {
 }
 
 /**
+ * Payload for buy_shop_item event (Client -> Server)
+ * Used to purchase items from Gold or Gem shop via WebSocket
+ */
+export interface BuyShopItemPayload {
+    shopType: 'GOLD' | 'GEM';
+    itemKey: string;
+}
+
+/**
  * Response from server for water/harvest actions
  */
 export interface GameActionResponse {
@@ -161,6 +170,7 @@ export const SOCKET_EVENTS = {
     WATER_PLANT: 'water_plant',
     HARVEST_PLANT: 'harvest_plant',
     BUY_LAND: 'buy_land',
+    BUY_SHOP_ITEM: 'buy_shop_item',
     
     // Connection events
     CONNECT: 'connect',
