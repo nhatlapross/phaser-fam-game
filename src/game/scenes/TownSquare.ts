@@ -1581,7 +1581,15 @@ export class TownSquare extends Scene {
     }
 
     /**
+     * Check if device is in portrait mode
+     */
+    private isPortraitMode(): boolean {
+        return window.innerHeight > window.innerWidth;
+    }
+
+    /**
      * Create HTML input for chat (positioned using canvas scale calculations)
+     * Handles portrait mode with CSS rotation
      */
     private createChatInput(modalX: number, modalY: number, modalWidth: number, modalHeight: number) {
         // Remove existing input if any
@@ -1590,54 +1598,29 @@ export class TownSquare extends Scene {
             this.chatInputElement = null;
         }
 
-        // Get canvas rect and calculate scale factor
-        const canvas = this.game.canvas;
-        const canvasRect = canvas.getBoundingClientRect();
-
-        // Game dimensions vs actual canvas dimensions
+        // Game dimensions
         const gameWidth = this.scale.width;  // 960
         const gameHeight = this.scale.height; // 540
-        const scaleX = canvasRect.width / gameWidth;
-        const scaleY = canvasRect.height / gameHeight;
 
         // Send button is at x = modalWidth/2 - 40 from modal center, width 50
         // Input should be to the left of send button with 5px gap
         const sendButtonWidth = 50;
         const gap = 5;
         const inputWidthGame = modalWidth - 20 - sendButtonWidth - gap; // in game units
+        const inputHeightGame = 25;
 
-        // Calculate input position in game coordinates (relative to modal center)
-        const inputOffsetX = -modalWidth / 2 + 10; // left edge of input from modal center
-        const inputOffsetY = modalHeight / 2 - 40; // same Y as send button
-
-        // Convert to screen coordinates
-        const inputX = canvasRect.left + (modalX + inputOffsetX) * scaleX;
-        const inputY = canvasRect.top + (modalY + inputOffsetY) * scaleY - (25 * scaleY / 2); // center vertically
-        const inputWidth = inputWidthGame * scaleX;
-        const inputHeight = 25 * scaleY;
+        // Calculate input center position in game coordinates
+        const inputCenterX = modalX + (-modalWidth / 2 + 10) + inputWidthGame / 2;
+        const inputCenterY = modalY + (modalHeight / 2 - 40);
 
         // Create HTML input
         this.chatInputElement = document.createElement('input');
         this.chatInputElement.type = 'text';
-        this.chatInputElement.placeholder = 'Text your message...';
+        this.chatInputElement.placeholder = 'Type your message...';
         this.chatInputElement.maxLength = 100;
-        this.chatInputElement.style.cssText = `
-            position: fixed;
-            left: ${inputX}px;
-            top: ${inputY}px;
-            width: ${inputWidth}px;
-            height: ${inputHeight}px;
-            padding: 4px 8px;
-            font-family: 'PixelFont', Arial, sans-serif;
-            font-size: ${12 * scaleY}px;
-            background: #1A1A1A;
-            color: #FFFFFF;
-            border: 1px solid #5D4037;
-            border-radius: 4px;
-            outline: none;
-            z-index: 1000;
-            box-sizing: border-box;
-        `;
+
+        // Apply positioning based on orientation
+        this.applyChatInputStyles(inputCenterX, inputCenterY, inputWidthGame, inputHeightGame, gameWidth, gameHeight);
 
         // Handle Enter key
         this.chatInputElement.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -1655,18 +1638,97 @@ export class TownSquare extends Scene {
     }
 
     /**
-     * Reposition chat input when screen resizes
+     * Apply styles to chat input based on orientation
+     */
+    private applyChatInputStyles(
+        gameCenterX: number,
+        gameCenterY: number,
+        gameWidth: number,
+        gameHeight: number,
+        totalGameWidth: number,
+        totalGameHeight: number
+    ) {
+        if (!this.chatInputElement) return;
+
+        const isPortrait = this.isPortraitMode();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        if (isPortrait) {
+            // In portrait mode, the game is rotated 90deg clockwise via CSS
+            // Game X -> Screen Y, Game Y -> Screen X (inverted)
+            const scaleX = viewportHeight / totalGameWidth;
+            const scaleY = viewportWidth / totalGameHeight;
+
+            // Transform game coordinates to screen coordinates
+            const screenX = viewportWidth - (gameCenterY / totalGameHeight) * viewportWidth;
+            const screenY = (gameCenterX / totalGameWidth) * viewportHeight;
+
+            // Dimensions are swapped due to 90deg rotation
+            const screenWidth = gameWidth * scaleX;
+            const screenHeight = gameHeight * scaleY;
+
+            this.chatInputElement.style.cssText = `
+                position: fixed;
+                left: ${screenX}px;
+                top: ${screenY}px;
+                width: ${screenWidth}px;
+                height: ${screenHeight}px;
+                padding: 4px 8px;
+                font-family: 'PixelFont', Arial, sans-serif;
+                font-size: ${12 * scaleY}px;
+                background: #1A1A1A;
+                color: #FFFFFF;
+                border: 1px solid #5D4037;
+                border-radius: 4px;
+                outline: none;
+                z-index: 10000;
+                box-sizing: border-box;
+                transform: translate(-50%, -50%) rotate(90deg);
+                transform-origin: center center;
+            `;
+        } else {
+            // Landscape mode - normal positioning
+            const canvas = this.game.canvas;
+            const canvasRect = canvas.getBoundingClientRect();
+            const scaleX = canvasRect.width / totalGameWidth;
+            const scaleY = canvasRect.height / totalGameHeight;
+
+            const screenX = canvasRect.left + gameCenterX * scaleX;
+            const screenY = canvasRect.top + gameCenterY * scaleY;
+            const screenWidth = gameWidth * scaleX;
+            const screenHeight = gameHeight * scaleY;
+
+            this.chatInputElement.style.cssText = `
+                position: fixed;
+                left: ${screenX}px;
+                top: ${screenY}px;
+                width: ${screenWidth}px;
+                height: ${screenHeight}px;
+                padding: 4px 8px;
+                font-family: 'PixelFont', Arial, sans-serif;
+                font-size: ${12 * scaleY}px;
+                background: #1A1A1A;
+                color: #FFFFFF;
+                border: 1px solid #5D4037;
+                border-radius: 4px;
+                outline: none;
+                z-index: 10000;
+                box-sizing: border-box;
+                transform: translate(-50%, -50%);
+                transform-origin: center center;
+            `;
+        }
+    }
+
+    /**
+     * Reposition chat input when screen resizes or orientation changes
      */
     private repositionChatInput() {
         if (!this.chatInputElement || !this.chatModalOpen) return;
 
-        const canvas = this.game.canvas;
-        const canvasRect = canvas.getBoundingClientRect();
-
-        const gameWidth = this.scale.width;
-        const gameHeight = this.scale.height;
-        const scaleX = canvasRect.width / gameWidth;
-        const scaleY = canvasRect.height / gameHeight;
+        const gameWidth = this.scale.width;  // 960
+        const gameHeight = this.scale.height; // 540
 
         const modalWidth = 300;
         const modalHeight = 250;
@@ -1676,20 +1738,14 @@ export class TownSquare extends Scene {
         const sendButtonWidth = 50;
         const gap = 5;
         const inputWidthGame = modalWidth - 20 - sendButtonWidth - gap;
+        const inputHeightGame = 25;
 
-        const inputOffsetX = -modalWidth / 2 + 10;
-        const inputOffsetY = modalHeight / 2 - 40;
+        // Calculate input center position in game coordinates
+        const inputCenterX = modalX + (-modalWidth / 2 + 10) + inputWidthGame / 2;
+        const inputCenterY = modalY + (modalHeight / 2 - 40);
 
-        const inputX = canvasRect.left + (modalX + inputOffsetX) * scaleX;
-        const inputY = canvasRect.top + (modalY + inputOffsetY) * scaleY - (25 * scaleY / 2);
-        const inputWidth = inputWidthGame * scaleX;
-        const inputHeight = 25 * scaleY;
-
-        this.chatInputElement.style.left = `${inputX}px`;
-        this.chatInputElement.style.top = `${inputY}px`;
-        this.chatInputElement.style.width = `${inputWidth}px`;
-        this.chatInputElement.style.height = `${inputHeight}px`;
-        this.chatInputElement.style.fontSize = `${12 * scaleY}px`;
+        // Apply positioning based on current orientation
+        this.applyChatInputStyles(inputCenterX, inputCenterY, inputWidthGame, inputHeightGame, gameWidth, gameHeight);
     }
 
     /**
