@@ -964,7 +964,7 @@ export class GameDataService {
                 cachedGameData.inventory.backpack = {
                     userId: '',
                     backpack: [],
-                    capacity: { used: 0, max: 100, available: 100 }
+                    capacity: { total: 100, used: 0, max: 100, available: 100 }
                 };
             }
         }
@@ -1006,9 +1006,9 @@ export class GameDataService {
         // Update capacity
         if (cachedGameData.inventory.backpack.capacity) {
             const totalUsed = backpack.reduce((sum, item) => sum + item.amount, 0);
+            const maxCapacity = cachedGameData.inventory.backpack.capacity.max ?? cachedGameData.inventory.backpack.capacity.total;
             cachedGameData.inventory.backpack.capacity.used = totalUsed;
-            cachedGameData.inventory.backpack.capacity.available = 
-                cachedGameData.inventory.backpack.capacity.max - totalUsed;
+            cachedGameData.inventory.backpack.capacity.available = maxCapacity - totalUsed;
         }
 
         console.log('[GameDataService] Backpack cache updated from WebSocket:', backpack.length, 'items');

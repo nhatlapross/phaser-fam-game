@@ -574,9 +574,9 @@ export class FarmingGame extends Scene {
                 needsToolbarUpdate = true;
             }
             
-            // Update fertilizer counts (FERTILIZER_COMMON, FERTILIZER_UNCOMMON, FERTILIZER_RARE)
+            // Update fertilizer counts (FERTILIZER_COMMON, FERTILIZER_RARE, etc.)
             if (itemType.startsWith('FERTILIZER_')) {
-                const fertilizerType = itemType.replace('FERTILIZER_', '').toLowerCase() as 'common' | 'uncommon' | 'rare';
+                const fertilizerType = itemType.replace('FERTILIZER_', '').toLowerCase() as 'common' | 'rare' | 'epic' | 'legendary';
                 if (this.fertilizerCounts[fertilizerType] !== undefined) {
                     console.log(`[FarmingGame] Updating ${fertilizerType} fertilizer count: ${this.fertilizerCounts[fertilizerType]} -> ${item.amount}`);
                     this.fertilizerCounts[fertilizerType] = item.amount;

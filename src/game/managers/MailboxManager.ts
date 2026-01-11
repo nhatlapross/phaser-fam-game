@@ -6,6 +6,7 @@ import { RedeemService } from '../RedeemService';
 import { GameDataService } from '../GameDataService';
 import { getMissionSocketService, MissionUpdatedPayload } from '../MissionSocketService';
 import { EventBus } from '../EventBus';
+import { SocialSubmissionManager } from './SocialSubmissionManager';
 
 interface MailboxCallbacks {
     getSeedCounts: () => Record<PlantType, number>;
@@ -15,7 +16,7 @@ interface MailboxCallbacks {
     // Note: UI refresh is now handled by GameDataService.refreshAndUpdateUI()
 }
 
-// Submission type for missions
+// Submission type for missions - kept for backward compatibility
 type SubmissionType = 'link' | 'image';
 
 /**
@@ -38,6 +39,7 @@ export class MailboxManager extends BaseManager {
     private currentSubmissionType: SubmissionType = 'link';
     private shouldCloseMailbox: boolean = false;
     private tileSize: number;
+    private socialSubmissionManager: SocialSubmissionManager | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: MailboxCallbacks, tileSize: number) {
         super(scene);
@@ -1083,7 +1085,28 @@ export class MailboxManager extends BaseManager {
             if (mission.status === 'active') {
                 // Active mission - show submission form for social missions
                 if (mission.type === 'social') {
-                    this.createSubmissionForm(modalX + 15, modalY, modalWidth, modalHeight, actionY, mission.id);
+                    // Use reusable SocialSubmissionManager
+                    this.socialSubmissionManager = new SocialSubmissionManager(this.scene, {
+                        showToastMessage: (text, color) => this.callbacks.showToastMessage(text, color),
+                        playSuccessSound: () => this.callbacks.playSuccessSound(),
+                        onSubmitSuccess: async () => {
+                            this.closeMissionDetails();
+                            await this.preloadMissions();
+                            this.close();
+                            this.open();
+                        }
+                    });
+                    this.socialSubmissionManager.create({
+                        modalX: modalX + 15,
+                        modalY,
+                        modalWidth,
+                        modalHeight,
+                        actionY,
+                        missionId: mission.id,
+                        baseDepth: 5402
+                    });
+                    // Add elements to detail elements for cleanup
+                    this.missionDetailElements.push(...this.socialSubmissionManager.getElements());
                 } else {
                     // For non-social active missions, show "In Progress" status
                     const inProgressLabel = this.scene.add.text(modalX, actionY, '🔄 In Progress', {
@@ -1225,13 +1248,19 @@ export class MailboxManager extends BaseManager {
     }
 
     private closeMissionDetails(): void {
-        // Cleanup social link input
+        // Cleanup social submission manager
+        if (this.socialSubmissionManager) {
+            this.socialSubmissionManager.destroy();
+            this.socialSubmissionManager = null;
+        }
+
+        // Cleanup social link input (legacy - kept for backward compatibility)
         if (this.socialLinkInput && this.socialLinkInput.parentNode) {
             this.socialLinkInput.parentNode.removeChild(this.socialLinkInput);
         }
         this.socialLinkInput = null;
 
-        // Cleanup image file input
+        // Cleanup image file input (legacy - kept for backward compatibility)
         if (this.imageFileInput && this.imageFileInput.parentNode) {
             this.imageFileInput.parentNode.removeChild(this.imageFileInput);
         }

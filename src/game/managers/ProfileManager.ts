@@ -7,10 +7,12 @@ import { useGameState } from '../hooks/useGameState';
 import { NFTVoucherManager, SAMPLE_VOUCHERS } from './NFTVoucherManager';
 import { BadgeService, AVAILABLE_BADGES, Badge, SoulboundToken } from '../BadgeService';
 import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
+import { QuickActionsManager } from './QuickActionsManager';
 
 interface ProfileCallbacks {
     onLogout: () => void;
     onWalletConnected: (address: string) => void;
+    showToastMessage?: (text: string, color: number) => void;
 }
 
 /**
@@ -40,6 +42,9 @@ export class ProfileManager extends BaseManager {
     private badgesMask: Phaser.GameObjects.Graphics | null = null;
     private badgesLoading: boolean = false;
     private userBadges: SoulboundToken[] = [];
+
+    // Quick actions manager (mission button, etc.)
+    private quickActionsManager: QuickActionsManager | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: ProfileCallbacks) {
         super(scene);
@@ -204,6 +209,19 @@ export class ProfileManager extends BaseManager {
         bg.on('pointerdown', () => this.open());
         bg.on('pointerover', () => bg.setTint(0xcccccc));
         bg.on('pointerout', () => bg.clearTint());
+
+        // Create quick action buttons below profile panel
+        if (!this.quickActionsManager) {
+            this.quickActionsManager = new QuickActionsManager(this.scene, {
+                showToastMessage: this.callbacks.showToastMessage
+            });
+        }
+        this.quickActionsManager.createButtons(panelX, panelY, panelWidth, panelHeight);
+        
+        // Add quick action button elements to profile elements for camera ignore
+        this.quickActionsManager.getButtonElements().forEach(el => {
+            this.profileElements.push(el);
+        });
     }
 
     /**
@@ -1692,6 +1710,10 @@ export class ProfileManager extends BaseManager {
     public destroy(): void {
         this.closeEditForm();
         this.close();
+        if (this.quickActionsManager) {
+            this.quickActionsManager.destroy();
+            this.quickActionsManager = null;
+        }
         this.destroyProfileElements();
         super.destroy();
     }
