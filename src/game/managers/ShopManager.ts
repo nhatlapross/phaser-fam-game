@@ -62,6 +62,14 @@ export class ShopManager extends BaseManager {
         const shopX = factoryX - 80;
         const shopY = factoryY + 24;
 
+        this.createShopAt(shopX, shopY);
+    }
+
+    /**
+     * Create shop sprite at specific coordinates
+     * Used by TownSquare to position shop near fountain
+     */
+    public createShopAt(shopX: number, shopY: number): void {
         if (!this.scene.anims.exists('shop-idle')) {
             this.scene.anims.create({
                 key: 'shop-idle',

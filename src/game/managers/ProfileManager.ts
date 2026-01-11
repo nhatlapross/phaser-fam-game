@@ -654,7 +654,7 @@ export class ProfileManager extends BaseManager {
         // Profile fields
         const fieldStartY = avatarY + avatarSize / 2 + 35;
         const fieldSpacing = 26;
-        const labelX = modalX - modalWidth / 2 + 40;
+        const labelX = modalX - modalWidth / 2 + 50;
         const valueX = modalX - modalWidth / 2 + 95;
         const editX = modalX + modalWidth / 2 - 35;
 
@@ -749,36 +749,52 @@ export class ProfileManager extends BaseManager {
         // Reset scroll position
         this.badgesScrollY = 0;
 
-        // Show loading state
-        const loadingText = this.scene.add.text(modalX, contentStartY + contentHeight / 2, 'Loading badges...', {
-            fontSize: '10px',
-            fontFamily: 'PixelFont',
-            color: '#BCAAA4',
-            resolution: 2
-        });
-        loadingText.setOrigin(0.5);
-        loadingText.setDepth(5151);
-        this.scene.cameras.main.ignore(loadingText);
-        this.profileContentElements.push(loadingText);
+        // Check cache FIRST before showing any loading UI
+        const cachedData = GameDataService.getCachedData();
+        const hasCachedBadges = cachedData && cachedData.badges !== undefined;
 
-        // Fetch badges from API
-        this.badgesLoading = true;
-        try {
-            this.userBadges = await BadgeService.fetchSoulboundTokens();
-        } catch (error) {
-            console.error('[ProfileManager] Error fetching badges:', error);
-            this.userBadges = BadgeService.getCachedTokens();
+        if (hasCachedBadges) {
+            // Use cached badges - instant load, no loading text!
+            this.userBadges = cachedData.badges;
+            console.log('[ProfileManager] Using pre-loaded badges from cache:', this.userBadges.length);
+        } else {
+            // Need to fetch - show loading state
+            const loadingText = this.scene.add.text(modalX, contentStartY + contentHeight / 2, 'Loading badges...', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#BCAAA4',
+                resolution: 2
+            });
+            loadingText.setOrigin(0.5);
+            loadingText.setDepth(5151);
+            this.scene.cameras.main.ignore(loadingText);
+            this.profileContentElements.push(loadingText);
+
+            this.badgesLoading = true;
+            try {
+                this.userBadges = await BadgeService.fetchSoulboundTokens();
+            } catch (error) {
+                console.error('[ProfileManager] Error fetching badges:', error);
+                this.userBadges = BadgeService.getCachedTokens();
+            }
+            this.badgesLoading = false;
+
+            // Guard: Check if modal was closed while loading
+            if (!this.isOpen || this.activeTab !== 'badges') {
+                console.log('[ProfileManager] Modal closed or tab changed during badge loading, skipping render');
+                if (loadingText.active) loadingText.destroy();
+                return;
+            }
+
+            // Remove loading text
+            if (loadingText.active) loadingText.destroy();
         }
-        this.badgesLoading = false;
 
-        // If no badges from API, use mock data for testing
+        // If no badges, use mock data for testing
         if (this.userBadges.length === 0) {
             this.userBadges = this.getMockBadges();
             console.log('[ProfileManager] Using mock badges for testing');
         }
-
-        // Remove loading text
-        loadingText.destroy();
 
         // Grid configuration
         const columns = 5;
@@ -858,11 +874,11 @@ export class ProfileManager extends BaseManager {
             badgeBg.setInteractive({ useHandCursor: true });
             this.badgesContainer!.add(badgeBg);
 
-            // Badge icon (use rarity icon or category-based icon)
-            const badgeIcon = this.scene.add.text(x, y - 3, BadgeService.getRarityIcon(token.metadata?.rarity || 'COMMON'), {
-                fontSize: '18px',
-                resolution: 2
-            });
+            // Badge icon - use og-badge as default image
+            const badgeIcon = this.scene.add.image(x, y - 3, 'og-badge');
+            // Scale to fit within cell (leaving some padding)
+            const iconSize = cellSize - 12;
+            badgeIcon.setDisplaySize(iconSize, iconSize);
             badgeIcon.setOrigin(0.5);
             this.badgesContainer!.add(badgeIcon);
 
@@ -876,15 +892,6 @@ export class ProfileManager extends BaseManager {
                 badgeBg.setStrokeStyle(2, rarityColorHex);
             });
 
-            // Glow animation for badges
-            this.scene.tweens.add({
-                targets: badgeIcon,
-                scale: 1.1,
-                duration: 800,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
         });
 
         // Calculate if scrolling is needed
@@ -929,10 +936,10 @@ export class ProfileManager extends BaseManager {
         }
 
         // Stats
-        const statsText = this.scene.add.text(modalX, contentStartY + contentHeight - 10, `${this.userBadges.length} Badge${this.userBadges.length !== 1 ? 's' : ''} Collected`, {
+        const statsText = this.scene.add.text(modalX, contentStartY + contentHeight - 50, `${this.userBadges.length} Badge${this.userBadges.length !== 1 ? 's' : ''} Collected`, {
             fontSize: '9px',
             fontFamily: 'PixelFont',
-            color: '#4ade80',
+            color: '#000000',
             resolution: 2
         });
         statsText.setOrigin(0.5);

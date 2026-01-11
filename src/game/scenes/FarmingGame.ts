@@ -17,7 +17,6 @@ import { useGameState, GameStateHook, PlantUpdateHandler } from '../hooks';
 // Import managers
 import {
     CheckinManager,
-    ShopManager,
     FactoryManager,
     WarehouseManager,
     MailboxManager,
@@ -135,6 +134,9 @@ export class FarmingGame extends Scene {
     private actionButton!: Phaser.GameObjects.Arc;
     private actionButtonText!: Phaser.GameObjects.Text;
 
+    // Player movement speed (can be adjusted via buffs/items)
+    private playerSpeed: number = 64; // Base speed (reduced 20% from 80)
+
     // Check-in system
     private checkinModalOpen: boolean = false;
 
@@ -160,7 +162,6 @@ export class FarmingGame extends Scene {
 
     // ========== MANAGERS ==========
     private checkinManager!: CheckinManager;
-    private shopManager!: ShopManager;
     private factoryManager!: FactoryManager;
     private warehouseManager!: WarehouseManager;
     private mailboxManager!: MailboxManager;
@@ -226,9 +227,6 @@ export class FarmingGame extends Scene {
         // Create mailbox using manager
         this.mailboxManager.createMailbox();
         // Note: Missions are loaded from cache or API in loadGameDataFromCache()
-
-        // Create shop using manager
-        this.shopManager.createShop(this.TILE_SIZE);
 
         // Create well using manager
         this.wellManager.createWell();
@@ -341,20 +339,6 @@ export class FarmingGame extends Scene {
         // CheckinManager
         // Data refresh is handled by GameDataService.refreshAndUpdateUI()
         this.checkinManager = new CheckinManager(this, {
-            playSuccessSound: () => this.soundManager.playSuccessSound()
-        });
-
-        // ShopManager
-        // UI refresh is handled by GameDataService.refreshAndUpdateUI()
-        this.shopManager = new ShopManager(this, {
-            getPlayerGold: () => this.playerGold,
-            setPlayerGold: (value) => { this.playerGold = value; },
-            getPlayerGems: () => this.playerGems,
-            setPlayerGems: (value) => { this.playerGems = value; },
-            getSeedCounts: () => this.seedCounts,
-            getChestInventory: () => this.chestInventory,
-            setChestInventory: (inv) => { this.chestInventory = inv; },
-            getToolbarItems: () => this.toolbarItems,
             playSuccessSound: () => this.soundManager.playSuccessSound()
         });
 
@@ -3338,7 +3322,7 @@ export class FarmingGame extends Scene {
         }
 
         // Handle movement with collision check
-        const speed = 80;
+        const speed = this.playerSpeed;
         let velocityX = 0;
         let velocityY = 0;
 
@@ -3455,6 +3439,8 @@ export class FarmingGame extends Scene {
     }
 
     shutdown() {
+        console.log('🔄 [FarmingGame] shutdown - cleaning up resources');
+
         // Cleanup socket connection and event listeners
         if (this.plantUpdateHandler) {
             this.plantUpdateHandler.destroy();
@@ -3470,5 +3456,24 @@ export class FarmingGame extends Scene {
 
         EventBus.off('wallet-connected', this.onWalletConnected, this);
         this.scale.off('resize', this.onResize, this);
+
+        // Cleanup managers
+        this.soundManager?.destroy();
+        this.stationManager?.destroy();
+        this.profileManager?.destroy();
+        this.toolbarManager?.destroy();
+        this.checkinManager?.destroy();
+        this.factoryManager?.destroy();
+        this.mailboxManager?.destroy();
+        this.wellManager?.destroy();
+        this.warehouseManager?.destroy();
+        this.plotManager?.destroy();
+        this.plantDetailManager?.destroy();
+
+        // Stop all tweens to prevent memory leaks
+        this.tweens.killAll();
+
+        // Stop all time events (game loop, refresh timers, etc.)
+        this.time.removeAllEvents();
     }
 }

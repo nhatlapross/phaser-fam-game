@@ -86,7 +86,7 @@ export class ProfileScene extends Scene {
             return;
         }
 
-        const panelTop = centerY - panelHeight / 2;
+        const panelTop = centerY - panelHeight / 2 + 30;
 
         // Title
         const title = this.add.text(centerX, panelTop + 30, '👤 Profile', {
@@ -101,17 +101,17 @@ export class ProfileScene extends Scene {
         // Character preview + name + wallets
         this.createCharacterSection(centerX, panelTop + 80, panelWidth, user);
 
-        // My Badges section (scrollable grid)
-        this.createMyBadgesSection(centerX + 10, panelTop + 220, panelWidth - 30);
+        // My Badges section (inline with title)
+        this.createMyBadgesSection(centerX + 10, panelTop + 175, panelWidth - 30);
 
         // Unlock Badges section (scrollable list)
-        this.createUnlockBadgesSection(centerX + 10, panelTop + 295, panelWidth - 30);
+        this.createUnlockBadgesSection(centerX + 10, panelTop + 210, panelWidth - 30);
 
         // Navigation buttons - at bottom
-        this.createNavigationButtons(centerX, panelTop + 410);
+        this.createNavigationButtons(centerX + 10, panelTop + 350);
 
         // Logout button (small, top right)
-        this.createLogoutButton(centerX + panelWidth / 2 - 30, panelTop + 25);
+        this.createLogoutButton(centerX + panelWidth / 2 - 30, panelTop + 30);
         
         // Setup global scroll handlers
         this.setupScrollHandlers();
@@ -161,56 +161,201 @@ export class ProfileScene extends Scene {
         this.createWalletsSection(centerX, walletsStartY, panelWidth, user);
     }
 
+    // Track wallet modal state and elements
+    private walletElements: Phaser.GameObjects.GameObject[] = [];
+    private walletsUser: any = null;
+    private walletModalElements: Phaser.GameObjects.GameObject[] = [];
+    private walletModalOpen: boolean = false;
+
     private createWalletsSection(centerX: number, startY: number, panelWidth: number, user: any) {
+        this.walletsUser = user;
+
+        // Clear existing wallet elements
+        this.walletElements.forEach(el => (el as any)?.destroy?.());
+        this.walletElements = [];
+
         const leftX = centerX - panelWidth / 2 + 55;
-        const lineHeight = 18;
+        const evmAddress = user.walletAddress || user.address;
 
-        // Use real wallet addresses from API response
-        // API returns: walletAddress (EVM), walletAddressSui, walletAddressAptos, walletAddressCardano
-        const wallets = [
-            { chain: 'EVM', icon: '⟠', address: user.walletAddress || user.address, color: '#627EEA' },
-            { chain: 'Aptos', icon: '🔷', address: user.walletAddressAptos, color: '#2DD8A7' },
-            { chain: 'Sui', icon: '💧', address: user.walletAddressSui, color: '#6FBCF0' },
-            { chain: 'Cardano', icon: '🔵', address: user.walletAddressCardano, color: '#0033AD' }
-        ];
+        // Show only EVM address
+        const chainLabel = this.add.text(leftX, startY, 'EVM:', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        chainLabel.setStroke('#5D4037', 1);
+        this.walletElements.push(chainLabel);
 
-        wallets.forEach((wallet, index) => {
-            const y = startY + index * lineHeight;
-            
-            // Chain icon and name (left)
-            const chainLabel = this.add.text(leftX, y, `${wallet.icon} ${wallet.chain}:`, {
+        if (evmAddress) {
+            const shortAddr = `${evmAddress.slice(0, 6)}...${evmAddress.slice(-4)}`;
+            const addrText = this.add.text(leftX + 40, startY, shortAddr, {
                 fontSize: '10px',
                 fontFamily: 'PixelFont',
-                color: wallet.color,
+                color: '#FFFFFF', // White for better visibility
+                fontStyle: 'bold',
                 resolution: 2
             });
+            addrText.setStroke('#5D4037', 1);
+            this.walletElements.push(addrText);
+
+            // Copy button
+            const copyBtn = this.add.text(leftX + 140, startY, 'Copy', {
+                fontSize: '8px',
+                fontFamily: 'PixelFont',
+                color: '#4ade80',
+                resolution: 2
+            });
+            copyBtn.setInteractive({ useHandCursor: true });
+            this.walletElements.push(copyBtn);
+
+            copyBtn.on('pointerdown', async () => {
+                try {
+                    await navigator.clipboard.writeText(evmAddress);
+                    copyBtn.setText('Copied!');
+                    copyBtn.setColor('#86efac');
+                    this.time.delayedCall(1500, () => {
+                        if (copyBtn.active) {
+                            copyBtn.setText('Copy');
+                            copyBtn.setColor('#4ade80');
+                        }
+                    });
+                } catch {
+                    console.log('Copy failed');
+                }
+            });
+            copyBtn.on('pointerover', () => copyBtn.setColor('#86efac'));
+            copyBtn.on('pointerout', () => {
+                if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
+            });
+        }
+
+        // Check if there are other wallets
+        const hasOtherWallets = user.walletAddressAptos || user.walletAddressSui || user.walletAddressCardano;
+
+        if (hasOtherWallets) {
+            // More button - opens modal
+            const moreBtn = this.add.text(leftX + 185, startY, '▼ More', {
+                fontSize: '8px',
+                fontFamily: 'PixelFont',
+                color: '#4a90e2',
+                resolution: 2
+            });
+            moreBtn.setInteractive({ useHandCursor: true });
+            this.walletElements.push(moreBtn);
+
+            moreBtn.on('pointerdown', () => this.openWalletsModal(user));
+            moreBtn.on('pointerover', () => moreBtn.setColor('#6bb3ff'));
+            moreBtn.on('pointerout', () => moreBtn.setColor('#4a90e2'));
+        }
+    }
+
+    /**
+     * Open modal showing all wallet addresses
+     */
+    private openWalletsModal(user: any) {
+        if (this.walletModalOpen) return;
+        this.walletModalOpen = true;
+
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
+        const modalWidth = 280;
+        const modalHeight = 180;
+
+        // Overlay
+        const overlay = this.add.rectangle(centerX, centerY, this.scale.width, this.scale.height, 0x000000, 0.8);
+        overlay.setDepth(100);
+        overlay.setInteractive();
+        this.walletModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.add.sprite(centerX, centerY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(101);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+            e.stopPropagation();
+        });
+        this.walletModalElements.push(modalBg);
+
+        // Animate
+        modalBg.setScale(0);
+        this.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        // Title
+        const title = this.add.text(centerX, centerY - modalHeight / 2 + 25, '🔗 All Wallets', {
+            fontSize: '12px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(102);
+        title.setStroke('#5D4037', 2);
+        this.walletModalElements.push(title);
+
+        // All wallets list
+        const wallets = [
+            { chain: 'EVM', address: user.walletAddress || user.address },
+            { chain: 'Aptos', address: user.walletAddressAptos },
+            { chain: 'Sui', address: user.walletAddressSui },
+            { chain: 'Cardano', address: user.walletAddressCardano }
+        ];
+
+        const listStartY = centerY - modalHeight / 2 + 50;
+        const leftX = centerX - modalWidth / 2 + 45;
+
+        wallets.forEach((wallet, index) => {
+            const y = listStartY + index * 24;
+
+            const label = this.add.text(leftX, y, `${wallet.chain}:`, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            label.setDepth(102);
+            label.setStroke('#5D4037', 1);
+            this.walletModalElements.push(label);
 
             if (wallet.address) {
-                // Shortened address (center)
-                const shortAddr = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
-                const addrText = this.add.text(leftX + 90, y, shortAddr, {
+                const shortAddr = `${wallet.address.slice(0, 8)}...${wallet.address.slice(-6)}`;
+                const addrText = this.add.text(leftX + 70, y, shortAddr, {
                     fontSize: '10px',
                     fontFamily: 'PixelFont',
-                    color: '#BCAAA4',
+                    color: '#FFFFFF',
+                    fontStyle: 'bold',
                     resolution: 2
                 });
+                addrText.setDepth(102);
+                this.walletModalElements.push(addrText);
 
-                // Copy button (right)
-                const copyBtn = this.add.text(leftX + 210, y, 'Copy', {
+                const copyBtn = this.add.text(leftX + 185, y, 'Copy', {
                     fontSize: '8px',
                     fontFamily: 'PixelFont',
                     color: '#4ade80',
                     resolution: 2
                 });
+                copyBtn.setDepth(102);
                 copyBtn.setInteractive({ useHandCursor: true });
+                this.walletModalElements.push(copyBtn);
+
                 copyBtn.on('pointerdown', async () => {
                     try {
                         await navigator.clipboard.writeText(wallet.address!);
                         copyBtn.setText('Copied!');
                         copyBtn.setColor('#86efac');
                         this.time.delayedCall(1500, () => {
-                            copyBtn.setText('Copy');
-                            copyBtn.setColor('#4ade80');
+                            if (copyBtn.active) {
+                                copyBtn.setText('Copy');
+                                copyBtn.setColor('#4ade80');
+                            }
                         });
                     } catch {
                         console.log('Copy failed');
@@ -221,23 +366,51 @@ export class ProfileScene extends Scene {
                     if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
                 });
             } else {
-                // Not linked yet
-                this.add.text(leftX + 90, y, 'Not linked', {
+                const notLinked = this.add.text(leftX + 70, y, 'Not linked', {
                     fontSize: '10px',
                     fontFamily: 'PixelFont',
                     color: '#6b7280',
                     resolution: 2
                 });
+                notLinked.setDepth(102);
+                this.walletModalElements.push(notLinked);
             }
         });
+
+        // Close button
+        const closeBtn = this.add.text(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, '✕', {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        closeBtn.setOrigin(0.5);
+        closeBtn.setDepth(103);
+        closeBtn.setInteractive({ useHandCursor: true });
+        this.walletModalElements.push(closeBtn);
+
+        closeBtn.on('pointerdown', () => this.closeWalletsModal());
+        closeBtn.on('pointerover', () => closeBtn.setColor('#ff6b6b'));
+        closeBtn.on('pointerout', () => closeBtn.setColor('#FFFFFF'));
+
+        overlay.on('pointerdown', () => this.closeWalletsModal());
     }
 
+    private closeWalletsModal() {
+        this.walletModalOpen = false;
+        this.walletModalElements.forEach(el => (el as any)?.destroy?.());
+        this.walletModalElements = [];
+    }
+
+    // Track badge modal state
+    private badgeModalElements: Phaser.GameObjects.GameObject[] = [];
+    private badgeModalOpen: boolean = false;
+
     /**
-     * Create "My Badges" section with scrollable grid
+     * Create "My Badges" section with inline badges (max 5, with more button)
      */
     private createMyBadgesSection(centerX: number, startY: number, panelWidth: number) {
         const viewportWidth = panelWidth - 40;
-        const viewportHeight = 55; // Compact height for owned badges
         const leftX = centerX - viewportWidth / 2;
 
         // Section title
@@ -248,74 +421,231 @@ export class ProfileScene extends Scene {
             resolution: 2
         });
         title.setStroke('#5D4037', 2);
-
-        const contentStartY = startY + 16;
-
-        // Create mask
-        this.myBadgesMask = this.add.graphics();
-        this.myBadgesMask.fillRect(leftX, contentStartY, viewportWidth, viewportHeight);
-        const mask = this.myBadgesMask.createGeometryMask();
-
-        // Create container
-        this.myBadgesContainer = this.add.container(0, 0);
-        this.myBadgesContainer.setMask(mask);
+        this.badgeElements.push(title);
 
         const claimedBadges = AVAILABLE_BADGES.filter(b => BadgeService.isBadgeClaimed(b.id));
-        
+
+        // Show badges inline with title (max 5)
+        const maxInlineBadges = 5;
+        const badgesToShow = claimedBadges.slice(0, maxInlineBadges);
+        const badgeSize = 22;
+        const badgeSpacing = 4;
+        const badgesStartX = leftX + 85; // After title
+
         if (claimedBadges.length === 0) {
-            const noBadges = this.add.text(centerX, contentStartY + viewportHeight / 2, 'No badges yet', {
+            const noBadges = this.add.text(badgesStartX, startY, 'No badges yet', {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
                 color: '#6b7280',
                 resolution: 2
             });
-            noBadges.setOrigin(0.5);
-            this.myBadgesContainer.add(noBadges);
+            this.badgeElements.push(noBadges);
         } else {
-            // Grid of owned badges
-            const columns = 7;
-            const cellSize = 28;
-            const cellSpacing = 5;
-            const gridStartX = leftX + 15;
-            let contentHeight = 0;
+            // Display badges inline
+            badgesToShow.forEach((badge, index) => {
+                const x = badgesStartX + index * (badgeSize + badgeSpacing) + badgeSize / 2;
+                const y = startY + 5;
 
-            claimedBadges.forEach((badge, index) => {
-                const col = index % columns;
-                const row = Math.floor(index / columns);
-                const x = gridStartX + col * (cellSize + cellSpacing) + cellSize / 2;
-                const y = contentStartY + row * (cellSize + cellSpacing) + cellSize / 2;
-
-                const badgeBg = this.add.rectangle(x, y, cellSize, cellSize, 0x2d5a3d, 0.8);
-                badgeBg.setStrokeStyle(2, 0x4ade80);
+                const badgeBg = this.add.rectangle(x, y, badgeSize, badgeSize, 0x2d5a3d, 0.8);
+                badgeBg.setStrokeStyle(1, 0x4ade80);
                 badgeBg.setInteractive({ useHandCursor: true });
-                this.myBadgesContainer.add(badgeBg);
                 this.badgeElements.push(badgeBg);
 
                 const badgeIcon = this.add.text(x, y, badge.icon, {
-                    fontSize: '14px',
+                    fontSize: '12px',
                     resolution: 2
                 });
                 badgeIcon.setOrigin(0.5);
-                this.myBadgesContainer.add(badgeIcon);
                 this.badgeElements.push(badgeIcon);
 
                 badgeBg.on('pointerover', () => {
                     badgeBg.setStrokeStyle(2, 0xFFD700);
-                    this.showBadgeTooltip(x, y - cellSize / 2 - 20 + this.myBadgesScrollY, badge);
+                    this.showBadgeTooltip(x, y - badgeSize / 2 - 20, badge);
                 });
                 badgeBg.on('pointerout', () => {
-                    badgeBg.setStrokeStyle(2, 0x4ade80);
+                    badgeBg.setStrokeStyle(1, 0x4ade80);
                     this.hideBadgeTooltip();
                 });
-
-                contentHeight = (row + 1) * (cellSize + cellSpacing);
             });
 
-            this.myBadgesMaxScrollY = Math.max(0, contentHeight - viewportHeight);
+            // Show "more" button if there are more than 5 badges
+            if (claimedBadges.length > maxInlineBadges) {
+                const moreX = badgesStartX + maxInlineBadges * (badgeSize + badgeSpacing) + 15;
+                const moreBtn = this.add.text(moreX, startY + 5, `+${claimedBadges.length - maxInlineBadges}`, {
+                    fontSize: '9px',
+                    fontFamily: 'PixelFont',
+                    color: '#4a90e2',
+                    resolution: 2
+                });
+                moreBtn.setOrigin(0.5);
+                moreBtn.setInteractive({ useHandCursor: true });
+                this.badgeElements.push(moreBtn);
+
+                moreBtn.on('pointerdown', () => this.openBadgesModal(claimedBadges));
+                moreBtn.on('pointerover', () => moreBtn.setColor('#6bb3ff'));
+                moreBtn.on('pointerout', () => moreBtn.setColor('#4a90e2'));
+            }
         }
 
-        // Store bounds for scroll detection
-        this.myBadgesBounds = { x: leftX, y: contentStartY, width: viewportWidth, height: viewportHeight };
+        // No scrollable container needed for inline badges
+        this.myBadgesBounds = null;
+        this.myBadgesMaxScrollY = 0;
+    }
+
+    /**
+     * Open modal showing all badges
+     */
+    private openBadgesModal(badges: Badge[]) {
+        if (this.badgeModalOpen) return;
+        this.badgeModalOpen = true;
+
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
+        const modalWidth = 280;
+        const modalHeight = 220;
+
+        // Overlay
+        const overlay = this.add.rectangle(centerX, centerY, this.scale.width, this.scale.height, 0x000000, 0.8);
+        overlay.setDepth(100);
+        overlay.setInteractive();
+        this.badgeModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.add.sprite(centerX, centerY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(101);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+            e.stopPropagation();
+        });
+        this.badgeModalElements.push(modalBg);
+
+        // Animate
+        modalBg.setScale(0);
+        this.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        // Title
+        const title = this.add.text(centerX, centerY - modalHeight / 2 + 25, '🏆 All My Badges', {
+            fontSize: '12px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(102);
+        title.setStroke('#5D4037', 2);
+        this.badgeModalElements.push(title);
+
+        // Badge grid
+        const columns = 6;
+        const cellSize = 32;
+        const cellSpacing = 6;
+        const gridWidth = columns * cellSize + (columns - 1) * cellSpacing;
+        const gridStartX = centerX - gridWidth / 2 + cellSize / 2;
+        const gridStartY = centerY - modalHeight / 2 + 55;
+
+        badges.forEach((badge, index) => {
+            const col = index % columns;
+            const row = Math.floor(index / columns);
+            const x = gridStartX + col * (cellSize + cellSpacing);
+            const y = gridStartY + row * (cellSize + cellSpacing);
+
+            const badgeBg = this.add.rectangle(x, y, cellSize, cellSize, 0x2d5a3d, 0.8);
+            badgeBg.setStrokeStyle(2, 0x4ade80);
+            badgeBg.setDepth(102);
+            badgeBg.setInteractive({ useHandCursor: true });
+            this.badgeModalElements.push(badgeBg);
+
+            const badgeIcon = this.add.text(x, y, badge.icon, {
+                fontSize: '16px',
+                resolution: 2
+            });
+            badgeIcon.setOrigin(0.5);
+            badgeIcon.setDepth(103);
+            this.badgeModalElements.push(badgeIcon);
+
+            badgeBg.on('pointerover', () => {
+                badgeBg.setStrokeStyle(2, 0xFFD700);
+                this.showBadgeTooltipModal(x, y - cellSize / 2 - 20, badge);
+            });
+            badgeBg.on('pointerout', () => {
+                badgeBg.setStrokeStyle(2, 0x4ade80);
+                this.hideBadgeTooltipModal();
+            });
+        });
+
+        // Close button
+        const closeBtn = this.add.text(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, '✕', {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        closeBtn.setOrigin(0.5);
+        closeBtn.setDepth(103);
+        closeBtn.setInteractive({ useHandCursor: true });
+        this.badgeModalElements.push(closeBtn);
+
+        closeBtn.on('pointerdown', () => this.closeBadgesModal());
+        closeBtn.on('pointerover', () => closeBtn.setColor('#ff6b6b'));
+        closeBtn.on('pointerout', () => closeBtn.setColor('#FFFFFF'));
+
+        overlay.on('pointerdown', () => this.closeBadgesModal());
+    }
+
+    private badgeModalTooltip: Phaser.GameObjects.Container | null = null;
+
+    private showBadgeTooltipModal(x: number, y: number, badge: Badge): void {
+        this.hideBadgeTooltipModal();
+
+        const container = this.add.container(x, y);
+        container.setDepth(150);
+
+        const bg = this.add.rectangle(0, 0, 100, 32, 0x3E2723, 0.95);
+        bg.setStrokeStyle(1, 0x5D4037);
+        container.add(bg);
+
+        const nameText = this.add.text(0, 0, badge.name, {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#4ade80',
+            resolution: 2
+        });
+        nameText.setOrigin(0.5);
+        container.add(nameText);
+
+        this.badgeModalTooltip = container;
+        this.badgeModalElements.push(container);
+
+        container.setAlpha(0);
+        container.setScale(0.8);
+        this.tweens.add({
+            targets: container,
+            alpha: 1,
+            scale: 1,
+            duration: 100,
+            ease: 'Back.easeOut'
+        });
+    }
+
+    private hideBadgeTooltipModal(): void {
+        if (this.badgeModalTooltip) {
+            this.badgeModalTooltip.destroy();
+            this.badgeModalTooltip = null;
+        }
+    }
+
+    private closeBadgesModal() {
+        this.badgeModalOpen = false;
+        this.badgeModalElements.forEach(el => (el as any)?.destroy?.());
+        this.badgeModalElements = [];
+        this.badgeModalTooltip = null;
     }
 
     /**
@@ -323,7 +653,7 @@ export class ProfileScene extends Scene {
      */
     private createUnlockBadgesSection(centerX: number, startY: number, panelWidth: number) {
         const viewportWidth = panelWidth - 40;
-        const viewportHeight = 70; // Height for unlock badges list
+        const viewportHeight = 90; // Height for unlock badges list
         const leftX = centerX - viewportWidth / 2;
 
         const unclaimedBadges = BadgeService.getClaimableBadges().filter(b => !BadgeService.isBadgeClaimed(b.id));
@@ -1118,5 +1448,9 @@ export class ProfileScene extends Scene {
     shutdown() {
         this.closeClaimForm();
         this.closeQRScanner();
+        this.closeBadgesModal();
+        this.closeWalletsModal();
+        this.walletElements.forEach(el => (el as any)?.destroy?.());
+        this.walletElements = [];
     }
 }

@@ -1,5 +1,6 @@
 // src/game/GameDataService.ts
 // Service to batch fetch all game data during loading screen
+// Supports localStorage caching for instant game loading on subsequent visits
 
 import { UserService } from './UserService';
 import { GardenService, GardenResponse } from './GardenService';
@@ -10,7 +11,9 @@ import { MissionService, Mission } from './MissionService';
 import { StreakService, StreakStatusResponse, StreakHistoryResponse } from './StreakService';
 import { ShopService, GoldShopResponse, GemShopResponse, CashShopResponse } from './ShopService';
 import { InventoryService, StorageResponse, BackpackResponse } from './InventoryService';
+import { BadgeService, SoulboundToken } from './BadgeService';
 import { PlantType } from './types/GameTypes';
+import { GameCache, CACHE_KEYS, CACHE_TTL } from './utils/GameCache';
 
 // Types for pre-loaded data
 export interface UserData {
@@ -71,6 +74,7 @@ export interface GameData {
     streak: StreakData;
     shop: ShopData;
     inventory: InventoryData;
+    badges: SoulboundToken[];
     loadedAt: number;
 }
 
@@ -84,10 +88,21 @@ export class GameDataService {
     /**
      * Batch fetch all game data in parallel
      * Call this during loading screen before entering the game
+     *
+     * Loading strategy:
+     * 1. Check localStorage cache first
+     * 2. If valid cache exists → return immediately (instant load!)
+     * 3. If cache is stale but exists → return cached, trigger background refresh
+     * 4. If no cache → fetch from API (normal load)
+     *
      * @param onProgress Optional callback for progress updates (0-100)
+     * @param forceRefresh Skip cache and always fetch from API
      * @returns Promise<GameData> with all pre-loaded data
      */
-    static async fetchAllGameData(onProgress?: (progress: number) => void): Promise<GameData> {
+    static async fetchAllGameData(
+        onProgress?: (progress: number) => void,
+        forceRefresh: boolean = false
+    ): Promise<GameData> {
         const token = UserService.getAccessToken();
 
         if (!token) {
@@ -103,10 +118,35 @@ export class GameDataService {
                 streak: { status: null, history: null },
                 shop: { goldShop: null, gemShop: null, cashShop: null },
                 inventory: { storage: null, backpack: null },
+                badges: [],
                 loadedAt: Date.now()
             };
             cachedGameData = emptyData;
             return emptyData;
+        }
+
+        // Check localStorage cache first (unless force refresh)
+        if (!forceRefresh) {
+            const localCache = GameCache.get<GameData>(CACHE_KEYS.GAME_DATA);
+            if (localCache) {
+                const cacheAge = GameCache.getAge(CACHE_KEYS.GAME_DATA);
+                console.log(`[GameDataService] Found localStorage cache (age: ${GameCache.formatAge(cacheAge)})`);
+
+                // Update in-memory cache
+                cachedGameData = localCache;
+                onProgress?.(100);
+
+                // If cache is stale, trigger background refresh
+                if (GameCache.isStale(CACHE_KEYS.GAME_DATA, CACHE_TTL.GAME_DATA)) {
+                    console.log('[GameDataService] Cache is stale, refreshing in background...');
+                    this.fetchAndCacheInBackground();
+                }
+
+                return localCache;
+            }
+            console.log('[GameDataService] No valid cache found, fetching from API...');
+        } else {
+            console.log('[GameDataService] Force refresh requested, fetching from API...');
         }
 
         onProgress?.(10);
@@ -127,7 +167,8 @@ export class GameDataService {
             gemShopResult,
             cashShopResult,
             storageResult,
-            backpackResult
+            backpackResult,
+            badgesResult
         ] = await Promise.allSettled([
             UserService.getUserProfile(),
             GardenService.getGarden(),
@@ -142,7 +183,8 @@ export class GameDataService {
             ShopService.getGemShop(),
             ShopService.getCashShop(),
             InventoryService.getStorage(),
-            InventoryService.getBackpack()
+            InventoryService.getBackpack(),
+            BadgeService.fetchSoulboundTokens()
         ]);
 
         onProgress?.(80);
@@ -199,6 +241,7 @@ export class GameDataService {
                 storage: storageResult.status === 'fulfilled' ? storageResult.value : null,
                 backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null
             },
+            badges: badgesResult.status === 'fulfilled' ? badgesResult.value : [],
             loadedAt: Date.now()
         };
 
@@ -248,8 +291,11 @@ export class GameDataService {
 
         onProgress?.(100);
 
-        // Cache the data
+        // Cache the data in memory
         cachedGameData = gameData;
+
+        // Save to localStorage for next visit
+        this.saveToLocalStorage(gameData);
 
         console.log('All game data loaded:', {
             user: gameData.user?.username,
@@ -291,9 +337,156 @@ export class GameDataService {
 
     /**
      * Clear cached data (call when logging out or switching accounts)
+     * Clears both in-memory and localStorage cache
      */
     static clearCache(): void {
         cachedGameData = null;
+        GameCache.remove(CACHE_KEYS.GAME_DATA);
+        console.log('[GameDataService] Cleared all caches');
+    }
+
+    // ============================================
+    // localStorage caching methods
+    // ============================================
+
+    /**
+     * Save game data to localStorage
+     */
+    private static saveToLocalStorage(data: GameData): void {
+        const saved = GameCache.set(CACHE_KEYS.GAME_DATA, data, CACHE_TTL.GAME_DATA);
+        if (saved) {
+            console.log('[GameDataService] Saved to localStorage');
+        }
+    }
+
+    /**
+     * Fetch and cache data in background (non-blocking)
+     * Used for stale-while-revalidate pattern
+     */
+    private static async fetchAndCacheInBackground(): Promise<void> {
+        try {
+            // Fetch fresh data without progress callback
+            const freshData = await this.fetchFromAPI();
+
+            // Update caches
+            cachedGameData = freshData;
+            this.saveToLocalStorage(freshData);
+
+            console.log('[GameDataService] Background refresh completed');
+
+            // Trigger UI update if callback is registered
+            this.triggerUIUpdate();
+        } catch (error) {
+            console.error('[GameDataService] Background refresh failed:', error);
+            // Keep using stale cache - don't clear it
+        }
+    }
+
+    /**
+     * Internal method to fetch data from API without cache logic
+     */
+    private static async fetchFromAPI(): Promise<GameData> {
+        // Fetch all data in parallel using Promise.allSettled
+        const [
+            userResult,
+            gardenResult,
+            seedsResult,
+            fertilizersResult,
+            fruitsResult,
+            currenciesResult,
+            missionsResult,
+            streakStatusResult,
+            streakHistoryResult,
+            goldShopResult,
+            gemShopResult,
+            cashShopResult,
+            storageResult,
+            backpackResult,
+            badgesResult
+        ] = await Promise.allSettled([
+            UserService.getUserProfile(),
+            GardenService.getGarden(),
+            SeedService.getSeedInventory(),
+            FertilizerService.getFertilizerInventory(),
+            FruitService.getFruitInventory(),
+            FruitService.getCurrencyBalances(),
+            MissionService.getMissions(),
+            StreakService.getStatus(),
+            StreakService.getHistory(7),
+            ShopService.getGoldShop(),
+            ShopService.getGemShop(),
+            ShopService.getCashShop(),
+            InventoryService.getStorage(),
+            InventoryService.getBackpack(),
+            BadgeService.fetchSoulboundTokens()
+        ]);
+
+        // Extract results with fallbacks
+        const storedUser = UserService.getStoredUser();
+        const profileUser = userResult.status === 'fulfilled' ? userResult.value : null;
+
+        let mergedUser: UserData | null = null;
+        if (profileUser) {
+            const characterType = storedUser?.characterType || profileUser.characterType || 1;
+            mergedUser = {
+                ...profileUser,
+                walletAddressSui: profileUser.walletAddressSui || storedUser?.walletAddressSui,
+                walletAddressAptos: profileUser.walletAddressAptos || storedUser?.walletAddressAptos,
+                walletAddressCardano: profileUser.walletAddressCardano || storedUser?.walletAddressCardano,
+                characterType,
+            };
+        } else if (storedUser) {
+            mergedUser = storedUser;
+        }
+
+        return {
+            user: mergedUser,
+            garden: gardenResult.status === 'fulfilled' ? gardenResult.value : [],
+            seeds: seedsResult.status === 'fulfilled' ? seedsResult.value : [],
+            fertilizers: fertilizersResult.status === 'fulfilled' ? fertilizersResult.value : null,
+            fruits: fruitsResult.status === 'fulfilled' ? fruitsResult.value : [],
+            currencies: currenciesResult.status === 'fulfilled'
+                ? currenciesResult.value
+                : { gold: 0, gem: 0 },
+            missions: missionsResult.status === 'fulfilled' ? missionsResult.value : null,
+            streak: {
+                status: streakStatusResult.status === 'fulfilled' ? streakStatusResult.value : null,
+                history: streakHistoryResult.status === 'fulfilled' ? streakHistoryResult.value : null
+            },
+            shop: {
+                goldShop: goldShopResult.status === 'fulfilled' ? goldShopResult.value : null,
+                gemShop: gemShopResult.status === 'fulfilled' ? gemShopResult.value : null,
+                cashShop: cashShopResult.status === 'fulfilled' ? cashShopResult.value : null
+            },
+            inventory: {
+                storage: storageResult.status === 'fulfilled' ? storageResult.value : null,
+                backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null
+            },
+            badges: badgesResult.status === 'fulfilled' ? badgesResult.value : [],
+            loadedAt: Date.now()
+        };
+    }
+
+    /**
+     * Get cache statistics for debugging
+     */
+    static getCacheStats(): {
+        inMemory: boolean;
+        localStorage: boolean;
+        age: string;
+        isStale: boolean;
+        size: string;
+    } {
+        const stats = GameCache.getStats();
+        const gameDataEntry = stats.entries.find(e => e.key === CACHE_KEYS.GAME_DATA);
+
+        return {
+            inMemory: cachedGameData !== null,
+            localStorage: GameCache.has(CACHE_KEYS.GAME_DATA),
+            age: GameCache.formatAge(gameDataEntry?.age ?? null),
+            isStale: GameCache.isStale(CACHE_KEYS.GAME_DATA, CACHE_TTL.GAME_DATA),
+            size: GameCache.formatSize(gameDataEntry?.size ?? 0)
+        };
     }
 
     /**
@@ -613,6 +806,10 @@ export class GameDataService {
             this.refreshFertilizers(),
             this.refreshFruits()
         ]);
+        // Update localStorage cache with refreshed data
+        if (cachedGameData) {
+            this.saveToLocalStorage(cachedGameData);
+        }
     }
 
     /**
@@ -627,6 +824,10 @@ export class GameDataService {
             this.refreshFruits(),
             this.refreshStorage()
         ]);
+        // Update localStorage cache with refreshed data
+        if (cachedGameData) {
+            this.saveToLocalStorage(cachedGameData);
+        }
         this.triggerUIUpdate();
     }
 

@@ -16,6 +16,7 @@ interface CheckinCallbacks {
  */
 export class CheckinManager extends BaseManager {
     private checkinSign!: Phaser.GameObjects.Image;
+    private notificationIcon!: Phaser.GameObjects.Image;
     private callbacks: CheckinCallbacks;
     private cachedStreakStatus: StreakStatusResponse | null = null;
     private cachedStreakHistory: StreakHistoryResponse | null = null;
@@ -36,6 +37,8 @@ export class CheckinManager extends BaseManager {
             status: status ? 'loaded' : 'null',
             historyCount: history?.checkins?.length ?? 0
         });
+        // Update notification icon visibility
+        this.updateNotificationIcon();
     }
 
     /**
@@ -44,8 +47,9 @@ export class CheckinManager extends BaseManager {
     public createCheckinSign(tileSize: number): void {
         const centerX = 25;
         const centerY = 25;
-        const signX = (centerX - 3) * tileSize + tileSize / 2;
-        const signY = (centerY - 1) * tileSize + tileSize / 2;
+        // Position in front of warehouse (warehouse is at centerY - 5)
+        const signX = (centerX - 2) * tileSize + tileSize / 2;
+        const signY = (centerY - 4) * tileSize + tileSize / 2;
 
         this.checkinSign = this.scene.add.image(signX, signY, 'icon-checkin');
         this.checkinSign.setDisplaySize(16, 16);
@@ -58,6 +62,12 @@ export class CheckinManager extends BaseManager {
 
         // Setup hover effect with tint + shadow
         this.setupHoverEffect(this.checkinSign, 6);
+
+        // Create notification icon above the sign (hidden by default)
+        this.notificationIcon = this.scene.add.image(signX, signY - 14, 'icon-problem');
+        this.notificationIcon.setDisplaySize(12, 12);
+        this.notificationIcon.setDepth(signY + 100);
+        this.notificationIcon.setVisible(false);
     }
 
     /**
@@ -65,6 +75,28 @@ export class CheckinManager extends BaseManager {
      */
     public getCheckinSign(): Phaser.GameObjects.Image {
         return this.checkinSign;
+    }
+
+    /**
+     * Get the notification icon for camera ignore setup
+     */
+    public getNotificationIcon(): Phaser.GameObjects.Image {
+        return this.notificationIcon;
+    }
+
+    /**
+     * Update notification icon visibility based on check-in status
+     * Shows icon when user can check-in (hasn't checked in today)
+     */
+    public updateNotificationIcon(): void {
+        if (!this.notificationIcon) return;
+
+        // Check from cached status first, then fallback to local check
+        const canCheckin = this.cachedStreakStatus
+            ? this.cachedStreakStatus.canCheckinNow
+            : this.canCheckinToday();
+
+        this.notificationIcon.setVisible(canCheckin);
     }
 
     /**

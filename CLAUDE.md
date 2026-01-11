@@ -557,3 +557,336 @@ const input = document.createElement('input');
 const screenX = canvasRect.left + gameX * scaleX;
 input.style.left = `${screenX}px`;
 ```
+
+---
+
+## Phaser UI Components (PhaserButton, PhaserTextInput)
+
+### Vấn đề với React/HTML UI trong Phaser
+
+Khi game cần hỗ trợ **portrait mode** với CSS rotation (xoay 90°):
+- React/HTML buttons **KHÔNG** tự động follow CSS transform của game container
+- HTML input positioning bị sai vì coordinate system khác nhau
+- Touch/pointer events bị lệch do CSS rotation không transform input
+
+**Giải pháp:** Vẽ UI components bằng Phaser Graphics để chúng nằm trong game coordinate system.
+
+### PhaserButton Component
+
+**File:** `src/game/ui/PhaserButton.ts`
+
+```typescript
+import { PhaserButton, ButtonPresets } from '../ui/PhaserButton';
+
+// Basic usage
+const button = new PhaserButton({
+    scene: this,
+    x: centerX,
+    y: centerY,
+    text: 'Click Me',
+    onClick: () => {
+        console.log('Button clicked!');
+    },
+});
+
+// With custom style
+const styledButton = new PhaserButton({
+    scene: this,
+    x: 100,
+    y: 200,
+    text: 'Buy Now',
+    style: {
+        width: 200,
+        height: 50,
+        backgroundColor: 0x6D4C41,
+        backgroundColorHover: 0x8D6E63,
+        backgroundColorPressed: 0x5D4037,
+        borderColor: 0x3E2723,
+        borderWidth: 3,
+        borderRadius: 8,
+        fontSize: '14px',
+        fontFamily: 'Arial, sans-serif',
+        textColor: '#FFFFFF',
+        textStroke: '#3E2723',
+        textStrokeThickness: 2,
+        shadowColor: 0x3E2723,
+        shadowOffsetY: 4,
+    },
+    onClick: () => handlePurchase(),
+    depth: 100,
+});
+
+// Using presets
+const goldButton = new PhaserButton({
+    scene: this,
+    x: 100,
+    y: 300,
+    text: 'Gold Action',
+    style: ButtonPresets.gold,
+    onClick: () => {},
+});
+
+// Available presets: primary, secondary, danger, gold
+```
+
+### PhaserButton API
+
+```typescript
+// Methods
+button.setText('New Text');           // Change button text
+button.setDisabled(true);             // Disable button
+button.setDisabled(false);            // Enable button
+button.setCallback(() => {});         // Change click handler
+button.setButtonStyle({ ... });       // Update style
+button.setVisible(false);             // Hide button
+button.getIsDisabled();               // Check if disabled
+
+// Style options
+interface PhaserButtonStyle {
+    width?: number;
+    height?: number;
+    padding?: { x: number; y: number };
+
+    backgroundColor?: number;         // Normal state
+    backgroundColorHover?: number;    // Hover state
+    backgroundColorPressed?: number;  // Pressed state
+    backgroundColorDisabled?: number; // Disabled state
+
+    borderColor?: number;
+    borderColorHover?: number;
+    borderWidth?: number;
+    borderRadius?: number;
+
+    fontSize?: string;
+    fontFamily?: string;
+    textColor?: string;
+    textColorHover?: string;
+    textColorDisabled?: string;
+    textStroke?: string;
+    textStrokeThickness?: number;
+
+    shadowColor?: number;
+    shadowOffsetY?: number;
+}
+```
+
+### Khi nào dùng PhaserButton thay vì HTML/React Button
+
+| Trường hợp | Dùng PhaserButton | Dùng HTML Button |
+|------------|-------------------|------------------|
+| Game cần portrait mode | ✅ Yes | ❌ No |
+| Button trong game scene | ✅ Yes | ⚠️ Có thể |
+| Button trong React overlay | ❌ No | ✅ Yes |
+| Cần keyboard navigation | ⚠️ Hạn chế | ✅ Yes |
+| Cần form submission | ❌ No | ✅ Yes |
+
+---
+
+## Portrait Mode Support (CSS Rotation)
+
+### Cách CSS Rotation hoạt động
+
+Khi device ở portrait mode, game container (#app) được rotate 90° clockwise:
+
+```css
+@media screen and (orientation: portrait) {
+    #app {
+        position: fixed;
+        width: 100vh;
+        height: 100vw;
+        top: 0;
+        left: 100vw;
+        transform-origin: top left;
+        transform: rotate(90deg);
+    }
+}
+```
+
+### Coordinate Transformation
+
+Sau khi rotate 90° clockwise:
+- **Game X axis** → **Screen Y axis**
+- **Game Y axis** → **Screen X axis** (inverted)
+
+```typescript
+// Helper function
+private isPortraitMode(): boolean {
+    return window.innerHeight > window.innerWidth;
+}
+
+// Transform game coords to screen coords for HTML elements
+if (isPortraitMode) {
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // Game X → Screen Y, Game Y → Screen X (inverted)
+    const screenX = viewportWidth - (gameY / gameHeight) * viewportWidth;
+    const screenY = (gameX / gameWidth) * viewportHeight;
+}
+```
+
+### HTML Input trong Portrait Mode
+
+```typescript
+private applyChatInputStyles(
+    gameCenterX: number,
+    gameCenterY: number,
+    inputWidth: number,
+    inputHeight: number,
+    totalGameWidth: number,
+    totalGameHeight: number
+) {
+    if (!this.inputElement) return;
+
+    const isPortrait = this.isPortraitMode();
+
+    if (isPortrait) {
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        // Scale factors for portrait
+        const scaleX = viewportHeight / totalGameWidth;
+        const scaleY = viewportWidth / totalGameHeight;
+
+        // Transform coordinates
+        const screenX = viewportWidth - (gameCenterY / totalGameHeight) * viewportWidth;
+        const screenY = (gameCenterX / totalGameWidth) * viewportHeight;
+
+        // Dimensions are swapped due to rotation
+        const screenWidth = inputWidth * scaleX;
+        const screenHeight = inputHeight * scaleY;
+
+        this.inputElement.style.cssText = `
+            position: fixed;
+            left: ${screenX}px;
+            top: ${screenY}px;
+            width: ${screenWidth}px;
+            height: ${screenHeight}px;
+            transform: translate(-50%, -50%) rotate(90deg);
+            transform-origin: center center;
+            z-index: 10000;
+        `;
+    } else {
+        // Landscape - normal positioning
+        const canvas = this.game.canvas;
+        const canvasRect = canvas.getBoundingClientRect();
+        const scaleX = canvasRect.width / totalGameWidth;
+        const scaleY = canvasRect.height / totalGameHeight;
+
+        const screenX = canvasRect.left + gameCenterX * scaleX;
+        const screenY = canvasRect.top + gameCenterY * scaleY;
+
+        this.inputElement.style.cssText = `
+            position: fixed;
+            left: ${screenX}px;
+            top: ${screenY}px;
+            width: ${inputWidth * scaleX}px;
+            height: ${inputHeight * scaleY}px;
+            transform: translate(-50%, -50%);
+            z-index: 10000;
+        `;
+    }
+}
+```
+
+### Pointer Input Transformation (PhaserGame.tsx)
+
+Phaser's input system cũng cần transform coordinates cho portrait mode:
+
+```typescript
+// In PhaserGame.tsx
+useEffect(() => {
+    const setupInputTransform = () => {
+        if (!game.current) return;
+
+        const inputManager = game.current.input;
+        const originalTransformPointer = inputManager.transformPointer.bind(inputManager);
+
+        inputManager.transformPointer = function(
+            pointer: Phaser.Input.Pointer,
+            pageX: number,
+            pageY: number,
+            wasMove: boolean
+        ): void {
+            originalTransformPointer(pointer, pageX, pageY, wasMove);
+
+            // Transform for portrait mode (90deg clockwise CSS rotation)
+            if (isPortrait() && game.current) {
+                const gameWidth = game.current.scale.width;
+                const gameHeight = game.current.scale.height;
+                const screenWidth = window.innerWidth;
+                const screenHeight = window.innerHeight;
+
+                // Screen Y → Game X, Screen X → Game Y (inverted)
+                pointer.x = (pageY / screenHeight) * gameWidth;
+                pointer.y = ((screenWidth - pageX) / screenWidth) * gameHeight;
+                pointer.worldX = pointer.x;
+                pointer.worldY = pointer.y;
+            }
+        };
+    };
+    // ... setup and cleanup
+}, []);
+```
+
+### Checklist cho Portrait Mode Support
+
+| Step | Action |
+|------|--------|
+| 1 | Thêm CSS media query cho portrait orientation |
+| 2 | Override `transformPointer` trong PhaserGame.tsx |
+| 3 | Sử dụng PhaserButton thay vì HTML buttons |
+| 4 | HTML inputs cần `applyChatInputStyles()` pattern |
+| 5 | Test cả landscape và portrait modes |
+
+### ❌ KHÔNG hoạt động trong Portrait Mode
+
+```typescript
+// ❌ React buttons ngoài #app - không follow rotation
+<div style={{ position: 'fixed', top: '50%', left: '50%' }}>
+    <button>Click me</button>
+</div>
+
+// ❌ HTML input với fixed positioning - sai vị trí
+input.style.left = `${canvasRect.left + gameX * scaleX}px`;
+// Cần transform cho portrait mode!
+```
+
+### ✅ Hoạt động trong Portrait Mode
+
+```typescript
+// ✅ PhaserButton - tự động trong game coordinate system
+new PhaserButton({
+    scene: this,
+    x: centerX,
+    y: centerY,
+    text: 'Click Me',
+    onClick: () => {},
+});
+
+// ✅ HTML input với portrait transformation
+if (isPortraitMode()) {
+    const screenX = viewportWidth - (gameY / gameHeight) * viewportWidth;
+    const screenY = (gameX / gameWidth) * viewportHeight;
+    input.style.transform = 'translate(-50%, -50%) rotate(90deg)';
+}
+```
+
+---
+
+## UI Component Files
+
+```
+src/game/ui/
+├── index.ts              # Export all UI components
+├── PhaserButton.ts       # Reusable button component
+└── (future components)
+```
+
+### Adding New UI Components
+
+1. Tạo file mới trong `src/game/ui/`
+2. Extend `Phaser.GameObjects.Container`
+3. Implement hover/pressed/disabled states
+4. Export từ `index.ts`
+5. Document usage trong CLAUDE.md
