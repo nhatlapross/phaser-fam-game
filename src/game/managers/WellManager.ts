@@ -18,6 +18,7 @@ interface WellCallbacks {
 export class WellManager extends BaseManager {
     private wellSprite!: Phaser.GameObjects.Sprite;
     private tutorSprite!: Phaser.GameObjects.Sprite;
+    private notificationIcon!: Phaser.GameObjects.Image;
     private callbacks: WellCallbacks;
     private tileSize: number;
     private updateTimer?: Phaser.Time.TimerEvent;
@@ -72,6 +73,12 @@ export class WellManager extends BaseManager {
 
         // Setup hover effect with tint + shadow
         this.setupHoverEffect(this.wellSprite, 6);
+
+        // Create notification icon above the well (hidden by default)
+        this.notificationIcon = this.scene.add.image(wellX, wellY - 28, 'icon-problem');
+        this.notificationIcon.setDisplaySize(12, 12);
+        this.notificationIcon.setDepth(wellY + 100);
+        this.notificationIcon.setVisible(false);
 
         // Create turtle tutor next to the well (on the right side)
         this.createTutor(wellX, wellY);
@@ -128,6 +135,22 @@ export class WellManager extends BaseManager {
     }
 
     /**
+     * Update notification icon visibility based on water claim status
+     * Shows icon when water can be claimed
+     */
+    public updateNotificationIcon(): void {
+        if (!this.notificationIcon) return;
+        this.notificationIcon.setVisible(this.canClaimWater());
+    }
+
+    /**
+     * Get the notification icon for external access
+     */
+    public getNotificationIcon(): Phaser.GameObjects.Image {
+        return this.notificationIcon;
+    }
+
+    /**
      * Get time until next water is available (in seconds)
      */
     private getTimeUntilNextWater(): number {
@@ -151,9 +174,12 @@ export class WellManager extends BaseManager {
                 }
             }
             this.hasFetchedStatus = true; // Mark as fetched
+            // Update notification icon visibility
+            this.updateNotificationIcon();
         } catch (error) {
             console.error('Error fetching water status:', error);
             this.hasFetchedStatus = true; // Still mark as fetched to avoid infinite loading
+            this.updateNotificationIcon();
         }
     }
 
@@ -477,6 +503,7 @@ export class WellManager extends BaseManager {
         // 3. Set optimistic next claim time (4 hours from now)
         const optimisticNextClaim = new Date(Date.now() + 4 * 60 * 60 * 1000);
         this.nextClaimAt = optimisticNextClaim;
+        this.updateNotificationIcon(); // Hide notification
 
         // 4. Disable button
         claimBtn.disableInteractive();
@@ -532,6 +559,7 @@ export class WellManager extends BaseManager {
                 } else {
                     this.nextClaimAt = null; // Allow retry
                 }
+                this.updateNotificationIcon(); // Show notification if can retry
 
                 // Re-enable button
                 claimBtn.setInteractive({ useHandCursor: true });
@@ -547,6 +575,7 @@ export class WellManager extends BaseManager {
             statusText.setColor('#4CAF50');
             timerText.setText('Click to collect');
             this.nextClaimAt = null;
+            this.updateNotificationIcon(); // Show notification for retry
 
             claimBtn.setInteractive({ useHandCursor: true });
             claimBtnText.setText('Claim');

@@ -228,6 +228,11 @@ export class Preloader extends Scene
 
         // Check-in icon
         this.load.image('icon-checkin', 'icons/checkin.png');
+        this.load.image('icon-problem', 'icons/problem.png');
+
+        // Badge images
+        this.load.image('og-badge', 'badge/OG-badge.png');
+        this.load.image('ada-badge', 'badge/ADA-badge.png');
 
         // Lock land overlay for locked farm plots
         this.load.image('lock-land', 'objects/lock-land/lock-land.png');

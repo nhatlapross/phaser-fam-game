@@ -27,6 +27,18 @@ export class Login extends Scene {
         const bg = this.add.image(centerX, centerY, 'start-background');
         bg.setDisplaySize(this.scale.width, this.scale.height);
 
+        // "Power By OverGuild" text at center bottom
+        const powerByText = this.add.text(centerX, this.scale.height - 20, 'Power By OverGuild', {
+            fontSize: '14px',
+            fontFamily: 'Arial, sans-serif',
+            color: '#FFFFFF',
+            fontStyle: 'bold',
+            resolution: 2
+        });
+        powerByText.setOrigin(0.5, 1);
+        powerByText.setStroke('#5D4037', 4);
+        powerByText.setDepth(10);
+
         // Game name logo
         this.gameName = this.add.image(centerX, centerY - 70, 'game-name');
         this.gameName.setScale(0.85);

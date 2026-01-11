@@ -1,8 +1,10 @@
 // src/game/scenes/GameLoader.ts
 // Scene that loads all API data before entering the main game
+// Supports instant loading from localStorage cache
 
 import { Scene } from 'phaser';
 import { GameDataService } from '../GameDataService';
+import { GameCache, CACHE_KEYS } from '../utils/GameCache';
 
 export class GameLoader extends Scene {
     private loadingText!: Phaser.GameObjects.Text;
@@ -61,15 +63,25 @@ export class GameLoader extends Scene {
 
     private async loadGameData() {
         try {
+            // Check if we have cached data for faster loading
+            const hasCache = GameCache.has(CACHE_KEYS.GAME_DATA);
+
+            if (hasCache) {
+                // Instant load from cache
+                this.statusText.setText('Loading from cache...');
+                this.updateProgress(80);
+            } else {
+                this.statusText.setText('Fetching user profile...');
+            }
+
+            await this.delay(100); // Small delay for UI feedback
+
             // Update progress callback
             const onProgress = (progress: number) => {
                 this.updateProgress(progress);
             };
 
-            this.statusText.setText('Fetching user profile...');
-            await this.delay(100); // Small delay for UI feedback
-
-            // Fetch all game data
+            // Fetch all game data (will use cache if available)
             const gameData = await GameDataService.fetchAllGameData(onProgress);
 
             // Update status based on what was loaded
@@ -79,8 +91,9 @@ export class GameLoader extends Scene {
                 this.statusText.setText('Ready to play!');
             }
 
-            // Small delay to show completion
-            await this.delay(500);
+            // Shorter delay for cached load, longer for fresh load
+            const transitionDelay = hasCache ? 200 : 500;
+            await this.delay(transitionDelay);
 
             // Transition to game
             this.transitionToGame();

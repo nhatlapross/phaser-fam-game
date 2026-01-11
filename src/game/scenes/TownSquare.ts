@@ -1,7 +1,7 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { TOWN_SQUARE_MAP_DATA, TOWN_SQUARE_MAP_WIDTH, TOWN_SQUARE_MAP_HEIGHT } from './TownSquareMapData';
-import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType } from '../managers';
+import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager } from '../managers';
 import { GameDataService } from '../GameDataService';
 import { UserService } from '../UserService';
 import { LobbySocketService } from '../LobbySocketService';
@@ -40,6 +40,15 @@ export class TownSquare extends Scene {
     private joystickActive: boolean = false;
     private joystickPointer: Phaser.Input.Pointer | null = null;
 
+    // Player movement speed (can be adjusted via buffs/items)
+    private playerSpeed: number = 64; // Base speed (reduced 20% from 80)
+
+    // Speech bubble text scroll speed (ms per pixel width)
+    // Higher = slower scroll. Original: 100, Current: 140 (30% slower)
+    private readonly BUBBLE_SCROLL_SPEED = 140;
+    private readonly BUBBLE_MIN_DURATION = 2800;  // Minimum display time (ms)
+    private readonly BUBBLE_MAX_DURATION = 11200; // Maximum display time (ms)
+
     // Station for travel (using StationManager)
     private stationManager!: StationManager;
 
@@ -52,6 +61,10 @@ export class TownSquare extends Scene {
     // Toolbar manager
     private toolbarManager!: ToolbarManager;
     private selectedToolIndex: number = 0;
+
+    // Shop manager
+    private shopManager!: ShopManager;
+    private shopModalOpen: boolean = false;
 
     // Toolbar items (same as FarmingGame)
     private toolbarItems: ToolbarItem[] = [
@@ -89,6 +102,10 @@ export class TownSquare extends Scene {
     private speechBubble: Phaser.GameObjects.Container | null = null;
     private chatInputElement: HTMLInputElement | null = null;
     private chatHistoryText: Phaser.GameObjects.Text | null = null;
+
+    // Chat cooldown (prevent spam)
+    private readonly CHAT_COOLDOWN_MS = 10000; // 10 seconds cooldown
+    private lastChatTime: number = 0;
 
     // Lobby WebSocket service
     private lobbySocketService!: LobbySocketService;
@@ -201,6 +218,22 @@ export class TownSquare extends Scene {
             showToastMessage: (text, color) => this.showToastMessage(text, color),
             playSuccessSound: () => this.soundManager.playSuccessSound()
         });
+
+        // Create shop manager (near fountain, left side)
+        const gameState = useGameState(this);
+        this.shopManager = new ShopManager(this, {
+            getPlayerGold: () => gameState.getGold(),
+            setPlayerGold: (value) => { gameState.setGold(value); },
+            getPlayerGems: () => gameState.getGem(),
+            setPlayerGems: (value) => { gameState.setGem(value); },
+            getSeedCounts: () => this.seedCounts,
+            getChestInventory: () => this.chestInventory,
+            setChestInventory: (inv) => { this.chestInventory = inv; },
+            getToolbarItems: () => this.toolbarItems,
+            playSuccessSound: () => this.soundManager.playSuccessSound()
+        });
+        // Position shop at left side of fountain (tile 18, 32)
+        this.shopManager.createShopAt(18 * this.TILE_SIZE, 32 * this.TILE_SIZE);
 
         // Create marquee announcement
         this.createMarquee();
@@ -744,7 +777,20 @@ export class TownSquare extends Scene {
     }
 
     private handlePlayerMovement() {
-        const speed = 80;
+        // Don't allow movement when any modal is open or input is focused
+        // This prevents WASD keys from moving player while typing or interacting with UI
+        const isAnyModalOpen = this.chatModalOpen ||
+            this.profileManager?.getIsOpen() ||
+            this.stationManager?.getIsOpen() ||
+            this.shopManager?.getIsOpen() ||
+            (this.chatInputElement && document.activeElement === this.chatInputElement);
+
+        if (isAnyModalOpen) {
+            this.player.setVelocity(0, 0);
+            return;
+        }
+
+        const speed = this.playerSpeed;
         let velocityX = 0;
         let velocityY = 0;
         let direction = '';
@@ -903,15 +949,39 @@ export class TownSquare extends Scene {
         });
     }
 
-    destroy() {
+    /**
+     * Called when scene is stopped (via scene.start or scene.stop)
+     * CRITICAL: This is where cleanup must happen for scene transitions!
+     */
+    shutdown() {
+        console.log('🔄 [TownSquare] shutdown - cleaning up resources');
+
+        // Remove event listeners
         this.scale.off('resize', this.onResize, this);
+
+        // Cleanup managers
         this.soundManager?.destroy();
         this.stationManager?.destroy();
         this.profileManager?.destroy();
         this.toolbarManager?.destroy();
+        this.shopManager?.destroy();
 
-        // Cleanup lobby socket event listeners
+        // Cleanup lobby socket - disconnect to prevent orphaned connections
         this.cleanupLobbySocketListeners();
+        if (this.lobbySocketService) {
+            this.lobbySocketService.disconnect();
+        }
+
+        // Stop all tweens to prevent memory leaks
+        this.tweens.killAll();
+
+        // Stop all time events
+        this.time.removeAllEvents();
+    }
+
+    destroy() {
+        // destroy() calls shutdown() implicitly in Phaser, but we call it explicitly for safety
+        this.shutdown();
     }
 
     /**
@@ -1318,12 +1388,27 @@ export class TownSquare extends Scene {
         if (!this.chatHistoryText || !this.chatModalOpen) return;
 
         // Show last 10 messages (newest at bottom)
+        // Apply same wrapping logic as initial display
+        const maxMessageLength = 40; // Max chars per line before wrapping
         const displayMessages = this.chatHistory.slice(-10).map(msg => {
             const shortName = msg.username.length > 9
                 ? msg.username.substring(0, 9) + '...'
                 : msg.username;
             const scopeIcon = msg.scope === 'GLOBAL' ? '🌐' : '📍';
-            return `${scopeIcon} ${shortName}: ${msg.message}`;
+            const prefix = `${scopeIcon} ${shortName}: `;
+
+            // Wrap long messages manually (insert newlines)
+            let message = msg.message;
+            if (message.length > maxMessageLength) {
+                const wrappedLines: string[] = [];
+                for (let i = 0; i < message.length; i += maxMessageLength) {
+                    wrappedLines.push(message.substring(i, i + maxMessageLength));
+                }
+                // First line has prefix, subsequent lines are indented
+                const indent = '     '; // Indent for continuation lines
+                message = wrappedLines[0] + '\n' + wrappedLines.slice(1).map(line => indent + line).join('\n');
+            }
+            return `${prefix}${message}`;
         });
 
         this.chatHistoryText.setText(displayMessages.join('\n'));
@@ -1537,12 +1622,27 @@ export class TownSquare extends Scene {
         historyBg.setStrokeStyle(1, 0x5D4037);
 
         // Chat history text - show last 10 messages (newest at bottom)
+        // Limit message display to fit within chat area
+        const maxMessageLength = 40; // Max chars per line before wrapping
         const displayMessages = this.chatHistory.slice(-10).map(msg => {
             const shortName = msg.username.length > 9
                 ? msg.username.substring(0, 9) + '...'
                 : msg.username;
             const scopeIcon = msg.scope === 'GLOBAL' ? '🌐' : '📍';
-            return `${scopeIcon} ${shortName}: ${msg.message}`;
+            const prefix = `${scopeIcon} ${shortName}: `;
+
+            // Wrap long messages manually (insert newlines)
+            let message = msg.message;
+            if (message.length > maxMessageLength) {
+                const wrappedLines: string[] = [];
+                for (let i = 0; i < message.length; i += maxMessageLength) {
+                    wrappedLines.push(message.substring(i, i + maxMessageLength));
+                }
+                // First line has prefix, subsequent lines are indented
+                const indent = '     '; // Indent for continuation lines
+                message = wrappedLines[0] + '\n' + wrappedLines.slice(1).map(line => indent + line).join('\n');
+            }
+            return `${prefix}${message}`;
         });
 
         // Position text inside history area
@@ -1554,7 +1654,6 @@ export class TownSquare extends Scene {
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2,
-            wordWrap: { width: modalWidth - 45 },
             lineSpacing: 4
         });
 
@@ -1617,7 +1716,7 @@ export class TownSquare extends Scene {
         this.chatInputElement = document.createElement('input');
         this.chatInputElement.type = 'text';
         this.chatInputElement.placeholder = 'Type your message...';
-        this.chatInputElement.maxLength = 100;
+        this.chatInputElement.maxLength = 150;
 
         // Apply positioning based on orientation
         this.applyChatInputStyles(inputCenterX, inputCenterY, inputWidthGame, inputHeightGame, gameWidth, gameHeight);
@@ -1757,6 +1856,15 @@ export class TownSquare extends Scene {
         const message = this.chatInputElement.value.trim();
         if (!message) return;
 
+        // Check cooldown (prevent spam)
+        const now = Date.now();
+        const timeSinceLastChat = now - this.lastChatTime;
+        if (timeSinceLastChat < this.CHAT_COOLDOWN_MS) {
+            const remainingSeconds = Math.ceil((this.CHAT_COOLDOWN_MS - timeSinceLastChat) / 1000);
+            this.showToastMessage(`Please wait ${remainingSeconds}s before sending another message`, 0xFF9800);
+            return;
+        }
+
         // Check if connected to lobby
         if (!this.lobbySocketService?.isConnected()) {
             this.showToastMessage('Not connected to chat server', 0xFF5722);
@@ -1767,6 +1875,9 @@ export class TownSquare extends Scene {
         // Server will broadcast back via 'lobby_chat' event
         console.log('💬 [TownSquare] Sending global chat:', message);
         this.lobbySocketService.chatGlobal(message);
+
+        // Update last chat time for cooldown
+        this.lastChatTime = now;
 
         // Clear input
         this.chatInputElement.value = '';
@@ -1881,7 +1992,7 @@ export class TownSquare extends Scene {
         // Animate text scrolling from right to left
         const textWidth = textContent.width;
         const endX = -bubbleWidth / 2 - textWidth;
-        const duration = Math.min(Math.max(textWidth * 100, 2000), 8000);
+        const duration = Math.min(Math.max(textWidth * this.BUBBLE_SCROLL_SPEED, this.BUBBLE_MIN_DURATION), this.BUBBLE_MAX_DURATION);
 
         this.tweens.add({
             targets: textContent,
@@ -1994,7 +2105,7 @@ export class TownSquare extends Scene {
         // Animate text scrolling from right to left
         const textWidth = textContent.width;
         const endX = -bubbleWidth / 2 - textWidth;
-        const duration = Math.min(Math.max(textWidth * 100, 2000), 8000);
+        const duration = Math.min(Math.max(textWidth * this.BUBBLE_SCROLL_SPEED, this.BUBBLE_MIN_DURATION), this.BUBBLE_MAX_DURATION);
 
         this.tweens.add({
             targets: textContent,
