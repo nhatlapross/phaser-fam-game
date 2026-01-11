@@ -565,6 +565,12 @@ export class ShopManager extends BaseManager {
             buyBtn.on('pointerover', () => buyBtn.setTint(0xffff88));
             buyBtn.on('pointerout', () => buyBtn.clearTint());
             buyBtn.on('pointerdown', onBuy);
+        } else {
+            // Still allow clicking to attempt purchase - API will return error message
+            cardBg.setInteractive({ useHandCursor: true });
+            cardBg.on('pointerdown', onBuy);
+            buyBtn.setInteractive({ useHandCursor: true });
+            buyBtn.on('pointerdown', onBuy);
         }
     }
 
@@ -628,7 +634,7 @@ export class ShopManager extends BaseManager {
                     if (this.balanceText) {
                         this.balanceText.setText(`💰 ${previousGoldBalance}    💎 ${previousGemBalance}`);
                     }
-                    this.showMessage('Purchase failed!', '#F44336');
+                    this.showMessage(result?.message || 'Purchase failed!', '#F44336');
                 }
             } catch {
                 // Rollback on error
@@ -756,7 +762,7 @@ export class ShopManager extends BaseManager {
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
 
-        const msgText = this.scene.add.text(screenWidth / 2, screenHeight / 2 + 100, message, {
+        const msgText = this.scene.add.text(screenWidth / 2 + 10, screenHeight / 2 + 120, message, {
             fontSize: '12px',
             fontFamily: 'PixelFont',
             color: color,
@@ -764,15 +770,19 @@ export class ShopManager extends BaseManager {
         });
         msgText.setOrigin(0.5);
         msgText.setDepth(5400);
+        msgText.setStroke('#000000', 2);
         this.scene.cameras.main.ignore(msgText);
 
-        this.scene.tweens.add({
-            targets: msgText,
-            alpha: 0,
-            y: msgText.y - 30,
-            duration: 1500,
-            ease: 'Power2',
-            onComplete: () => msgText.destroy()
+        // Delay before fade out, then fade
+        this.scene.time.delayedCall(1500, () => {
+            this.scene.tweens.add({
+                targets: msgText,
+                alpha: 0,
+                y: msgText.y - 30,
+                duration: 1000,
+                ease: 'Power2',
+                onComplete: () => msgText.destroy()
+            });
         });
     }
 }

@@ -333,11 +333,11 @@ export class ShopService {
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 console.error("Error purchasing item:", errorData.message || response.statusText);
-                return null;
+                return { success: false, message: errorData.message || 'Purchase failed' } as GoldPurchaseResponse;
             }
         } catch (error) {
             console.error("Network error purchasing item:", error);
-            return null;
+            return { success: false, message: 'Not ready to buy' } as GoldPurchaseResponse;
         }
     }
 
@@ -369,11 +369,11 @@ export class ShopService {
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 console.error("Error purchasing gem item:", errorData.message || response.statusText);
-                return null;
+                return { success: false, message: errorData.message || 'Purchase failed' } as GemPurchaseResponse;
             }
         } catch (error) {
             console.error("Network error purchasing gem item:", error);
-            return null;
+            return { success: false, message: 'Network error' } as GemPurchaseResponse;
         }
     }
 
