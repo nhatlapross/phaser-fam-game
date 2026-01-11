@@ -1,13 +1,15 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
-import { UserService } from '../UserService'; // Import UserService
+import { UserService } from '../UserService';
+import { PhaserButton } from '../ui/PhaserButton';
 
 export class Login extends Scene {
     private gameName!: Phaser.GameObjects.Image;
     private subtitleText!: Phaser.GameObjects.Text;
+    private loginButton!: PhaserButton;
     private fromLogout: boolean = false;
     private ignoreWalletEvents: boolean = false;
-    private connectedAddress: string | null = null; // Store connected address
+    private connectedAddress: string | null = null;
 
     constructor() {
         super('Login');
@@ -80,14 +82,48 @@ export class Login extends Scene {
         EventBus.emit('current-scene-ready', this);
     }
 
-    private createBackground() {
-        // Background is now handled by the start-background image in create()
-        // This method is kept for compatibility
+    private createConnectButton(x: number, y: number) {
+        // Create login button using PhaserButton
+        this.loginButton = new PhaserButton({
+            scene: this,
+            x: x,
+            y: y,
+            text: 'Sign in with Google',
+            style: {
+                width: 220,
+                height: 50,
+                backgroundColor: 0x6D4C41,
+                backgroundColorHover: 0x8D6E63,
+                backgroundColorPressed: 0x5D4037,
+                borderColor: 0x3E2723,
+                borderWidth: 3,
+                borderRadius: 6,
+                fontSize: '14px',
+                fontFamily: 'Arial, sans-serif',
+                textColor: '#FFFFFF',
+                textStroke: '#3E2723',
+                textStrokeThickness: 2,
+                shadowColor: 0x3E2723,
+                shadowOffsetY: 4,
+            },
+            onClick: () => {
+                // Emit event to React to trigger Passport login
+                EventBus.emit('request-login');
+            },
+            depth: 100,
+        });
     }
 
-    private createConnectButton(_x: number, _y: number) {
-        // ConnectButton is rendered by React in App.tsx
-        // This method is kept for compatibility but does nothing
+    private hideLoginButton() {
+        if (this.loginButton) {
+            this.loginButton.setVisible(false);
+        }
+    }
+
+    private showLoginButton() {
+        if (this.loginButton) {
+            this.loginButton.setVisible(true);
+        }
     }
 
     private async onWalletConnected(address: string) {
@@ -99,8 +135,8 @@ export class Login extends Scene {
             return;
         }
 
-        // Safety check - make sure scene is active
-        if (!this.scene.isActive('Login') || !this.add) {
+        // Safety check - make sure scene exists and is active
+        if (!this.scene || !this.scene.isActive('Login') || !this.add) {
             console.log('Login: scene not active, skipping');
             return;
         }
@@ -135,6 +171,7 @@ export class Login extends Scene {
         // Hide Phaser UI elements
         this.gameName.setVisible(false);
         this.subtitleText.setVisible(false);
+        this.hideLoginButton();
 
         // Show connected message briefly
         const centerX = this.scale.width / 2;
@@ -169,6 +206,7 @@ export class Login extends Scene {
         console.log('Login: Registration complete for:', data.username, data.address);
         this.gameName.setVisible(true);
         this.subtitleText.setVisible(true);
+        this.hideLoginButton(); // Keep button hidden during transition
         
         // Set flag for transformation effect
         localStorage.setItem('fam_game_is_new_user', 'true');
@@ -177,7 +215,10 @@ export class Login extends Scene {
         this.transitionToProfile(data.address, true);
     }
 
-    private transitionToProfile(address: string, isNewUser: boolean) {
+    private transitionToProfile(address: string, _isNewUser: boolean) {
+        // Hide login button during transition
+        this.hideLoginButton();
+
         // Show connected message briefly then transition
         const centerX = this.scale.width / 2;
         const centerY = this.scale.height / 2;

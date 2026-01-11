@@ -1188,8 +1188,10 @@ export class ProfileManager extends BaseManager {
                 copyBtn.setText('Copied!');
                 copyBtn.setColor('#86efac');
                 this.scene.time.delayedCall(1500, () => {
-                    copyBtn.setText('Copy');
-                    copyBtn.setColor('#4ade80');
+                    if (copyBtn.active) {
+                        copyBtn.setText('Copy');
+                        copyBtn.setColor('#4ade80');
+                    }
                 });
             } catch {
                 // Fallback for older browsers
@@ -1204,8 +1206,10 @@ export class ProfileManager extends BaseManager {
                 copyBtn.setText('Copied!');
                 copyBtn.setColor('#86efac');
                 this.scene.time.delayedCall(1500, () => {
-                    copyBtn.setText('Copy');
-                    copyBtn.setColor('#4ade80');
+                    if (copyBtn.active) {
+                        copyBtn.setText('Copy');
+                        copyBtn.setColor('#4ade80');
+                    }
                 });
             }
         });

@@ -87,3 +87,37 @@ html, body {
         color: rgba(255, 255, 255, 0.3);
     }
 }
+
+/* Force landscape mode when device is in portrait */
+@media screen and (orientation: portrait) {
+    #app {
+        position: fixed;
+        width: 100vh;
+        height: 100vw;
+        top: 0;
+        left: 100vw;
+        transform-origin: top left;
+        transform: rotate(90deg);
+        overflow: hidden;
+        background: #000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    #game-container {
+        /* Game container maintains aspect ratio */
+        width: 100% !important;
+        height: calc(100vh * 540 / 960) !important; /* maintain 960:540 aspect ratio */
+        max-height: 100vw !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+
+    #game-container canvas {
+        width: 100% !important;
+        height: 100% !important;
+        touch-action: none;
+    }
+}
