@@ -66,7 +66,7 @@ export interface CashShopItem {
     key: string;
     name: string;
     description: string;
-    priceUSD: number;
+    priceUSD: number | null;  // null when price is not available
     icon: string;
     available: boolean;
     reward?: {
@@ -294,7 +294,28 @@ export class ShopService {
             );
 
             if (response.ok) {
-                return await response.json();
+                const data = await response.json();
+                
+                // Transform items to match CashShopItem interface
+                // API returns: { price: 0, currency: null, limitConfig: { priceUSD: 5 } }
+                // We need: { priceUSD: 5 }
+                if (data.items) {
+                    data.items = data.items.map((item: any) => ({
+                        key: item.key,
+                        name: item.name,
+                        description: item.description,
+                        // Get priceUSD from limitConfig, fallback to price, or null if not available
+                        priceUSD: item.limitConfig?.priceUSD ?? (item.currency && item.price ? item.price : null),
+                        icon: item.icon || '',
+                        // Item is available only if it has a valid price
+                        available: item.available && (item.limitConfig?.priceUSD != null || (item.currency && item.price > 0)),
+                        reward: item.rewardConfig,
+                        currentLandSlots: data.user?.currentLandSlots,
+                        maxLandSlot: data.user?.maxLandSlot,
+                    }));
+                }
+                
+                return data;
             } else {
                 console.error("Error fetching cash shop:", response.statusText);
                 return null;

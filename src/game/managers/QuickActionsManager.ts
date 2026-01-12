@@ -24,6 +24,12 @@ export class QuickActionsManager extends BaseManager {
     // Mission detail modal
     private missionDetailElements: Phaser.GameObjects.GameObject[] = [];
     private socialSubmissionManager: SocialSubmissionManager | null = null;
+    
+    // Notification elements
+    private notificationBadge: Phaser.GameObjects.Container | null = null;
+    private missionBtnBg: Phaser.GameObjects.Sprite | null = null;
+    private pulseTween: Phaser.Tweens.Tween | null = null;
+    private buttonGlowTween: Phaser.Tweens.Tween | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: QuickActionsCallbacks = {}) {
         super(scene);
@@ -43,12 +49,12 @@ export class QuickActionsManager extends BaseManager {
         const btnY = panelY + panelHeight / 2 + 20;
         
         // Mission button
-        const missionBtnBg = this.scene.add.sprite(panelX, btnY, 'square-buttons', 6);
-        missionBtnBg.setDisplaySize(panelWidth - 10, 28);
-        missionBtnBg.setDepth(5020);
-        missionBtnBg.setInteractive({ useHandCursor: true });
-        this.scene.cameras.main.ignore(missionBtnBg);
-        this.buttonElements.push(missionBtnBg);
+        this.missionBtnBg = this.scene.add.sprite(panelX, btnY, 'square-buttons', 6);
+        this.missionBtnBg.setDisplaySize(panelWidth - 10, 28);
+        this.missionBtnBg.setDepth(5020);
+        this.missionBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(this.missionBtnBg);
+        this.buttonElements.push(this.missionBtnBg);
 
         const missionBtnText = this.scene.add.text(panelX, btnY, '📋 Missions', {
             fontSize: '10px',
@@ -62,12 +68,162 @@ export class QuickActionsManager extends BaseManager {
         this.scene.cameras.main.ignore(missionBtnText);
         this.buttonElements.push(missionBtnText);
 
-        missionBtnBg.on('pointerdown', () => this.openMissionModal());
-        missionBtnBg.on('pointerover', () => missionBtnBg.setTint(0xcccccc));
-        missionBtnBg.on('pointerout', () => missionBtnBg.clearTint());
+        this.missionBtnBg.on('pointerdown', () => this.openMissionModal());
+        this.missionBtnBg.on('pointerover', () => {
+            if (!this.buttonGlowTween) {
+                this.missionBtnBg?.setTint(0xcccccc);
+            }
+        });
+        this.missionBtnBg.on('pointerout', () => {
+            if (!this.buttonGlowTween) {
+                this.missionBtnBg?.clearTint();
+            }
+        });
+
+        // Create notification badge (hidden by default)
+        this.createNotificationBadge(panelX - 28, btnY);
+
+        // Check for incomplete missions
+        this.updateNotificationBadge();
 
         // Future buttons can be added here below mission button
         // const nextBtnY = btnY + 35;
+    }
+
+    /**
+     * Create notification badge for incomplete missions
+     */
+    private createNotificationBadge(x: number, y: number): void {
+        this.notificationBadge = this.scene.add.container(x, y);
+        this.notificationBadge.setDepth(5022);
+        this.scene.cameras.main.ignore(this.notificationBadge);
+        
+        // Badge background (red circle)
+        const badgeBg = this.scene.add.circle(0, 0, 8, 0xef4444);
+        badgeBg.setStrokeStyle(1, 0xb91c1c);
+        this.notificationBadge.add(badgeBg);
+        
+        // Badge text (exclamation mark or count)
+        const badgeText = this.scene.add.text(0, 0, '!', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        badgeText.setOrigin(0.5);
+        badgeText.setName('badgeText');
+        this.notificationBadge.add(badgeText);
+        
+        // Initially hidden
+        this.notificationBadge.setVisible(false);
+        this.buttonElements.push(this.notificationBadge);
+    }
+
+    /**
+     * Update notification badge based on incomplete missions
+     */
+    public async updateNotificationBadge(): Promise<void> {
+        if (!this.notificationBadge) return;
+
+        // Get missions from cache or fetch
+        const cachedData = GameDataService.getCachedData();
+        let missions: Mission[] | null = cachedData?.missions || this.cachedMissions;
+        
+        if (!missions) {
+            missions = await MissionService.getMissions();
+            if (missions) {
+                this.cachedMissions = missions;
+            }
+        }
+
+        if (!missions) {
+            this.notificationBadge.setVisible(false);
+            this.stopPulseEffect();
+            return;
+        }
+
+        // Count incomplete missions (active, pending, or completed but not claimed)
+        const incompleteMissions = missions.filter(m => 
+            m.status === 'active' || m.status === 'pending' || m.status === 'completed'
+        );
+        
+        const count = incompleteMissions.length;
+        
+        if (count > 0) {
+            // Update badge text
+            const badgeText = this.notificationBadge.getByName('badgeText') as Phaser.GameObjects.Text;
+            if (badgeText) {
+                badgeText.setText(count > 9 ? '9+' : count.toString());
+            }
+            
+            this.notificationBadge.setVisible(true);
+            this.startPulseEffect();
+        } else {
+            this.notificationBadge.setVisible(false);
+            this.stopPulseEffect();
+        }
+    }
+
+    /**
+     * Start pulse animation effect for badge and button glow
+     */
+    private startPulseEffect(): void {
+        // Badge pulse
+        if (!this.pulseTween && this.notificationBadge) {
+            this.pulseTween = this.scene.tweens.add({
+                targets: this.notificationBadge,
+                scaleX: 1.2,
+                scaleY: 1.2,
+                duration: 500,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+        }
+        
+        // Button glow effect - use timeline for color alternation
+        if (!this.buttonGlowTween && this.missionBtnBg) {
+            // Create a custom property to animate
+            const glowTarget = { progress: 0 };
+            this.buttonGlowTween = this.scene.tweens.add({
+                targets: glowTarget,
+                progress: 1,
+                duration: 600,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut',
+                onUpdate: () => {
+                    if (this.missionBtnBg) {
+                        // Interpolate between normal (no tint) and orange/red
+                        if (glowTarget.progress > 0.5) {
+                            this.missionBtnBg.setTint(0xff6b35); // Orange-red color
+                        } else {
+                            this.missionBtnBg.clearTint();
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    /**
+     * Stop pulse animation effect
+     */
+    private stopPulseEffect(): void {
+        if (this.pulseTween) {
+            this.pulseTween.stop();
+            this.pulseTween = null;
+        }
+        if (this.buttonGlowTween) {
+            this.buttonGlowTween.stop();
+            this.buttonGlowTween = null;
+        }
+        if (this.notificationBadge) {
+            this.notificationBadge.setScale(1);
+        }
+        if (this.missionBtnBg) {
+            this.missionBtnBg.clearTint();
+        }
     }
 
 
@@ -82,6 +238,9 @@ export class QuickActionsManager extends BaseManager {
      * Destroy button elements
      */
     private destroyButtonElements(): void {
+        this.stopPulseEffect();
+        this.notificationBadge = null;
+        this.missionBtnBg = null;
         this.buttonElements.forEach(el => {
             if (el && el.destroy) el.destroy();
         });
@@ -146,6 +305,9 @@ export class QuickActionsManager extends BaseManager {
             if (el && el.destroy) el.destroy();
         });
         this.modalElements = [];
+        
+        // Update notification badge after closing modal
+        this.updateNotificationBadge();
     }
 
     /**
