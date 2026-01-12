@@ -35,7 +35,8 @@ import {
     PLANT_STAGES,
     PLANT_TYPES,
     CROP_DEFINITIONS,
-    DEATH_TIMER_MS
+    DEATH_TIMER_MS,
+    GAME_CONSTANTS
 } from '../managers';
 import { InventoryService, InventoryItem } from '../InventoryService';
 import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
@@ -2044,6 +2045,7 @@ export class FarmingGame extends Scene {
         );
 
         this.player.setCollideWorldBounds(true);
+        this.player.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         this.player.setDepth(this.player.y); // Dynamic depth based on Y position
 
         // Create animations for the selected character
