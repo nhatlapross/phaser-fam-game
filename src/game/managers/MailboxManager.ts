@@ -1831,6 +1831,9 @@ export class MailboxManager extends BaseManager {
             // Play success sound for successful redeem
             this.callbacks.playSuccessSound();
 
+            // Refresh inventory to update player's items after redeem
+            GameDataService.refreshAndUpdateUI();
+
             this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
 
             this.scene.time.delayedCall(3000, () => {
@@ -1902,10 +1905,12 @@ export class MailboxManager extends BaseManager {
             this.redeemResultElements.push(title);
 
             if (isLoading) {
+                // Draw spinner centered at (0,0) so rotation works correctly
                 const spinner = this.scene.add.graphics();
+                spinner.setPosition(modalX, modalY - 5); // Position the graphics object
                 spinner.lineStyle(2, 0x4a90e2, 1);
                 spinner.beginPath();
-                spinner.arc(modalX, modalY - 5, 15, Phaser.Math.DegToRad(0), Phaser.Math.DegToRad(270), false);
+                spinner.arc(0, 0, 15, Phaser.Math.DegToRad(0), Phaser.Math.DegToRad(270), false); // Draw at origin
                 spinner.strokePath();
                 spinner.setDepth(5502);
                 this.scene.cameras.main.ignore(spinner);

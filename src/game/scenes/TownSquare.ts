@@ -1,7 +1,7 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { TOWN_SQUARE_MAP_DATA, TOWN_SQUARE_MAP_WIDTH, TOWN_SQUARE_MAP_HEIGHT } from './TownSquareMapData';
-import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager } from '../managers';
+import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager, GAME_CONSTANTS } from '../managers';
 import { GameDataService } from '../GameDataService';
 import { UserService } from '../UserService';
 import { LobbySocketService } from '../LobbySocketService';
@@ -219,7 +219,7 @@ export class TownSquare extends Scene {
             playSuccessSound: () => this.soundManager.playSuccessSound()
         });
 
-        // Create shop manager (near fountain, left side)
+        // Create shop manager (near fountain, right side)
         const gameState = useGameState(this);
         this.shopManager = new ShopManager(this, {
             getPlayerGold: () => gameState.getGold(),
@@ -232,8 +232,8 @@ export class TownSquare extends Scene {
             getToolbarItems: () => this.toolbarItems,
             playSuccessSound: () => this.soundManager.playSuccessSound()
         });
-        // Position shop at left side of fountain (tile 18, 32)
-        this.shopManager.createShopAt(18 * this.TILE_SIZE, 32 * this.TILE_SIZE);
+        // Position shop at right side of fountain (tile 42, 32)
+        this.shopManager.createShopAt(42 * this.TILE_SIZE, 32 * this.TILE_SIZE);
 
         // Create marquee announcement
         this.createMarquee();
@@ -519,6 +519,7 @@ export class TownSquare extends Scene {
         // Create player with character from user data
         this.player = this.physics.add.sprite(startX, startY, this.currentCharacterKey, 0);
         this.player.setOrigin(0.5, 0.8);
+        this.player.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         this.player.setCollideWorldBounds(false);
         this.player.setDepth(startY);
 
@@ -1221,6 +1222,7 @@ export class TownSquare extends Scene {
         // Create sprite using character from user data
         const sprite = this.add.sprite(user.x, user.y, characterKey, 0);
         sprite.setOrigin(0.5, 0.8); // Same origin as main player
+        sprite.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         sprite.setDepth(user.y); // Depth based on Y position for proper layering
 
         // Play idle animation with correct character

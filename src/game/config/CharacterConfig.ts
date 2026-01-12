@@ -24,11 +24,13 @@ export interface CharacterDefinition {
  * Generated from: public/assets/characters/
  */
 export const PLAYABLE_CHARACTERS: CharacterDefinition[] = [
-    { key: 'bear', displayName: 'Bear', frameWidth: 48, frameHeight: 48 },
-    { key: 'boy', displayName: 'Boy', frameWidth: 48, frameHeight: 48 },
-    { key: 'lion', displayName: 'Lion', frameWidth: 48, frameHeight: 48 },
-    { key: 'panda', displayName: 'Panda', frameWidth: 48, frameHeight: 48 },
-    { key: 'rabit', displayName: 'Rabit', frameWidth: 48, frameHeight: 48 }
+    { key: 'Alice', displayName: 'Alice', frameWidth: 48, frameHeight: 48 },
+    { key: 'Jane', displayName: 'Jane', frameWidth: 48, frameHeight: 48 },
+    { key: 'Marry', displayName: 'Marry', frameWidth: 48, frameHeight: 48 },
+    { key: 'Peter', displayName: 'Peter', frameWidth: 48, frameHeight: 48 },
+    { key: 'RED', displayName: 'RED', frameWidth: 48, frameHeight: 48 },
+    { key: 'Shin', displayName: 'Shin', frameWidth: 48, frameHeight: 48 },
+    { key: 'Willi', displayName: 'Willi', frameWidth: 48, frameHeight: 48 }
 ];
 
 /**
