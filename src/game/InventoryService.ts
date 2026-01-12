@@ -20,6 +20,7 @@ export interface BackpackResponse {
         total: number;
         used: number;
         available: number;
+        max?: number;
     };
 }
 
@@ -29,6 +30,7 @@ export interface StorageResponse {
     summary: {
         totalTypes: number;
         totalItems: number;
+        categories?: number;
     };
 }
 

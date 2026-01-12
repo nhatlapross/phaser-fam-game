@@ -540,20 +540,54 @@ export class FarmingGame extends Scene {
 
     /**
      * Handle inventory_update event from socket
-     * Updates water count and other inventory items in real-time
+     * Updates water count, seeds, and other inventory items in real-time
      */
-    private onInventoryUpdate(items: Array<{ itemType: string; amount: number }>): void {
+    private onInventoryUpdate(items: Array<{ itemType: string; amount: number; location?: string }>): void {
         console.log('[FarmingGame] Received inventory_update:', items);
         
-        // Update water count from inventory
-        const waterItem = items.find(item => item.itemType === 'WATER');
-        if (waterItem) {
-            const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
-            if (wateringCan) {
-                console.log(`[FarmingGame] Updating water count: ${wateringCan.count} -> ${waterItem.amount}`);
-                wateringCan.count = waterItem.amount;
-                this.updateToolbar();
+        let needsToolbarUpdate = false;
+        
+        // Update GameDataService cache for warehouse/backpack
+        GameDataService.updateStorageCacheFromSocket(items);
+        GameDataService.updateBackpackCacheFromSocket(items);
+        
+        // Process each inventory item for toolbar
+        items.forEach(item => {
+            const itemType = item.itemType.toUpperCase();
+            
+            // Update water count
+            if (itemType === 'WATER') {
+                const wateringCan = this.toolbarItems.find(i => i.name === 'wateringCan');
+                if (wateringCan) {
+                    console.log(`[FarmingGame] Updating water count: ${wateringCan.count} -> ${item.amount}`);
+                    wateringCan.count = item.amount;
+                    needsToolbarUpdate = true;
+                }
             }
+            
+            // Update seed counts (SEED_ALGAE, SEED_MUSHROOM, SEED_TREE)
+            if (itemType.startsWith('SEED_')) {
+                const seedType = itemType.replace('SEED_', '');
+                const plantType = SeedService.mapSeedTypeToPlantType(seedType);
+                console.log(`[FarmingGame] Updating ${plantType} seed count: ${this.seedCounts[plantType]} -> ${item.amount}`);
+                this.seedCounts[plantType] = item.amount;
+                needsToolbarUpdate = true;
+            }
+            
+            // Update fertilizer counts (FERTILIZER_COMMON, FERTILIZER_RARE, etc.)
+            if (itemType.startsWith('FERTILIZER_')) {
+                const fertilizerType = itemType.replace('FERTILIZER_', '').toLowerCase() as 'common' | 'rare' | 'epic' | 'legendary';
+                if (this.fertilizerCounts[fertilizerType] !== undefined) {
+                    console.log(`[FarmingGame] Updating ${fertilizerType} fertilizer count: ${this.fertilizerCounts[fertilizerType]} -> ${item.amount}`);
+                    this.fertilizerCounts[fertilizerType] = item.amount;
+                    needsToolbarUpdate = true;
+                }
+            }
+        });
+        
+        // Update toolbar UI if any counts changed
+        if (needsToolbarUpdate) {
+            this.updateToolbar();
         }
     }
 

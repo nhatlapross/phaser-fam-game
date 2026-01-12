@@ -333,11 +333,11 @@ export class ShopService {
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 console.error("Error purchasing item:", errorData.message || response.statusText);
-                return null;
+                return { success: false, message: errorData.message || 'Purchase failed' } as GoldPurchaseResponse;
             }
         } catch (error) {
             console.error("Network error purchasing item:", error);
-            return null;
+            return { success: false, message: 'Not ready to buy' } as GoldPurchaseResponse;
         }
     }
 
@@ -369,11 +369,11 @@ export class ShopService {
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 console.error("Error purchasing gem item:", errorData.message || response.statusText);
-                return null;
+                return { success: false, message: errorData.message || 'Purchase failed' } as GemPurchaseResponse;
             }
         } catch (error) {
             console.error("Network error purchasing gem item:", error);
-            return null;
+            return { success: false, message: 'Network error' } as GemPurchaseResponse;
         }
     }
 
@@ -556,6 +556,32 @@ export class ShopService {
 
         console.log('[ShopService] Buying land via WebSocket');
         socketService.buyLand();
+        return true;
+    }
+
+    /**
+     * Buy shop item via WebSocket (fire-and-forget)
+     * Uses the game gateway: ws://localhost:3000/game
+     * Emit: 'buy_shop_item', { shopType: "GOLD" | "GEM", itemKey: string }
+     * Response comes via:
+     * - 'action_success' with purchase details
+     * - 'currency_update' with new balances
+     * - 'inventory_update' if item has rewards (seeds/tools)
+     * - 'land_update' if land plot was unlocked (GEM shop)
+     * @param shopType - "GOLD" or "GEM"
+     * @param itemKey - The item key to purchase
+     * @returns true if WebSocket was used, false if not connected
+     */
+    static buyShopItemWS(shopType: 'GOLD' | 'GEM', itemKey: string): boolean {
+        const socketService = getSocketService();
+        
+        if (!socketService.isConnected()) {
+            console.log('[ShopService] WebSocket not connected for buy_shop_item');
+            return false;
+        }
+
+        console.log(`[ShopService] Buying ${shopType} shop item via WebSocket:`, itemKey);
+        socketService.buyShopItem(shopType, itemKey);
         return true;
     }
 }

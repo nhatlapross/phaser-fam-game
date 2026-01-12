@@ -6,6 +6,7 @@ import { RedeemService } from '../RedeemService';
 import { GameDataService } from '../GameDataService';
 import { getMissionSocketService, MissionUpdatedPayload } from '../MissionSocketService';
 import { EventBus } from '../EventBus';
+import { SocialSubmissionManager } from './SocialSubmissionManager';
 
 interface MailboxCallbacks {
     getSeedCounts: () => Record<PlantType, number>;
@@ -15,7 +16,7 @@ interface MailboxCallbacks {
     // Note: UI refresh is now handled by GameDataService.refreshAndUpdateUI()
 }
 
-// Submission type for missions
+// Submission type for missions - kept for backward compatibility
 type SubmissionType = 'link' | 'image';
 
 /**
@@ -38,6 +39,7 @@ export class MailboxManager extends BaseManager {
     private currentSubmissionType: SubmissionType = 'link';
     private shouldCloseMailbox: boolean = false;
     private tileSize: number;
+    private socialSubmissionManager: SocialSubmissionManager | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: MailboxCallbacks, tileSize: number) {
         super(scene);
@@ -148,9 +150,9 @@ export class MailboxManager extends BaseManager {
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
-        // Responsive modal size - max 300px or 90% of screen width
+        // Responsive modal size - increased height for better visibility
         const modalWidth = Math.min(300, screenWidth * 0.9);
-        const modalHeight = Math.min(280, screenHeight * 0.8);
+        const modalHeight = Math.min(340, screenHeight * 0.85);
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
 
@@ -308,9 +310,9 @@ export class MailboxManager extends BaseManager {
         const contentY = modalY + 20;
         const contentElements: Phaser.GameObjects.GameObject[] = [];
 
-        // Scrollable area setup
+        // Scrollable area setup - increased height
         const scrollAreaTop = modalY - modalHeight / 2 + 85;
-        const scrollAreaHeight = 160;
+        const scrollAreaHeight = 220;
 
         // Create mask
         const maskGraphics = this.scene.make.graphics({ x: 0, y: 0 });
@@ -439,10 +441,12 @@ export class MailboxManager extends BaseManager {
                 (missionName as any).originalY = nameY;
 
                 // Progress bar
-                const barWidth = 120;
-                const barHeight = 8;
+                const barWidth = 100;
+                const barHeight = 10;
                 const barX = cardX - cardWidth / 2 + 35;
                 const barY = baseY + 8;
+                const isClaimed = mission.status === 'claimed';
+                const isCompleted = mission.status === 'completed';
 
                 const barBorder = this.scene.add.rectangle(barX, barY, barWidth + 2, barHeight + 2, 0x8B7355);
                 barBorder.setOrigin(0, 0.5);
@@ -453,7 +457,7 @@ export class MailboxManager extends BaseManager {
                 contentElements.push(barBorder);
                 (barBorder as any).originalY = barY;
 
-                const progressBarBg = this.scene.add.rectangle(barX + 1, barY, barWidth, barHeight, 0xFFF8E1);
+                const progressBarBg = this.scene.add.rectangle(barX + 1, barY, barWidth, barHeight, 0x3E2723);
                 progressBarBg.setOrigin(0, 0.5);
                 progressBarBg.setDepth(5305);
                 progressBarBg.setMask(scrollMask);
@@ -472,20 +476,128 @@ export class MailboxManager extends BaseManager {
                 contentElements.push(progressBarFill);
                 (progressBarFill as any).originalY = barY;
 
-                // Progress text
-                const progressText = this.scene.add.text(cardX + cardWidth / 2 - 25, baseY, `${mission.progress}/${mission.target}`, {
-                    fontSize: '9px',
+                // Progress text on the bar (white text with dark stroke for visibility)
+                const progressText = this.scene.add.text(barX + barWidth / 2, barY, `${mission.progress}/${mission.target}`, {
+                    fontSize: '8px',
                     fontFamily: 'PixelFont',
-                    color: isDone ? '#16a34a' : '#5D4037',
+                    color: '#FFFFFF',
                     resolution: 2
                 });
                 progressText.setOrigin(0.5);
-                progressText.setDepth(5304);
+                progressText.setDepth(5307);
+                progressText.setStroke('#000000', 2);
                 progressText.setMask(scrollMask);
                 this.scene.cameras.main.ignore(progressText);
                 this.addElement(progressText);
                 contentElements.push(progressText);
-                (progressText as any).originalY = baseY;
+                (progressText as any).originalY = barY;
+
+                // Right side: Reward display OR Claim button OR Claimed checkmark
+                const rightSideX = cardX + cardWidth / 2 - 30;
+
+                if (isClaimed) {
+                    // Show green checkmark for claimed missions
+                    const claimedCheck = this.scene.add.text(rightSideX, baseY, '✓', {
+                        fontSize: '16px',
+                        fontFamily: 'Arial',
+                        color: '#22c55e',
+                        resolution: 2
+                    });
+                    claimedCheck.setOrigin(0.5);
+                    claimedCheck.setDepth(5304);
+                    claimedCheck.setStroke('#166534', 2);
+                    claimedCheck.setMask(scrollMask);
+                    this.scene.cameras.main.ignore(claimedCheck);
+                    this.addElement(claimedCheck);
+                    contentElements.push(claimedCheck);
+                    (claimedCheck as any).originalY = baseY;
+                } else if (isCompleted) {
+                    // Show Claim button for completed missions
+                    const claimBtnBg = this.scene.add.rectangle(rightSideX, baseY, 50, 20, 0x22c55e);
+                    claimBtnBg.setDepth(5304);
+                    claimBtnBg.setStrokeStyle(1, 0x166534);
+                    claimBtnBg.setInteractive({ useHandCursor: true });
+                    claimBtnBg.setMask(scrollMask);
+                    this.scene.cameras.main.ignore(claimBtnBg);
+                    this.addElement(claimBtnBg);
+                    contentElements.push(claimBtnBg);
+                    (claimBtnBg as any).originalY = baseY;
+
+                    const claimBtnText = this.scene.add.text(rightSideX, baseY, 'Claim', {
+                        fontSize: '8px',
+                        fontFamily: 'PixelFont',
+                        color: '#FFFFFF',
+                        resolution: 2
+                    });
+                    claimBtnText.setOrigin(0.5);
+                    claimBtnText.setDepth(5305);
+                    claimBtnText.setStroke('#166534', 1);
+                    claimBtnText.setMask(scrollMask);
+                    this.scene.cameras.main.ignore(claimBtnText);
+                    this.addElement(claimBtnText);
+                    contentElements.push(claimBtnText);
+                    (claimBtnText as any).originalY = baseY;
+
+                    claimBtnBg.on('pointerover', () => claimBtnBg.setFillStyle(0x4ade80));
+                    claimBtnBg.on('pointerout', () => claimBtnBg.setFillStyle(0x22c55e));
+                    claimBtnBg.on('pointerdown', (pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+                        event.stopPropagation();
+                        this.claimMissionReward(mission.id);
+                    });
+                } else {
+                    // Show all rewards for active/pending missions - auto wrap with right alignment
+                    const rewardParts: string[] = [];
+                    if (mission.reward) {
+                        if (mission.reward.xp && mission.reward.xp > 0) {
+                            rewardParts.push(`⭐${mission.reward.xp}`);
+                        }
+                        if (mission.reward.reputation && mission.reward.reputation > 0) {
+                            rewardParts.push(`🏆${mission.reward.reputation}`);
+                        }
+                        if (mission.reward.items && mission.reward.items.length > 0) {
+                            mission.reward.items.forEach(item => {
+                                const icon = item.type === 'gold' ? '💰' : item.type === 'gem' ? '💎' : '🎁';
+                                rewardParts.push(`${icon}${item.amount}`);
+                            });
+                        }
+                    }
+
+                    // Determine items per row based on total count
+                    // 1-2: all in 1 row, 3-4: 2 per row, 5+: 3 per row
+                    const total = rewardParts.length;
+                    const maxPerRow = total <= 2 ? total : (total <= 4 ? 2 : 3);
+
+                    // Split into rows
+                    const rows: string[][] = [];
+                    for (let i = 0; i < total; i += maxPerRow) {
+                        rows.push(rewardParts.slice(i, i + maxPerRow));
+                    }
+
+                    const rowHeight = 11;
+                    const totalRows = rows.length;
+                    const startY = baseY - ((totalRows - 1) * rowHeight) / 2;
+
+                    rows.forEach((row, rowIdx) => {
+                        const rowText = row.join(' ');
+                        const rewardY = startY + rowIdx * rowHeight;
+
+                        const rewardDisplay = this.scene.add.text(rightSideX, rewardY, rowText, {
+                            fontSize: '8px',
+                            fontFamily: 'PixelFont',
+                            color: '#fbbf24',
+                            resolution: 2,
+                            align: 'center'
+                        });
+                        rewardDisplay.setOrigin(0.5);
+                        rewardDisplay.setDepth(5304);
+                        rewardDisplay.setStroke('#92400e', 1);
+                        rewardDisplay.setMask(scrollMask);
+                        this.scene.cameras.main.ignore(rewardDisplay);
+                        this.addElement(rewardDisplay);
+                        contentElements.push(rewardDisplay);
+                        (rewardDisplay as any).originalY = rewardY;
+                    });
+                }
 
                 // Hover effects
                 cardBg.on('pointerover', () => {
@@ -744,9 +856,9 @@ export class MailboxManager extends BaseManager {
         const screenHeight = this.scene.scale.height;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
-        const modalWidth = 280;
+        const modalWidth = 320;
         // Increase height to fit rewards section
-        const modalHeight = mission.type === 'social' ? 380 : 280;
+        const modalHeight = mission.type === 'social' ? 420 : 360;
 
         // Overlay
         const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.7);
@@ -801,7 +913,7 @@ export class MailboxManager extends BaseManager {
             closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
 
             // Mission name
-            const title = this.scene.add.text(modalX, modalY - modalHeight / 2 + 35, mission.name, {
+            const title = this.scene.add.text(modalX + 15, modalY - modalHeight / 2 + 45, mission.name, {
                 fontSize: '12px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
@@ -817,12 +929,12 @@ export class MailboxManager extends BaseManager {
             // Mission type badge
             const typeColor = mission.type === 'social' ? 0x3b82f6 : 0x22c55e;
             const typeLabel = mission.type.charAt(0).toUpperCase() + mission.type.slice(1);
-            const typeBadge = this.scene.add.rectangle(modalX, modalY - modalHeight / 2 + 58, 60, 16, typeColor);
+            const typeBadge = this.scene.add.rectangle(modalX + 15, modalY - modalHeight / 2 + 70, 60, 16, typeColor);
             typeBadge.setDepth(5402);
             this.scene.cameras.main.ignore(typeBadge);
             this.missionDetailElements.push(typeBadge);
 
-            const typeText = this.scene.add.text(modalX, modalY - modalHeight / 2 + 58, typeLabel, {
+            const typeText = this.scene.add.text(modalX + 15, modalY - modalHeight / 2 + 70, typeLabel, {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
@@ -834,12 +946,12 @@ export class MailboxManager extends BaseManager {
             this.missionDetailElements.push(typeText);
 
             // Description - position closer to type badge
-            const description = this.scene.add.text(modalX, modalY - modalHeight / 2 + 95, mission.description, {
+            const description = this.scene.add.text(modalX + 15, modalY - modalHeight / 2 + 95, mission.description, {
                 fontSize: '9px',
                 fontFamily: 'PixelFont',
                 color: '#FFF8E1',
                 resolution: 2,
-                wordWrap: { width: modalWidth - 40 },
+                wordWrap: { width: modalWidth - 80 },
                 align: 'center'
             });
             description.setOrigin(0.5, 0);
@@ -849,24 +961,24 @@ export class MailboxManager extends BaseManager {
             this.missionDetailElements.push(description);
 
             // Progress bar
-            const barWidth = 180;
+            const barWidth = 160;
             const barHeight = 12;
-            const barY = modalY + 10;
+            const barY = modalY - 40;
             const progressPercent = Math.min((mission.progress / mission.target) * 100, 100);
 
-            const barBg = this.scene.add.rectangle(modalX, barY, barWidth, barHeight, 0x5D4037);
+            const barBg = this.scene.add.rectangle(modalX + 15, barY, barWidth, barHeight, 0x5D4037);
             barBg.setDepth(5402);
             this.scene.cameras.main.ignore(barBg);
             this.missionDetailElements.push(barBg);
 
             const barFillWidth = Math.max(2, (barWidth - 4) * progressPercent / 100);
-            const barFill = this.scene.add.rectangle(modalX - (barWidth - 4) / 2 + barFillWidth / 2, barY, barFillWidth, barHeight - 4,
+            const barFill = this.scene.add.rectangle(modalX + 15 - (barWidth - 4) / 2 + barFillWidth / 2, barY, barFillWidth, barHeight - 4,
                 mission.status === 'completed' || mission.status === 'claimed' ? 0x22c55e : 0xf59e0b);
             barFill.setDepth(5403);
             this.scene.cameras.main.ignore(barFill);
             this.missionDetailElements.push(barFill);
 
-            const progressText = this.scene.add.text(modalX, barY, `${mission.progress}/${mission.target}`, {
+            const progressText = this.scene.add.text(modalX + 15, barY, `${mission.progress}/${mission.target}`, {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
@@ -880,16 +992,17 @@ export class MailboxManager extends BaseManager {
 
             // Reward section - compact styled box with icons
             const rewardSectionY = barY + 25;
+            const rewardX = modalX + 10;
             
             // Reward section background - smaller
-            const rewardBg = this.scene.add.rectangle(modalX, rewardSectionY + 20, modalWidth - 40, 50, 0x3E2723, 0.8);
+            const rewardBg = this.scene.add.rectangle(rewardX, rewardSectionY + 20, modalWidth - 95, 50, 0x3E2723, 0.8);
             rewardBg.setStrokeStyle(2, 0x5D4037);
             rewardBg.setDepth(5402);
             this.scene.cameras.main.ignore(rewardBg);
             this.missionDetailElements.push(rewardBg);
 
             // Reward title
-            const rewardTitle = this.scene.add.text(modalX, rewardSectionY + 2, '🎁 Rewards', {
+            const rewardTitle = this.scene.add.text(rewardX, rewardSectionY + 2, '🎁 Rewards', {
                 fontSize: '9px',
                 fontFamily: 'PixelFont',
                 color: '#fbbf24',
@@ -920,7 +1033,7 @@ export class MailboxManager extends BaseManager {
             }
 
             if (rewardItems.length === 0) {
-                const noRewardText = this.scene.add.text(modalX, rewardSectionY + 22, 'Complete to earn rewards!', {
+                const noRewardText = this.scene.add.text(rewardX, rewardSectionY + 22, 'Complete to earn rewards!', {
                     fontSize: '8px',
                     fontFamily: 'PixelFont',
                     color: '#a3a3a3',
@@ -934,7 +1047,7 @@ export class MailboxManager extends BaseManager {
                 // Calculate layout for reward items (horizontal layout) - compact
                 const itemSpacing = Math.min(60, (modalWidth - 60) / rewardItems.length);
                 const totalWidth = (rewardItems.length - 1) * itemSpacing;
-                const startX = modalX - totalWidth / 2;
+                const startX = rewardX - totalWidth / 2;
 
                 rewardItems.forEach((item, index) => {
                     const itemX = startX + index * itemSpacing;
@@ -966,13 +1079,34 @@ export class MailboxManager extends BaseManager {
             }
 
             // Adjust positions for status/action buttons - after rewards
-            const actionY = rewardSectionY + 55;
+            const actionY = rewardSectionY + 75;
 
             // Handle different mission states
             if (mission.status === 'active') {
                 // Active mission - show submission form for social missions
                 if (mission.type === 'social') {
-                    this.createSubmissionForm(modalX, modalY, modalWidth, modalHeight, actionY, mission.id);
+                    // Use reusable SocialSubmissionManager
+                    this.socialSubmissionManager = new SocialSubmissionManager(this.scene, {
+                        showToastMessage: (text, color) => this.callbacks.showToastMessage(text, color),
+                        playSuccessSound: () => this.callbacks.playSuccessSound(),
+                        onSubmitSuccess: async () => {
+                            this.closeMissionDetails();
+                            await this.preloadMissions();
+                            this.close();
+                            this.open();
+                        }
+                    });
+                    this.socialSubmissionManager.create({
+                        modalX: modalX + 15,
+                        modalY,
+                        modalWidth,
+                        modalHeight,
+                        actionY,
+                        missionId: mission.id,
+                        baseDepth: 5402
+                    });
+                    // Add elements to detail elements for cleanup
+                    this.missionDetailElements.push(...this.socialSubmissionManager.getElements());
                 } else {
                     // For non-social active missions, show "In Progress" status
                     const inProgressLabel = this.scene.add.text(modalX, actionY, '🔄 In Progress', {
@@ -1114,13 +1248,19 @@ export class MailboxManager extends BaseManager {
     }
 
     private closeMissionDetails(): void {
-        // Cleanup social link input
+        // Cleanup social submission manager
+        if (this.socialSubmissionManager) {
+            this.socialSubmissionManager.destroy();
+            this.socialSubmissionManager = null;
+        }
+
+        // Cleanup social link input (legacy - kept for backward compatibility)
         if (this.socialLinkInput && this.socialLinkInput.parentNode) {
             this.socialLinkInput.parentNode.removeChild(this.socialLinkInput);
         }
         this.socialLinkInput = null;
 
-        // Cleanup image file input
+        // Cleanup image file input (legacy - kept for backward compatibility)
         if (this.imageFileInput && this.imageFileInput.parentNode) {
             this.imageFileInput.parentNode.removeChild(this.imageFileInput);
         }
@@ -1236,14 +1376,14 @@ export class MailboxManager extends BaseManager {
         });
 
         // Submit button - at bottom of modal
-        const submitBtnBg = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 28, 'square-buttons', 6);
+        const submitBtnBg = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 38, 'square-buttons', 6);
         submitBtnBg.setDisplaySize(100, 28);
         submitBtnBg.setDepth(5402);
         submitBtnBg.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(submitBtnBg);
         this.missionDetailElements.push(submitBtnBg);
 
-        const submitText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 28, 'Submit', {
+        const submitText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 38, 'Submit', {
             fontSize: '11px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',

@@ -12,6 +12,7 @@ import {
     SOCKET_EVENTS,
     WaterPlantPayload,
     HarvestPlantPayload,
+    BuyShopItemPayload,
 } from './types/SocketTypes';
 
 /**
@@ -332,6 +333,28 @@ export class SocketService {
 
         console.log('🏡 [SocketService] Emitting buy_land');
         this.socket.emit(SOCKET_EVENTS.BUY_LAND, {});
+    }
+
+    /**
+     * Buy an item from the shop (Gold or Gem shop)
+     * Emit: 'buy_shop_item', { shopType: "GOLD" | "GEM", itemKey: string }
+     * Response comes via:
+     * - 'action_success' with purchase details
+     * - 'currency_update' with new balances
+     * - 'inventory_update' if item has rewards (seeds/tools)
+     * - 'land_update' if land plot was unlocked (GEM shop)
+     * @param shopType - "GOLD" or "GEM"
+     * @param itemKey - The item key to purchase
+     */
+    public buyShopItem(shopType: 'GOLD' | 'GEM', itemKey: string): void {
+        if (!this.socket?.connected) {
+            console.warn('[SocketService] Cannot buy shop item, socket not connected');
+            return;
+        }
+
+        const payload: BuyShopItemPayload = { shopType, itemKey };
+        console.log('🛒 [SocketService] Emitting buy_shop_item:', payload);
+        this.socket.emit(SOCKET_EVENTS.BUY_SHOP_ITEM, payload);
     }
 
     /**

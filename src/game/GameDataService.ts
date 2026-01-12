@@ -885,4 +885,132 @@ export class GameDataService {
         await this.refreshInventory();
         this.triggerUIUpdate();
     }
+
+    // ============================================
+    // WebSocket-based cache updates
+    // ============================================
+
+    /**
+     * Update storage cache from WebSocket inventory_update payload
+     * Called when receiving inventory_update event from server
+     * @param items Array of inventory items from WebSocket
+     */
+    static updateStorageCacheFromSocket(items: Array<{ itemType: string; amount: number; location?: string }>): void {
+        if (!cachedGameData?.inventory?.storage) {
+            // Initialize storage if not exists
+            if (cachedGameData) {
+                cachedGameData.inventory = cachedGameData.inventory || { storage: null, backpack: null };
+                cachedGameData.inventory.storage = {
+                    userId: '',
+                    storage: [],
+                    summary: { totalItems: 0, totalTypes: 0, categories: 0 }
+                };
+            }
+        }
+
+        if (!cachedGameData?.inventory?.storage?.storage) return;
+
+        const storage = cachedGameData.inventory.storage.storage;
+
+        // Update each item in the cache
+        items.forEach(item => {
+            // Only update STORAGE items (or items without location specified)
+            if (item.location && item.location !== 'STORAGE') return;
+
+            const existingIndex = storage.findIndex(s => s.itemType === item.itemType);
+
+            if (item.amount <= 0) {
+                // Remove item if amount is 0 or negative
+                if (existingIndex >= 0) {
+                    storage.splice(existingIndex, 1);
+                }
+            } else if (existingIndex >= 0) {
+                // Update existing item
+                storage[existingIndex].amount = item.amount;
+            } else {
+                // Add new item
+                storage.push({
+                    id: `ws-${Date.now()}-${item.itemType}`,
+                    itemType: item.itemType,
+                    amount: item.amount,
+                    location: 'STORAGE',
+                    name: item.itemType,
+                    rarity: 'common',
+                    category: 'item',
+                    icon: ''
+                });
+            }
+        });
+
+        // Update summary
+        if (cachedGameData.inventory.storage.summary) {
+            cachedGameData.inventory.storage.summary.totalItems = storage.reduce((sum, item) => sum + item.amount, 0);
+            cachedGameData.inventory.storage.summary.totalTypes = storage.length;
+        }
+
+        console.log('[GameDataService] Storage cache updated from WebSocket:', storage.length, 'items');
+    }
+
+    /**
+     * Update backpack cache from WebSocket inventory_update payload
+     * Called when receiving inventory_update event from server
+     * @param items Array of inventory items from WebSocket
+     */
+    static updateBackpackCacheFromSocket(items: Array<{ itemType: string; amount: number; location?: string }>): void {
+        if (!cachedGameData?.inventory?.backpack) {
+            // Initialize backpack if not exists
+            if (cachedGameData) {
+                cachedGameData.inventory = cachedGameData.inventory || { storage: null, backpack: null };
+                cachedGameData.inventory.backpack = {
+                    userId: '',
+                    backpack: [],
+                    capacity: { total: 100, used: 0, max: 100, available: 100 }
+                };
+            }
+        }
+
+        if (!cachedGameData?.inventory?.backpack?.backpack) return;
+
+        const backpack = cachedGameData.inventory.backpack.backpack;
+
+        // Update each item in the cache
+        items.forEach(item => {
+            // Only update BACKPACK items (or items without location specified)
+            if (item.location && item.location !== 'BACKPACK') return;
+
+            const existingIndex = backpack.findIndex(b => b.itemType === item.itemType);
+
+            if (item.amount <= 0) {
+                // Remove item if amount is 0 or negative
+                if (existingIndex >= 0) {
+                    backpack.splice(existingIndex, 1);
+                }
+            } else if (existingIndex >= 0) {
+                // Update existing item
+                backpack[existingIndex].amount = item.amount;
+            } else {
+                // Add new item
+                backpack.push({
+                    id: `ws-${Date.now()}-${item.itemType}`,
+                    itemType: item.itemType,
+                    amount: item.amount,
+                    location: 'BACKPACK',
+                    name: item.itemType,
+                    rarity: 'common',
+                    category: 'item',
+                    icon: ''
+                });
+            }
+        });
+
+        // Update capacity
+        if (cachedGameData.inventory.backpack.capacity) {
+            const totalUsed = backpack.reduce((sum, item) => sum + item.amount, 0);
+            const maxCapacity = cachedGameData.inventory.backpack.capacity.max ?? cachedGameData.inventory.backpack.capacity.total;
+            cachedGameData.inventory.backpack.capacity.used = totalUsed;
+            cachedGameData.inventory.backpack.capacity.available = maxCapacity - totalUsed;
+        }
+
+        console.log('[GameDataService] Backpack cache updated from WebSocket:', backpack.length, 'items');
+    }
 }
