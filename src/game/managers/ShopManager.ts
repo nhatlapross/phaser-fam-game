@@ -420,7 +420,7 @@ export class ShopManager extends BaseManager {
                         `💰${item.priceGold}`, item.affordable, () => this.handleGoldPurchase(item));
                 });
             } else {
-                this.showLoadingOrEmpty('No items available');
+                this.showLoadingOrEmpty('🚧 Coming Soon');
             }
         };
 
@@ -444,10 +444,10 @@ export class ShopManager extends BaseManager {
                         `💎${item.priceGem}`, canBuy, () => this.handleGemPurchase(item));
                 });
                 if (items.length === 0) {
-                    this.showLoadingOrEmpty('No items available');
+                    this.showLoadingOrEmpty('🚧 Coming Soon');
                 }
             } else {
-                this.showLoadingOrEmpty('No items available');
+                this.showLoadingOrEmpty('🚧 Coming Soon');
             }
         };
 
@@ -462,11 +462,14 @@ export class ShopManager extends BaseManager {
                 const items = this.cashShopData.items.slice(0, 5);
                 items.forEach((item, index) => {
                     const itemY = contentStartY + index * itemHeight;
+                    // Show "N/A" if priceUSD is null, and disable purchase
+                    const priceDisplay = item.priceUSD != null ? `$${item.priceUSD}` : 'N/A';
+                    const canBuy = item.available && item.priceUSD != null;
                     this.createShopItem(modalX, itemY, item.icon, item.name, item.description,
-                        `$${item.priceUSD}`, item.available, () => this.handleCashPurchase(item));
+                        priceDisplay, canBuy, () => this.handleCashPurchase(item));
                 });
             } else {
-                this.showLoadingOrEmpty('No items available');
+                this.showLoadingOrEmpty('🚧 Coming Soon');
             }
         };
 

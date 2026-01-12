@@ -216,7 +216,7 @@ export class ProfileManager extends BaseManager {
                 showToastMessage: this.callbacks.showToastMessage
             });
         }
-        this.quickActionsManager.createButtons(panelX, panelY, panelWidth, panelHeight);
+        this.quickActionsManager.createButtons(panelX + 25, panelY, panelWidth, panelHeight);
         
         // Add quick action button elements to profile elements for camera ignore
         this.quickActionsManager.getButtonElements().forEach(el => {
