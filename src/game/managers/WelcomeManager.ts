@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
 import { UserService } from '../UserService';
-import { BadgeService, AVAILABLE_BADGES, Badge, UserBadge } from '../BadgeService';
+import { BadgeService, ApiBadge } from '../BadgeService';
 import { GameDataService } from '../GameDataService';
 
 interface WelcomeCallbacks {
@@ -19,8 +19,8 @@ export class WelcomeManager extends BaseManager {
     private badgeElements: Phaser.GameObjects.GameObject[] = [];
     private claimFormElements: Phaser.GameObjects.GameObject[] = [];
     private claimFormOpen: boolean = false;
-    private codeInput: HTMLInputElement | null = null;
-    private userBadges: UserBadge[] = [];
+    private proofInput: HTMLInputElement | null = null;
+    private allBadges: ApiBadge[] = [];
 
     constructor(scene: Phaser.Scene, callbacks: WelcomeCallbacks) {
         super(scene);
@@ -34,8 +34,8 @@ export class WelcomeManager extends BaseManager {
         if (this.isOpen) return;
         this.isOpen = true;
 
-        // Fetch user badges
-        this.userBadges = await BadgeService.fetchUserBadges();
+        // Fetch all badges with status
+        this.allBadges = await BadgeService.getAllBadges();
 
         const cachedData = GameDataService.getCachedData();
         const user = cachedData?.user || UserService.getStoredUser();
@@ -253,7 +253,10 @@ export class WelcomeManager extends BaseManager {
 
     private createBadgesSection(centerX: number, startY: number, width: number, height: number): void {
         // Section title
-        const sectionTitle = this.scene.add.text(centerX, startY, '🏆 Badges', {
+        const claimedCount = this.allBadges.filter(b => b.status === 'CLAIMED').length;
+        const totalCount = this.allBadges.length;
+        
+        const sectionTitle = this.scene.add.text(centerX, startY, `🏆 Badges (${claimedCount}/${totalCount})`, {
             fontSize: '14px', fontFamily: 'PixelFont', color: '#FFD700', resolution: 2
         });
         sectionTitle.setOrigin(0.5);
@@ -268,45 +271,71 @@ export class WelcomeManager extends BaseManager {
         // Badge list container
         const listStartY = startY + 25;
         const badgeHeight = 45;
-        const claimableBadges = BadgeService.getClaimableBadges();
 
-        claimableBadges.forEach((badge, index) => {
+        this.allBadges.forEach((badge, index) => {
             const y = listStartY + index * badgeHeight;
             this.createBadgeRow(centerX, y, width - 40, badge, index);
         });
     }
 
-    private createBadgeRow(centerX: number, y: number, width: number, badge: Badge, index: number): void {
-        const isClaimed = BadgeService.isBadgeClaimed(badge.id);
+    private createBadgeRow(centerX: number, y: number, width: number, badge: ApiBadge, index: number): void {
+        const isClaimed = badge.status === 'CLAIMED';
+        const isPending = badge.status === 'PENDING';
+        const canClaim = badge.status === 'CAN_CLAIM';
+        const isLocked = badge.status === 'LOCKED';
         const leftX = centerX - width / 2;
 
-        // Badge row background
+        // Badge row background - different colors based on status
+        let bgColor = 0x3E2723; // LOCKED
+        let strokeColor = 0x5D4037;
+        
+        if (isClaimed) {
+            bgColor = 0x4a5568;
+            strokeColor = 0x68d391;
+        } else if (canClaim) {
+            bgColor = 0x2d5a3d;
+            strokeColor = 0x4ade80;
+        } else if (isPending) {
+            bgColor = 0x5D4037;
+            strokeColor = 0xfbbf24;
+        }
+        
         const rowBg = this.scene.add.rectangle(
             centerX, y + 15,
             width, 40,
-            isClaimed ? 0x4a5568 : 0x3E2723,
+            bgColor,
             0.8
         );
         rowBg.setDepth(6002);
-        rowBg.setStrokeStyle(1, isClaimed ? 0x68d391 : 0x5D4037);
+        rowBg.setStrokeStyle(1, strokeColor);
         rowBg.setAlpha(0);
         this.scene.cameras.main.ignore(rowBg);
         this.badgeElements.push(rowBg);
 
         // Badge icon
-        const icon = this.scene.add.text(leftX + 20, y + 15, badge.icon, {
+        let iconEmoji = '🔒';
+        if (isClaimed) iconEmoji = '🏆';
+        else if (canClaim) iconEmoji = '🏆';
+        else if (isPending) iconEmoji = '⏳';
+        
+        const icon = this.scene.add.text(leftX + 20, y + 15, iconEmoji, {
             fontSize: '20px', resolution: 2
         });
         icon.setOrigin(0.5);
         icon.setDepth(6003);
-        icon.setAlpha(isClaimed ? 1 : 0.4);
+        icon.setAlpha(isClaimed || canClaim ? 1 : 0.4);
         this.scene.cameras.main.ignore(icon);
         this.badgeElements.push(icon);
 
-        // Badge name
+        // Badge name - color based on status
+        let nameColor = '#9CA3AF'; // gray for LOCKED
+        if (isClaimed) nameColor = '#68d391';
+        else if (canClaim) nameColor = '#4ade80';
+        else if (isPending) nameColor = '#fbbf24';
+        
         const name = this.scene.add.text(leftX + 45, y + 8, badge.name, {
             fontSize: '10px', fontFamily: 'PixelFont',
-            color: isClaimed ? '#68d391' : '#FFFFFF',
+            color: nameColor,
             resolution: 2
         });
         name.setDepth(6003);
@@ -316,15 +345,16 @@ export class WelcomeManager extends BaseManager {
         this.badgeElements.push(name);
 
         // Badge description
-        const desc = this.scene.add.text(leftX + 45, y + 22, badge.requirement, {
-            fontSize: '8px', fontFamily: 'PixelFont', color: '#BCAAA4', resolution: 2
+        const desc = this.scene.add.text(leftX + 45, y + 22, badge.description, {
+            fontSize: '8px', fontFamily: 'PixelFont', color: '#BCAAA4', resolution: 2,
+            wordWrap: { width: width - 120 }
         });
         desc.setDepth(6003);
         desc.setAlpha(0);
         this.scene.cameras.main.ignore(desc);
         this.badgeElements.push(desc);
 
-        // Unlock button or Claimed status
+        // Status display based on badge status
         if (isClaimed) {
             const claimedText = this.scene.add.text(centerX + width / 2 - 45, y + 15, '✓ Claimed', {
                 fontSize: '9px', fontFamily: 'PixelFont', color: '#68d391', resolution: 2
@@ -341,40 +371,72 @@ export class WelcomeManager extends BaseManager {
                 duration: 200,
                 delay: 200 + index * 50
             });
-        } else {
-            // Unlock button
-            const unlockBtnBg = this.scene.add.sprite(
+        } else if (isPending) {
+            const pendingText = this.scene.add.text(centerX + width / 2 - 45, y + 15, '⏳ Pending', {
+                fontSize: '9px', fontFamily: 'PixelFont', color: '#fbbf24', resolution: 2
+            });
+            pendingText.setOrigin(0.5);
+            pendingText.setDepth(6003);
+            pendingText.setAlpha(0);
+            this.scene.cameras.main.ignore(pendingText);
+            this.badgeElements.push(pendingText);
+
+            this.scene.tweens.add({
+                targets: pendingText,
+                alpha: 1,
+                duration: 200,
+                delay: 200 + index * 50
+            });
+        } else if (isLocked) {
+            const lockedText = this.scene.add.text(centerX + width / 2 - 45, y + 15, '🔒 Locked', {
+                fontSize: '9px', fontFamily: 'PixelFont', color: '#9CA3AF', resolution: 2
+            });
+            lockedText.setOrigin(0.5);
+            lockedText.setDepth(6003);
+            lockedText.setAlpha(0);
+            this.scene.cameras.main.ignore(lockedText);
+            this.badgeElements.push(lockedText);
+
+            this.scene.tweens.add({
+                targets: lockedText,
+                alpha: 1,
+                duration: 200,
+                delay: 200 + index * 50
+            });
+        } else if (canClaim) {
+            // Claim button for CAN_CLAIM badges
+            const claimBtnBg = this.scene.add.sprite(
                 centerX + width / 2 - 40,
                 y + 15,
                 'square-buttons', 6
             );
-            unlockBtnBg.setDisplaySize(60, 24);
-            unlockBtnBg.setDepth(6003);
-            unlockBtnBg.setTint(0x4ade80);
-            unlockBtnBg.setInteractive({ useHandCursor: true });
-            unlockBtnBg.setAlpha(0);
-            this.scene.cameras.main.ignore(unlockBtnBg);
-            this.badgeElements.push(unlockBtnBg);
+            claimBtnBg.setDisplaySize(60, 24);
+            claimBtnBg.setDepth(6003);
+            claimBtnBg.setTint(0x4ade80);
+            claimBtnBg.setInteractive({ useHandCursor: true });
+            claimBtnBg.setAlpha(0);
+            this.scene.cameras.main.ignore(claimBtnBg);
+            this.badgeElements.push(claimBtnBg);
 
-            const unlockText = this.scene.add.text(
+            const claimText = this.scene.add.text(
                 centerX + width / 2 - 40,
                 y + 15,
-                'Unlock',
+                'Claim',
                 { fontSize: '9px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2 }
             );
-            unlockText.setOrigin(0.5);
-            unlockText.setDepth(6004);
-            unlockText.setStroke('#2d6a4f', 1);
-            unlockText.setAlpha(0);
-            this.scene.cameras.main.ignore(unlockText);
-            this.badgeElements.push(unlockText);
+            claimText.setOrigin(0.5);
+            claimText.setDepth(6004);
+            claimText.setStroke('#2d6a4f', 1);
+            claimText.setAlpha(0);
+            this.scene.cameras.main.ignore(claimText);
+            this.badgeElements.push(claimText);
 
-            unlockBtnBg.on('pointerdown', () => this.openClaimForm(badge));
-            unlockBtnBg.on('pointerover', () => unlockBtnBg.setTint(0x86efac));
-            unlockBtnBg.on('pointerout', () => unlockBtnBg.setTint(0x4ade80));
+            claimBtnBg.on('pointerdown', () => this.openClaimForm(badge));
+            claimBtnBg.on('pointerover', () => claimBtnBg.setTint(0x86efac));
+            claimBtnBg.on('pointerout', () => claimBtnBg.setTint(0x4ade80));
 
             this.scene.tweens.add({
-                targets: [unlockBtnBg, unlockText],
+                targets: [claimBtnBg, claimText],
                 alpha: 1,
                 duration: 200,
                 delay: 200 + index * 50
@@ -384,7 +446,7 @@ export class WelcomeManager extends BaseManager {
         // Animate row
         this.scene.tweens.add({
             targets: [rowBg, icon, name, desc],
-            alpha: (target: any) => target === icon && !isClaimed ? 0.4 : 1,
+            alpha: (target: Phaser.GameObjects.GameObject) => target === icon && (isLocked || isPending) ? 0.4 : 1,
             duration: 200,
             delay: 200 + index * 50
         });
@@ -422,14 +484,14 @@ export class WelcomeManager extends BaseManager {
         btnBg.on('pointerout', () => btnBg.setTint(0x4ade80));
     }
 
-    private openClaimForm(badge: Badge): void {
+    private openClaimForm(badge: ApiBadge): void {
         if (this.claimFormOpen) return;
         this.claimFormOpen = true;
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
         const formWidth = 280;
-        const formHeight = 180;
+        const formHeight = 200;
         const formX = screenWidth / 2;
         const formY = screenHeight / 2;
 
@@ -476,8 +538,10 @@ export class WelcomeManager extends BaseManager {
         this.claimFormElements.push(title);
 
         // Instructions
-        const instructions = this.scene.add.text(formX, formY - 25, 'Enter code or scan QR:', {
-            fontSize: '10px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2
+        const instructions = this.scene.add.text(formX, formY - 35, 'Submit proof (link or description):', {
+            fontSize: '9px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2,
+            wordWrap: { width: formWidth - 40 },
+            align: 'center'
         });
         instructions.setOrigin(0.5);
         instructions.setDepth(6102);
@@ -486,28 +550,38 @@ export class WelcomeManager extends BaseManager {
         this.scene.cameras.main.ignore(instructions);
         this.claimFormElements.push(instructions);
 
+        // Note about verification
+        const note = this.scene.add.text(formX, formY + 70, '⏳ Admin will verify your proof', {
+            fontSize: '8px', fontFamily: 'PixelFont', color: '#fbbf24', resolution: 2
+        });
+        note.setOrigin(0.5);
+        note.setDepth(6102);
+        note.setAlpha(0);
+        this.scene.cameras.main.ignore(note);
+        this.claimFormElements.push(note);
+
         this.scene.time.delayedCall(100, () => {
-            this.scene.tweens.add({ targets: [title, instructions], alpha: 1, duration: 150 });
-            this.createCodeInput(formX, formY, badge);
+            this.scene.tweens.add({ targets: [title, instructions, note], alpha: 1, duration: 150 });
+            this.createProofInput(formX, formY, badge);
         });
 
         overlay.on('pointerdown', () => this.closeClaimForm());
     }
 
-    private createCodeInput(formX: number, formY: number, badge: Badge): void {
-        // HTML input for code
-        this.codeInput = document.createElement('input');
-        this.codeInput.type = 'text';
-        this.codeInput.placeholder = 'Enter code...';
-        this.codeInput.maxLength = 20;
-        this.codeInput.style.cssText = `
+    private createProofInput(formX: number, formY: number, badge: ApiBadge): void {
+        // HTML input for proof
+        this.proofInput = document.createElement('input');
+        this.proofInput.type = 'text';
+        this.proofInput.placeholder = 'https://twitter.com/...';
+        this.proofInput.maxLength = 200;
+        this.proofInput.style.cssText = `
             position: fixed;
             left: 50%;
             top: 50%;
-            transform: translate(-50%, -5px);
-            width: 180px;
+            transform: translate(-50%, -15px);
+            width: 220px;
             padding: 10px 15px;
-            font-size: 14px;
+            font-size: 12px;
             font-family: 'PixelFont', monospace;
             border: 3px solid #5D4037;
             border-radius: 8px;
@@ -516,13 +590,12 @@ export class WelcomeManager extends BaseManager {
             outline: none;
             text-align: center;
             z-index: 10001;
-            text-transform: uppercase;
         `;
-        document.body.appendChild(this.codeInput);
+        document.body.appendChild(this.proofInput);
 
-        this.codeInput.addEventListener('keydown', async (e) => {
+        this.proofInput.addEventListener('keydown', async (e) => {
             if (e.key === 'Enter') {
-                await this.submitClaimCode(badge);
+                await this.submitProof(badge);
                 e.preventDefault();
             } else if (e.key === 'Escape') {
                 this.closeClaimForm();
@@ -530,12 +603,12 @@ export class WelcomeManager extends BaseManager {
             }
             e.stopPropagation();
         });
-        this.codeInput.addEventListener('keyup', (e) => e.stopPropagation());
-        this.codeInput.addEventListener('keypress', (e) => e.stopPropagation());
-        this.codeInput.focus();
+        this.proofInput.addEventListener('keyup', (e) => e.stopPropagation());
+        this.proofInput.addEventListener('keypress', (e) => e.stopPropagation());
+        this.proofInput.focus();
 
         // Buttons
-        const btnY = formY + 45;
+        const btnY = formY + 35;
 
         // Submit button
         const submitBtnBg = this.scene.add.sprite(formX - 50, btnY, 'square-buttons', 6);
@@ -547,7 +620,7 @@ export class WelcomeManager extends BaseManager {
         this.scene.cameras.main.ignore(submitBtnBg);
         this.claimFormElements.push(submitBtnBg);
 
-        const submitText = this.scene.add.text(formX - 50, btnY, 'Claim', {
+        const submitText = this.scene.add.text(formX - 50, btnY, 'Submit', {
             fontSize: '11px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2
         });
         submitText.setOrigin(0.5);
@@ -582,7 +655,7 @@ export class WelcomeManager extends BaseManager {
             duration: 150
         });
 
-        submitBtnBg.on('pointerdown', () => this.submitClaimCode(badge));
+        submitBtnBg.on('pointerdown', () => this.submitProof(badge));
         submitBtnBg.on('pointerover', () => submitBtnBg.setTint(0x86efac));
         submitBtnBg.on('pointerout', () => submitBtnBg.setTint(0x4ade80));
 
@@ -591,20 +664,20 @@ export class WelcomeManager extends BaseManager {
         cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
     }
 
-    private async submitClaimCode(badge: Badge): Promise<void> {
-        const code = this.codeInput?.value.trim().toUpperCase();
-        if (!code) {
-            this.callbacks.showToastMessage('Please enter a code', 0xfbbf24);
+    private async submitProof(badge: ApiBadge): Promise<void> {
+        const proof = this.proofInput?.value.trim();
+        if (!proof) {
+            this.callbacks.showToastMessage('Please enter proof', 0xfbbf24);
             return;
         }
 
-        const result = await BadgeService.claimBadgeWithCode(badge.id, code);
+        const result = await BadgeService.claimBadge(badge.id, proof);
 
         if (result.success) {
-            this.callbacks.showToastMessage(`🎉 ${badge.name} unlocked!`, 0x4ade80);
+            this.callbacks.showToastMessage('⏳ Proof submitted! Waiting for verification.', 0x4ade80);
             this.closeClaimForm();
             // Refresh badges display
-            this.userBadges = await BadgeService.fetchUserBadges();
+            this.allBadges = await BadgeService.getAllBadges();
             this.refreshBadgesDisplay();
         } else {
             this.callbacks.showToastMessage(result.message, 0xef4444);
@@ -614,10 +687,10 @@ export class WelcomeManager extends BaseManager {
     private closeClaimForm(): void {
         this.claimFormOpen = false;
 
-        if (this.codeInput?.parentNode) {
-            this.codeInput.parentNode.removeChild(this.codeInput);
+        if (this.proofInput?.parentNode) {
+            this.proofInput.parentNode.removeChild(this.proofInput);
         }
-        this.codeInput = null;
+        this.proofInput = null;
 
         this.claimFormElements.forEach(el => el?.destroy?.());
         this.claimFormElements = [];
@@ -634,11 +707,10 @@ export class WelcomeManager extends BaseManager {
         const modalTop = screenHeight / 2 - modalHeight / 2;
         const badgesStartY = modalTop + 75 + 90;
 
-        const claimableBadges = BadgeService.getClaimableBadges();
         const centerX = this.scene.scale.width / 2;
         const width = 320 - 40;
 
-        claimableBadges.forEach((badge, index) => {
+        this.allBadges.forEach((badge, index) => {
             const y = badgesStartY + 25 + index * 45;
             this.createBadgeRow(centerX, y, width, badge, index);
         });

@@ -2,15 +2,49 @@
 
 import { UserService } from './UserService';
 
-// Badge definition (for predefined badges)
+// Badge status from API
+export type BadgeStatus = 'LOCKED' | 'CAN_CLAIM' | 'PENDING' | 'CLAIMED';
+
+// Badge from API
+export interface ApiBadge {
+    id: string;
+    slug: string;
+    name: string;
+    description: string;
+    imageUrl: string;
+    icon?: string; // Optional emoji icon for display
+    requirements: {
+        type: string;
+        chain?: string;
+        [key: string]: unknown;
+    };
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+    status: BadgeStatus;
+}
+
+// Claim response from API
+export interface ClaimBadgeResponse {
+    id: string;
+    userId: string;
+    badgeId: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    proof: string;
+    claimedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// Legacy Badge definition (for backward compatibility)
 export interface Badge {
     id: string;
     name: string;
     description: string;
-    icon: string; // emoji or image key
+    icon: string;
     color: string;
-    requirement: string; // Description of how to unlock
-    isClaimable: boolean; // Can be claimed with code/QR
+    requirement: string;
+    isClaimable: boolean;
 }
 
 // User's badge status (legacy format for local storage)
@@ -18,7 +52,7 @@ export interface UserBadge {
     badgeId: string;
     claimed: boolean;
     claimedAt?: string;
-    code?: string; // Code used to claim (if applicable)
+    code?: string;
 }
 
 // Soulbound Token from API
@@ -61,154 +95,23 @@ const RARITY_ICONS: Record<string, string> = {
     'LEGENDARY': '🟡'
 };
 
-// Available badges in the game (predefined, for unlock section)
-export const AVAILABLE_BADGES: Badge[] = [
-    {
-        id: 'early_adopter',
-        name: 'Early Adopter',
-        description: 'One of the first players to join',
-        icon: '🌟',
-        color: '#FFD700',
-        requirement: 'Register during beta period',
-        isClaimable: true
-    },
-    {
-        id: 'event_participant',
-        name: 'Event Participant',
-        description: 'Attended an official event',
-        icon: '🎪',
-        color: '#FF6B6B',
-        requirement: 'Scan QR at event booth',
-        isClaimable: true
-    },
-    {
-        id: 'community_member',
-        name: 'Community Member',
-        description: 'Joined the community',
-        icon: '👥',
-        color: '#4ECDC4',
-        requirement: 'Join Discord/Telegram',
-        isClaimable: true
-    },
-    {
-        id: 'beta_tester',
-        name: 'Beta Tester',
-        description: 'Helped test the game',
-        icon: '🧪',
-        color: '#9B59B6',
-        requirement: 'Participate in beta testing',
-        isClaimable: true
-    },
-    {
-        id: 'ambassador',
-        name: 'Ambassador',
-        description: 'Official game ambassador',
-        icon: '🏅',
-        color: '#E74C3C',
-        requirement: 'Apply for ambassador program',
-        isClaimable: true
-    },
-    {
-        id: 'first_harvest',
-        name: 'First Harvest',
-        description: 'Harvested your first crop',
-        icon: '🌾',
-        color: '#4ade80',
-        requirement: 'Complete first harvest',
-        isClaimable: false
-    },
-    {
-        id: 'master_farmer',
-        name: 'Master Farmer',
-        description: 'Reached farming mastery',
-        icon: '👨‍🌾',
-        color: '#8B4513',
-        requirement: 'Harvest 100 crops',
-        isClaimable: false
-    },
-    {
-        id: 'social_butterfly',
-        name: 'Social Butterfly',
-        description: 'Made many friends',
-        icon: '🦋',
-        color: '#FF69B4',
-        requirement: 'Add 10 friends',
-        isClaimable: false
-    }
-];
-
-const STORAGE_KEY_BADGES = 'fam_game_user_badges';
-const STORAGE_KEY_TOKENS = 'fam_game_soulbound_tokens';
-
 export class BadgeService {
     private static API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
-    
-    // Cached tokens from API
-    private static cachedTokens: SoulboundToken[] = [];
+    private static BADGES_KEY = 'fam_game_badges';
+    private static TOKENS_KEY = 'fam_game_soulbound_tokens';
 
     /**
-     * Get user's badges from local storage (cached) - legacy format
+     * Get all badges with user status from API
      */
-    static getStoredBadges(): UserBadge[] {
-        if (typeof window === 'undefined') return [];
-        const data = localStorage.getItem(STORAGE_KEY_BADGES);
-        if (data) {
-            try {
-                return JSON.parse(data);
-            } catch {
-                return [];
-            }
-        }
-        return [];
-    }
-
-    /**
-     * Save badges to local storage
-     */
-    private static saveBadges(badges: UserBadge[]): void {
-        if (typeof window === 'undefined') return;
-        localStorage.setItem(STORAGE_KEY_BADGES, JSON.stringify(badges));
-    }
-
-    /**
-     * Get cached soulbound tokens
-     */
-    static getCachedTokens(): SoulboundToken[] {
-        if (this.cachedTokens.length > 0) return this.cachedTokens;
-        
-        // Try to load from localStorage
-        if (typeof window === 'undefined') return [];
-        const data = localStorage.getItem(STORAGE_KEY_TOKENS);
-        if (data) {
-            try {
-                this.cachedTokens = JSON.parse(data);
-                return this.cachedTokens;
-            } catch {
-                return [];
-            }
-        }
-        return [];
-    }
-
-    /**
-     * Save tokens to local storage
-     */
-    private static saveTokens(tokens: SoulboundToken[]): void {
-        this.cachedTokens = tokens;
-        if (typeof window === 'undefined') return;
-        localStorage.setItem(STORAGE_KEY_TOKENS, JSON.stringify(tokens));
-    }
-
-    /**
-     * Fetch user's soulbound tokens from API
-     * GET /soulbound-tokens
-     */
-    static async fetchSoulboundTokens(): Promise<SoulboundToken[]> {
+    static async getAllBadges(): Promise<ApiBadge[]> {
         const token = UserService.getAccessToken();
-        if (!token) return this.getCachedTokens();
+        if (!token) {
+            console.log('No access token available for badges');
+            return [];
+        }
 
         try {
-            const response = await fetch(`${BadgeService.API_BASE_URL}/soulbound-tokens`, {
+            const response = await fetch(`${BadgeService.API_BASE_URL}/badges`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -216,126 +119,51 @@ export class BadgeService {
             });
 
             if (response.ok) {
-                const data: SoulboundTokensResponse = await response.json();
-                const tokens = data.tokens || [];
-                
-                // Save to cache and localStorage
-                this.saveTokens(tokens);
-                
-                // Also update legacy UserBadge format for backward compatibility
-                const userBadges: UserBadge[] = tokens.map(t => ({
-                    badgeId: t.metadata?.badgeType?.toLowerCase() || t.id,
-                    claimed: true,
-                    claimedAt: t.issuedAt
-                }));
-                this.saveBadges(userBadges);
-                
-                console.log(`[BadgeService] Fetched ${tokens.length} soulbound tokens`);
-                return tokens;
+                const data: ApiBadge[] = await response.json();
+                console.log('Badges loaded:', data.length);
+                return data;
             } else {
-                console.error('Error fetching soulbound tokens:', response.statusText);
+                console.error('Error fetching badges:', response.statusText);
+                return [];
             }
         } catch (error) {
-            console.error('Network error fetching soulbound tokens:', error);
+            console.error('Network error fetching badges:', error);
+            return [];
         }
-
-        return this.getCachedTokens();
     }
 
     /**
-     * Fetch user's badges from API (legacy - redirects to fetchSoulboundTokens)
+     * Submit proof to claim a badge
      */
-    static async fetchUserBadges(): Promise<UserBadge[]> {
-        await this.fetchSoulboundTokens();
-        return this.getStoredBadges();
-    }
-
-    /**
-     * Claim a badge using a redemption code
-     * Calls POST /redemption/claim
-     * 
-     * Response format:
-     * {
-     *   "success": true,
-     *   "type": "BADGE",
-     *   "reward": { "badgeType": "COMMUNITY_HERO" },
-     *   "data": {
-     *     "token": { id, userId, name, issuedAt, metadata: { rarity, category, badgeType, inputCode, description } },
-     *     "message": "🎖️ Badge \"Community Hero\" issued!"
-     *   }
-     * }
-     */
-    static async claimBadgeWithCode(badgeId: string, code: string): Promise<{ success: boolean; message: string; badgeName?: string }> {
+    static async claimBadge(badgeId: string, proof: string): Promise<{ success: boolean; message: string; data?: ClaimBadgeResponse }> {
         const token = UserService.getAccessToken();
         if (!token) {
             return { success: false, message: 'Not authenticated' };
         }
 
-        // Get userId from stored user data
-        const user = UserService.getStoredUser();
-        if (!user?.id) {
-            return { success: false, message: 'User not found' };
-        }
-
         try {
-            const response = await fetch(`${BadgeService.API_BASE_URL}/redemption/claim`, {
+            const response = await fetch(`${BadgeService.API_BASE_URL}/badges/${badgeId}/claim`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ 
-                    userId: user.id,
-                    code: code 
-                })
+                body: JSON.stringify({ proof })
             });
 
             const data = await response.json();
 
-            if (response.ok && data.success) {
-                // Handle BADGE type response
-                if (data.type === 'BADGE' && data.data?.token) {
-                    const tokenData = data.data.token as SoulboundToken;
-                    const claimedBadgeId = tokenData?.metadata?.badgeType?.toLowerCase() || badgeId;
-                    const badgeName = tokenData?.name || 'Badge';
-
-                    // Update cached tokens
-                    const tokens = this.getCachedTokens();
-                    tokens.push(tokenData);
-                    this.saveTokens(tokens);
-
-                    // Update legacy local storage
-                    const badges = this.getStoredBadges();
-                    const existingIndex = badges.findIndex(b => b.badgeId === claimedBadgeId);
-                    const newBadge: UserBadge = {
-                        badgeId: claimedBadgeId,
-                        claimed: true,
-                        claimedAt: tokenData?.issuedAt || new Date().toISOString(),
-                        code
-                    };
-
-                    if (existingIndex >= 0) {
-                        badges[existingIndex] = newBadge;
-                    } else {
-                        badges.push(newBadge);
-                    }
-                    this.saveBadges(badges);
-
-                    return { 
-                        success: true, 
-                        message: data.data.message || `Badge "${badgeName}" unlocked!`,
-                        badgeName 
-                    };
-                }
-
-                // Handle other reward types (future-proof)
-                return { 
-                    success: true, 
-                    message: data.data?.message || data.message || 'Code redeemed successfully!',
-                    badgeName: data.data?.token?.name
+            if (response.ok) {
+                return {
+                    success: true,
+                    message: 'Proof submitted! Waiting for admin verification.',
+                    data
                 };
             } else {
-                return { success: false, message: data.message || 'Invalid code or already redeemed' };
+                return {
+                    success: false,
+                    message: data.message || 'Failed to submit proof'
+                };
             }
         } catch (error) {
             console.error('Error claiming badge:', error);
@@ -344,57 +172,146 @@ export class BadgeService {
     }
 
     /**
-     * Check if a badge is claimed by the user
+     * Get badges by status
      */
-    static isBadgeClaimed(badgeId: string): boolean {
-        // Check in cached tokens first
-        const tokens = this.getCachedTokens();
-        const foundInTokens = tokens.some(t => 
-            t.metadata?.badgeType?.toLowerCase() === badgeId.toLowerCase() ||
-            t.id === badgeId
-        );
-        if (foundInTokens) return true;
-
-        // Fallback to legacy storage
-        const badges = this.getStoredBadges();
-        return badges.some(b => b.badgeId === badgeId && b.claimed);
+    static async getBadgesByStatus(status: BadgeStatus): Promise<ApiBadge[]> {
+        const badges = await BadgeService.getAllBadges();
+        return badges.filter(b => b.status === status);
     }
 
     /**
-     * Get badge definition by ID
+     * Get claimed badges
      */
-    static getBadgeById(badgeId: string): Badge | undefined {
-        return AVAILABLE_BADGES.find(b => b.id === badgeId);
+    static async getClaimedBadges(): Promise<ApiBadge[]> {
+        return BadgeService.getBadgesByStatus('CLAIMED');
     }
 
     /**
-     * Get all claimable badges (that can be unlocked with code/QR)
+     * Get locked badges
      */
-    static getClaimableBadges(): Badge[] {
-        return AVAILABLE_BADGES.filter(b => b.isClaimable);
+    static async getLockedBadges(): Promise<ApiBadge[]> {
+        return BadgeService.getBadgesByStatus('LOCKED');
     }
 
     /**
-     * Get rarity color for a token
+     * Get pending badges (waiting for verification)
+     */
+    static async getPendingBadges(): Promise<ApiBadge[]> {
+        return BadgeService.getBadgesByStatus('PENDING');
+    }
+
+    // ============ Legacy methods for backward compatibility ============
+
+    /**
+     * Get stored badges from localStorage (legacy)
+     */
+    static getStoredBadges(): UserBadge[] {
+        if (typeof window === 'undefined') return [];
+        const stored = localStorage.getItem(BadgeService.BADGES_KEY);
+        return stored ? JSON.parse(stored) : [];
+    }
+
+    /**
+     * Save badges to localStorage (legacy)
+     */
+    static saveBadges(badges: UserBadge[]): void {
+        if (typeof window === 'undefined') return;
+        localStorage.setItem(BadgeService.BADGES_KEY, JSON.stringify(badges));
+    }
+
+    /**
+     * Get cached soulbound tokens
+     */
+    static getCachedTokens(): SoulboundToken[] {
+        if (typeof window === 'undefined') return [];
+        const stored = localStorage.getItem(BadgeService.TOKENS_KEY);
+        return stored ? JSON.parse(stored) : [];
+    }
+
+    /**
+     * Save tokens to localStorage
+     */
+    static saveTokens(tokens: SoulboundToken[]): void {
+        if (typeof window === 'undefined') return;
+        localStorage.setItem(BadgeService.TOKENS_KEY, JSON.stringify(tokens));
+    }
+
+    /**
+     * Fetch soulbound tokens from API
+     */
+    static async fetchSoulboundTokens(): Promise<SoulboundToken[]> {
+        const accessToken = UserService.getAccessToken();
+        if (!accessToken) {
+            console.log('No access token available for soulbound tokens');
+            return this.getCachedTokens();
+        }
+
+        try {
+            const response = await fetch(`${BadgeService.API_BASE_URL}/soulbound-tokens/my-tokens`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            });
+
+            if (response.ok) {
+                const data: SoulboundTokensResponse = await response.json();
+                const tokens = data.tokens || [];
+                this.saveTokens(tokens);
+                console.log('Soulbound tokens fetched:', tokens.length);
+                return tokens;
+            } else {
+                console.error('Error fetching soulbound tokens:', response.statusText);
+                return this.getCachedTokens();
+            }
+        } catch (error) {
+            console.error('Network error fetching soulbound tokens:', error);
+            return this.getCachedTokens();
+        }
+    }
+
+    /**
+     * Get rarity color
      */
     static getRarityColor(rarity: string): string {
         return RARITY_COLORS[rarity] || RARITY_COLORS['COMMON'];
     }
 
     /**
-     * Get rarity icon for a token
+     * Get rarity icon
      */
     static getRarityIcon(rarity: string): string {
         return RARITY_ICONS[rarity] || RARITY_ICONS['COMMON'];
     }
 
     /**
-     * Clear badges data (on logout)
+     * Check if a badge is claimed by the user (legacy)
+     */
+    static isBadgeClaimed(badgeId: string): boolean {
+        const tokens = this.getCachedTokens();
+        const hasToken = tokens.some(t => 
+            t.metadata?.badgeType?.toLowerCase() === badgeId.toLowerCase() ||
+            t.name?.toLowerCase().includes(badgeId.toLowerCase())
+        );
+        if (hasToken) return true;
+
+        const badges = this.getStoredBadges();
+        return badges.some(b => b.badgeId === badgeId && b.claimed);
+    }
+
+    /**
+     * Get user's claimed badges (legacy)
+     */
+    static getUserBadges(): UserBadge[] {
+        return this.getStoredBadges();
+    }
+
+    /**
+     * Clear all badge data from localStorage
      */
     static clearBadges(): void {
-        this.cachedTokens = [];
         if (typeof window === 'undefined') return;
-        localStorage.removeItem(STORAGE_KEY_BADGES);
-        localStorage.removeItem(STORAGE_KEY_TOKENS);
+        localStorage.removeItem(BadgeService.BADGES_KEY);
+        localStorage.removeItem(BadgeService.TOKENS_KEY);
     }
 }
