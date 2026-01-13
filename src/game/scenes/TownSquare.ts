@@ -1,7 +1,7 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { TOWN_SQUARE_MAP_DATA, TOWN_SQUARE_MAP_WIDTH, TOWN_SQUARE_MAP_HEIGHT } from './TownSquareMapData';
-import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager, GAME_CONSTANTS } from '../managers';
+import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager, FactoryManager, GAME_CONSTANTS } from '../managers';
 import { GameDataService } from '../GameDataService';
 import { UserService } from '../UserService';
 import { LobbySocketService } from '../LobbySocketService';
@@ -66,6 +66,9 @@ export class TownSquare extends Scene {
     private shopManager!: ShopManager;
     private shopModalOpen: boolean = false;
 
+    // Factory manager
+    private factoryManager!: FactoryManager;
+
     // Toolbar items (same as FarmingGame)
     private toolbarItems: ToolbarItem[] = [
         { type: 'tool', name: 'hand' },
@@ -76,10 +79,10 @@ export class TownSquare extends Scene {
         { type: 'tool', name: 'chest' },
     ];
 
-    // Empty states for toolbar (not used in TownSquare)
+    // Inventory states (loaded from cache in initializeGameState)
     private seedCounts: Record<PlantType, number> = { algae: 0, mushroom: 0, tree: 0 };
     private fertilizerCounts: Record<'common' | 'rare' | 'epic' | 'legendary', number> = { common: 0, rare: 0, epic: 0, legendary: 0 };
-    private chestInventory: any[] = [];
+    private chestInventory: { type: PlantType; count: number }[] = [];
     private chestOpen: boolean = false;
     private selectedSeedIndex: number = 0;
     private selectedFertilizerIndex: number = 0;
@@ -89,6 +92,12 @@ export class TownSquare extends Scene {
 
     // Marquee UI
     private marqueeText!: Phaser.GameObjects.Text;
+
+    // Mini Map UI
+    private miniMapContainer!: Phaser.GameObjects.Container;
+    private miniMapPlayerAvatar!: Phaser.GameObjects.Image;
+    private readonly MINIMAP_SIZE = 80; // Size of mini map in pixels
+    private readonly MINIMAP_SCALE: number = 80 / (60 * 16); // minimap size / map world size
 
     // Player name text (displayed above player in TownSquare)
     private playerNameText!: Phaser.GameObjects.Text;
@@ -188,6 +197,9 @@ export class TownSquare extends Scene {
         // Create clock UI
         this.createClockUI();
 
+        // Create mini map below clock
+        this.createMiniMap();
+
         // Initialize gameState from cached data (needed for ProfileManager currency display)
         this.initializeGameState();
 
@@ -234,6 +246,18 @@ export class TownSquare extends Scene {
         });
         // Position shop at right side of fountain (tile 42, 32)
         this.shopManager.createShopAt(42 * this.TILE_SIZE, 32 * this.TILE_SIZE);
+
+        // Create factory manager (above the shop)
+        this.factoryManager = new FactoryManager(this, {
+            getChestInventory: () => this.chestInventory,
+            getPlayer: () => this.player,
+            closeSeedSelector: () => { }, // Not used in TownSquare
+            closeChestPanel: () => { }, // Not used in TownSquare
+            showToastMessage: (text, color) => this.showToastMessage(text, color),
+            playSuccessSound: () => this.soundManager.playSuccessSound()
+        }, this.TILE_SIZE);
+        // Position factory above shop (tile 42, 28)
+        this.factoryManager.createFactory(42 * this.TILE_SIZE, 28 * this.TILE_SIZE);
 
         // Create marquee announcement
         this.createMarquee();
@@ -668,6 +692,23 @@ export class TownSquare extends Scene {
             // P key to switch character
             this.pKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
             this.pKey.on('down', () => this.switchCharacter());
+
+            // Enter key to open chat (only when chat is not already open)
+            const enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+            enterKey.on('down', () => {
+                // Only open chat if not already open and not typing in input
+                if (!this.chatModalOpen && document.activeElement?.tagName !== 'INPUT') {
+                    this.openChatModal();
+                }
+            });
+
+            // Escape key to close chat
+            const escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+            escKey.on('down', () => {
+                if (this.chatModalOpen) {
+                    this.closeChatModal();
+                }
+            });
         }
     }
 
@@ -771,6 +812,7 @@ export class TownSquare extends Scene {
     update() {
         this.handlePlayerMovement();
         this.updateClock();
+        this.updateMiniMap();
 
         // Multiplayer: send position and update other players
         this.sendPlayerPosition();
@@ -784,6 +826,7 @@ export class TownSquare extends Scene {
             this.profileManager?.getIsOpen() ||
             this.stationManager?.getIsOpen() ||
             this.shopManager?.getIsOpen() ||
+            this.factoryManager?.getIsOpen() ||
             (this.chatInputElement && document.activeElement === this.chatInputElement);
 
         if (isAnyModalOpen) {
@@ -927,6 +970,49 @@ export class TownSquare extends Scene {
         const cachedData = GameDataService.getCachedData();
         if (!cachedData) return;
 
+        // Load fruits into chestInventory from cached data
+        if (cachedData.fruits && cachedData.fruits.length > 0) {
+            this.chestInventory = [];
+            for (const item of cachedData.fruits) {
+                if (item.count > 0) {
+                    this.chestInventory.push({
+                        type: item.type,
+                        count: item.count
+                    });
+                }
+            }
+            console.log('[TownSquare] Loaded fruits into chestInventory:', this.chestInventory);
+        }
+
+        // Load seeds from cached data (array of SeedInventoryItem)
+        if (cachedData.seeds && Array.isArray(cachedData.seeds)) {
+            this.seedCounts = { algae: 0, mushroom: 0, tree: 0 };
+            for (const seed of cachedData.seeds) {
+                const type = seed.type?.toLowerCase() as 'algae' | 'mushroom' | 'tree';
+                if (type && this.seedCounts[type] !== undefined) {
+                    this.seedCounts[type] += seed.quantity || 0;
+                }
+            }
+        }
+
+        // Load fertilizers from cached data (FertilizerInventoryResponse)
+        if (cachedData.fertilizers?.fertilizers) {
+            this.fertilizerCounts = { common: 0, rare: 0, epic: 0, legendary: 0 };
+            for (const fert of cachedData.fertilizers.fertilizers) {
+                // Map FERTILIZER_COMMON -> common, etc.
+                const rarityMap: Record<string, 'common' | 'rare' | 'epic' | 'legendary'> = {
+                    'FERTILIZER_COMMON': 'common',
+                    'FERTILIZER_RARE': 'rare',
+                    'FERTILIZER_EPIC': 'epic',
+                    'FERTILIZER_LEGENDARY': 'legendary'
+                };
+                const type = rarityMap[fert.type];
+                if (type) {
+                    this.fertilizerCounts[type] += fert.amount || 0;
+                }
+            }
+        }
+
         const gameState = useGameState(this);
         gameState.initialize({
             currency: {
@@ -935,7 +1021,7 @@ export class TownSquare extends Scene {
             },
             seeds: this.seedCounts,
             fertilizers: this.fertilizerCounts,
-            fruits: [],
+            fruits: cachedData.fruits || [],
             waterCount: 0,
             user: cachedData.user ? {
                 id: cachedData.user.id,
@@ -966,6 +1052,7 @@ export class TownSquare extends Scene {
         this.profileManager?.destroy();
         this.toolbarManager?.destroy();
         this.shopManager?.destroy();
+        this.factoryManager?.destroy();
 
         // Cleanup lobby socket - disconnect to prevent orphaned connections
         this.cleanupLobbySocketListeners();
@@ -1091,7 +1178,6 @@ export class TownSquare extends Scene {
      */
     private handleLobbyConnected = () => {
         console.log('✅ [TownSquare] Lobby WebSocket connected');
-        this.showToastMessage('Connected to chat', 0x4CAF50);
 
         // Send initial position immediately after connection
         // This ensures other players see us right away
@@ -1111,7 +1197,6 @@ export class TownSquare extends Scene {
      */
     private handleLobbyDisconnected = (reason: string) => {
         console.log('❌ [TownSquare] Lobby WebSocket disconnected:', reason);
-        this.showToastMessage('Chat disconnected', 0xFF5722);
     };
 
     // ==========================================
@@ -1464,6 +1549,113 @@ export class TownSquare extends Scene {
     }
 
     /**
+     * Create mini map below the clock - uses actual map background
+     */
+    private createMiniMap() {
+        const mapX = 20; // Align with clock
+        const mapY = 50; // Below clock (clock is at y=25, height ~30)
+        const mapSize = this.MINIMAP_SIZE;
+
+        // Container for all mini map elements
+        this.miniMapContainer = this.add.container(mapX, mapY);
+        this.miniMapContainer.setDepth(5000);
+
+        // Create RenderTexture for mini map background
+        const rt = this.add.renderTexture(mapSize / 2, mapSize / 2, mapSize, mapSize);
+        rt.setOrigin(0.5);
+
+        // Draw water tile as background (tiled)
+        const waterTileSize = mapSize / 6; // 6x6 grid of water tiles
+        for (let y = 0; y < 6; y++) {
+            for (let x = 0; x < 6; x++) {
+                const waterTile = this.add.image(0, 0, 'water-tileset', 0);
+                waterTile.setDisplaySize(waterTileSize + 1, waterTileSize + 1);
+                rt.draw(waterTile, x * waterTileSize + waterTileSize / 2, y * waterTileSize + waterTileSize / 2);
+                waterTile.destroy();
+            }
+        }
+
+        // Draw stone floor (center area - matching TOWN_SQUARE_MAP_DATA proportions)
+        // Stone area is roughly from tile 8 to 52 (44 tiles out of 60)
+        const stoneRatio = 44 / 60;
+        const stoneSize = mapSize * stoneRatio;
+        const stoneOffset = (mapSize - stoneSize) / 2;
+        const stoneTileSize = stoneSize / 5; // 5x5 grid of stone tiles
+        for (let y = 0; y < 5; y++) {
+            for (let x = 0; x < 5; x++) {
+                const stoneTile = this.add.image(0, 0, 'square-tileset', 12); // Center floor tile
+                stoneTile.setDisplaySize(stoneTileSize + 1, stoneTileSize + 1);
+                rt.draw(stoneTile, stoneOffset + x * stoneTileSize + stoneTileSize / 2, stoneOffset + y * stoneTileSize + stoneTileSize / 2);
+                stoneTile.destroy();
+            }
+        }
+
+        this.miniMapContainer.add(rt);
+
+        // Border frame around mini map
+        const borderFrame = this.add.rectangle(mapSize / 2, mapSize / 2, mapSize, mapSize, 0x000000, 0);
+        borderFrame.setStrokeStyle(2, 0x5D4037);
+        this.miniMapContainer.add(borderFrame);
+
+        // Key locations (convert tile coords to minimap coords)
+        const tileToMiniMap = (tileX: number, tileY: number) => ({
+            x: (tileX / this.MAP_WIDTH) * mapSize,
+            y: (tileY / this.MAP_HEIGHT) * mapSize
+        });
+
+        // Emoji style config
+        const emojiStyle = { fontSize: '10px', resolution: 2 };
+
+        // Fountain (center) - water emoji
+        const fountainPos = tileToMiniMap(30, 30);
+        const fountain = this.add.text(fountainPos.x, fountainPos.y, '⛲', emojiStyle).setOrigin(0.5);
+        this.miniMapContainer.add(fountain);
+
+        // Station (bến tàu) - ship emoji
+        const stationPos = tileToMiniMap(6.5, 30);
+        const station = this.add.text(stationPos.x, stationPos.y, '🚢', emojiStyle).setOrigin(0.5);
+        this.miniMapContainer.add(station);
+
+        // Shop - cart emoji
+        const shopPos = tileToMiniMap(42, 32);
+        const shop = this.add.text(shopPos.x, shopPos.y, '🛒', emojiStyle).setOrigin(0.5);
+        this.miniMapContainer.add(shop);
+
+        // Factory - factory emoji
+        const factoryPos = tileToMiniMap(42, 28);
+        const factory = this.add.text(factoryPos.x, factoryPos.y, '🏭', emojiStyle).setOrigin(0.5);
+        this.miniMapContainer.add(factory);
+
+        // Player avatar (use character avatar image)
+        const avatarKey = `${this.currentCharacterKey}-avatar`;
+        this.miniMapPlayerAvatar = this.add.image(mapSize / 2, mapSize / 2, avatarKey);
+        this.miniMapPlayerAvatar.setDisplaySize(12, 12); // Small circular avatar size
+        this.miniMapPlayerAvatar.setOrigin(0.5);
+        this.miniMapContainer.add(this.miniMapPlayerAvatar);
+
+        // Ignore by main camera (UI element)
+        this.cameras.main?.ignore(this.miniMapContainer);
+    }
+
+    /**
+     * Update player position on mini map
+     */
+    private updateMiniMap() {
+        if (!this.miniMapPlayerAvatar || !this.player) return;
+
+        // Convert player world position to minimap position
+        const mapWorldSize = this.MAP_WIDTH * this.TILE_SIZE;
+        const miniMapX = (this.player.x / mapWorldSize) * this.MINIMAP_SIZE;
+        const miniMapY = (this.player.y / mapWorldSize) * this.MINIMAP_SIZE;
+
+        // Clamp to minimap bounds
+        const clampedX = Phaser.Math.Clamp(miniMapX, 6, this.MINIMAP_SIZE - 6);
+        const clampedY = Phaser.Math.Clamp(miniMapY, 6, this.MINIMAP_SIZE - 6);
+
+        this.miniMapPlayerAvatar.setPosition(clampedX, clampedY);
+    }
+
+    /**
      * Create marquee announcement banner
      */
     private createMarquee() {
@@ -1568,6 +1760,11 @@ export class TownSquare extends Scene {
     private openChatModal() {
         if (this.chatModalOpen) return;
         this.chatModalOpen = true;
+
+        // Disable Phaser keyboard to allow Telex/IME input in HTML input
+        if (this.input.keyboard) {
+            this.input.keyboard.enabled = false;
+        }
 
         const screenWidth = this.scale.width;
         const screenHeight = this.scale.height;
@@ -1723,10 +1920,12 @@ export class TownSquare extends Scene {
         // Apply positioning based on orientation
         this.applyChatInputStyles(inputCenterX, inputCenterY, inputWidthGame, inputHeightGame, gameWidth, gameHeight);
 
-        // Handle Enter key
+        // Handle Enter key to send, Escape to close
         this.chatInputElement.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Enter') {
                 this.sendChatMessage();
+            } else if (e.key === 'Escape') {
+                this.closeChatModal();
             }
         });
 
@@ -1914,6 +2113,11 @@ export class TownSquare extends Scene {
         }
 
         this.chatHistoryText = null;
+
+        // Re-enable Phaser keyboard after closing chat
+        if (this.input.keyboard) {
+            this.input.keyboard.enabled = true;
+        }
     }
 
     /**

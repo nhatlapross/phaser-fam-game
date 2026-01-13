@@ -223,6 +223,22 @@ export const EXCHANGE_REWARDS: ExchangeReward[] = [
     { id: 'seed_nft', name: '1 Seed NFT', nameVi: '1 Seed NFT', treeCost: 0, mushroomCost: 5000, sporeCost: 10000, icon: '🌱', color: '#4ade80' },
 ];
 
+// Plant hydration config (matches backend PLANT_CONFIGS)
+// 1 Water Drop = 3 hours of waterBalance
+export const WATER_DROP_HOURS = 3;
+
+export const PLANT_WATER_CONFIG: Record<PlantType, { waterCapacityDrops: number; maxWaterHours: number }> = {
+    algae: { waterCapacityDrops: 3, maxWaterHours: 3 * WATER_DROP_HOURS },      // 9 hours max
+    mushroom: { waterCapacityDrops: 5, maxWaterHours: 5 * WATER_DROP_HOURS },   // 15 hours max
+    tree: { waterCapacityDrops: 8, maxWaterHours: 8 * WATER_DROP_HOURS },       // 24 hours max
+};
+
+// Helper function to get max water hours for a plant type
+export function getMaxWaterHours(plantType: PlantType | string): number {
+    const type = plantType.toLowerCase() as PlantType;
+    return PLANT_WATER_CONFIG[type]?.maxWaterHours ?? 9; // Default to algae
+}
+
 // Game constants
 export const GAME_CONSTANTS = {
     TILE_SIZE: 16,

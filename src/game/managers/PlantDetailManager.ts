@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
-import { TileState, PlantType, PLANT_STAGES, CROP_DEFINITIONS } from '../types/GameTypes';
+import { TileState, PlantType, PLANT_STAGES, CROP_DEFINITIONS, getMaxWaterHours } from '../types/GameTypes';
 
 // Plant detail information
 export interface PlantDetailInfo {
@@ -349,13 +349,15 @@ export class PlantDetailManager extends BaseManager {
 
         // Hydration info (health/water status) - Priority display
         if (tileState.hydration) {
-            // Hours to death - Health indicator
-            const hoursToDeath = tileState.hydration.hoursToDeath;
-            const healthPercent = Math.min(Math.round((hoursToDeath / 72) * 100), 100);
+            // Use waterBalance and plant-type-specific max hours for accurate display
+            const waterBalance = tileState.hydration.waterBalance ?? 0;
+            const plantType = tileState.cropType || 'algae';
+            const maxWaterHours = getMaxWaterHours(plantType);
+            const healthPercent = Math.min(Math.round((waterBalance / maxWaterHours) * 100), 100);
             let healthColor = '#4CAF50';
             if (healthPercent <= 30) healthColor = '#F44336';
             else if (healthPercent <= 60) healthColor = '#FF9800';
-            this.createInfoRow(leftX, currentY, 'Health:', `${healthPercent}% (${hoursToDeath}h left)`, healthColor);
+            this.createInfoRow(leftX, currentY, 'Hydration:', `${healthPercent}% (${waterBalance}h)`, healthColor);
             currentY += lineHeight;
 
             // Hydration status

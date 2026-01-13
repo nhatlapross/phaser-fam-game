@@ -36,12 +36,12 @@ export class FactoryManager extends BaseManager {
 
     /**
      * Create the factory sprite on the map
+     * @param x Optional X position in pixels (defaults to tile 25)
+     * @param y Optional Y position in pixels (defaults to tile 20)
      */
-    public createFactory(): void {
-        const centerX = 25;
-        const centerY = 25;
-        const factoryX = centerX * this.tileSize + this.tileSize / 2;
-        const factoryY = (centerY - 5) * this.tileSize;
+    public createFactory(x?: number, y?: number): void {
+        const factoryX = x ?? (25 * this.tileSize + this.tileSize / 2);
+        const factoryY = y ?? (20 * this.tileSize);
 
         this.factorySprite = this.scene.add.sprite(factoryX, factoryY, 'factory-1');
         this.factorySprite.setDisplaySize(64, 64);

@@ -2,7 +2,7 @@
 import Phaser from 'phaser';
 import { EventBus } from '../EventBus';
 import { PlantUpdatePayload, SocketPlant } from '../types/SocketTypes';
-import { TileState, PlantType, PlantHydration, PlantGrowth } from '../types/GameTypes';
+import { TileState, PlantType, PlantHydration, PlantGrowth, getMaxWaterHours } from '../types/GameTypes';
 import { GardenService } from '../GardenService';
 
 /**
@@ -233,9 +233,9 @@ export class PlantUpdateHandler {
         // Update plant sprite
         this.callbacks.showPlant(x, y, plantType, plantStage, isDead, isNowWithered);
 
-        // Update health bar
+        // Update health bar with plant-type-specific max water hours
         if (!isDead) {
-            const maxHours = 72; // Max water balance hours
+            const maxHours = getMaxWaterHours(plant.type);
             this.callbacks.updateHealthBar(tileKey, plant.waterBalance, maxHours);
         }
     }

@@ -67,6 +67,9 @@ export class QuickActionsManager extends BaseManager {
     private timerText: Phaser.GameObjects.Text | null = null;
     private questionStartTime: number = 0; // Real timestamp when question started
     private questionTimeLimit: number = 0; // Time limit for current question
+    private submittedQuizIds: Set<string> = new Set(); // Track quizzes submitted this session
+    private quizAttemptedCache: Map<string, boolean> = new Map(); // Cache hasAttempted status from API
+    private isPreloadingQuizStatus: boolean = false;
 
     constructor(scene: Phaser.Scene, callbacks: QuickActionsCallbacks = {}) {
         super(scene);
@@ -504,7 +507,7 @@ export class QuickActionsManager extends BaseManager {
         if (!this.quizNotificationBadge) return;
 
         let quizzes: Quiz[] | null = this.cachedQuizzes;
-        
+
         if (!quizzes) {
             quizzes = await QuizService.getActiveQuizzes();
             if (quizzes) {
@@ -518,19 +521,89 @@ export class QuickActionsManager extends BaseManager {
             return;
         }
 
-        const count = quizzes.length;
-        
+        // Filter out already submitted/attempted quizzes (use cache)
+        const availableQuizzes = quizzes.filter(q =>
+            !this.submittedQuizIds.has(q.id) &&
+            !this.quizAttemptedCache.get(q.id)
+        );
+        const count = availableQuizzes.length;
+
+        this.updateBadgeDisplay(count);
+
+        // Preload hasAttempted status in background (only once)
+        if (!this.isPreloadingQuizStatus && quizzes.length > 0) {
+            this.preloadQuizAttemptedStatus(quizzes);
+        }
+    }
+
+    /**
+     * Update badge display with count
+     */
+    private updateBadgeDisplay(count: number): void {
+        if (!this.quizNotificationBadge) return;
+
         if (count > 0) {
             const badgeText = this.quizNotificationBadge.getByName('badgeText') as Phaser.GameObjects.Text;
             if (badgeText) {
                 badgeText.setText(count > 9 ? '9+' : count.toString());
             }
-            
+
             this.quizNotificationBadge.setVisible(true);
             this.startQuizPulseEffect();
         } else {
             this.quizNotificationBadge.setVisible(false);
             this.stopQuizPulseEffect();
+        }
+    }
+
+    /**
+     * Preload hasAttempted status for all quizzes in background
+     */
+    private async preloadQuizAttemptedStatus(quizzes: Quiz[]): Promise<void> {
+        this.isPreloadingQuizStatus = true;
+
+        try {
+            // Filter quizzes that haven't been cached yet
+            const uncachedQuizzes = quizzes.filter(q =>
+                !this.submittedQuizIds.has(q.id) &&
+                !this.quizAttemptedCache.has(q.id)
+            );
+
+            if (uncachedQuizzes.length === 0) {
+                this.isPreloadingQuizStatus = false;
+                return;
+            }
+
+            // Fetch hasAttempted for all uncached quizzes in parallel
+            const results = await Promise.allSettled(
+                uncachedQuizzes.map(async (quiz) => {
+                    const detail = await QuizService.getQuizByEvent(quiz.event.id);
+                    return { quizId: quiz.id, hasAttempted: detail?.hasAttempted ?? false };
+                })
+            );
+
+            // Update cache with results
+            for (const result of results) {
+                if (result.status === 'fulfilled') {
+                    this.quizAttemptedCache.set(result.value.quizId, result.value.hasAttempted);
+                    if (result.value.hasAttempted) {
+                        this.submittedQuizIds.add(result.value.quizId);
+                    }
+                }
+            }
+
+            // Update badge count with accurate data
+            if (this.cachedQuizzes) {
+                const availableQuizzes = this.cachedQuizzes.filter(q =>
+                    !this.submittedQuizIds.has(q.id) &&
+                    !this.quizAttemptedCache.get(q.id)
+                );
+                this.updateBadgeDisplay(availableQuizzes.length);
+            }
+        } catch (error) {
+            console.error('[QuickActionsManager] Error preloading quiz status:', error);
+        } finally {
+            this.isPreloadingQuizStatus = false;
         }
     }
 
@@ -1738,8 +1811,11 @@ export class QuickActionsManager extends BaseManager {
             const cardWidth = 230;
             const cardX = modalX + 10;
 
-            // Card border
-            const cardBorder = this.scene.add.rectangle(cardX, baseY, cardWidth + 3, cardHeight + 3, 0x7c3aed);
+            // Check if quiz is already submitted
+            const isSubmitted = this.submittedQuizIds.has(quiz.id);
+
+            // Card border (gray if submitted)
+            const cardBorder = this.scene.add.rectangle(cardX, baseY, cardWidth + 3, cardHeight + 3, isSubmitted ? 0x666666 : 0x7c3aed);
             cardBorder.setDepth(5302);
             cardBorder.setMask(scrollMask);
             this.scene.cameras.main.ignore(cardBorder);
@@ -1747,10 +1823,12 @@ export class QuickActionsManager extends BaseManager {
             contentElements.push(cardBorder);
             (cardBorder as any).originalY = baseY;
 
-            // Card background
-            const cardBg = this.scene.add.rectangle(cardX, baseY, cardWidth, cardHeight, 0xD4C4A8);
+            // Card background (grayed out if submitted)
+            const cardBg = this.scene.add.rectangle(cardX, baseY, cardWidth, cardHeight, isSubmitted ? 0xA0A0A0 : 0xD4C4A8);
             cardBg.setDepth(5303);
-            cardBg.setInteractive({ useHandCursor: true });
+            if (!isSubmitted) {
+                cardBg.setInteractive({ useHandCursor: true });
+            }
             cardBg.setMask(scrollMask);
             this.scene.cameras.main.ignore(cardBg);
             this.quizModalElements.push(cardBg);
@@ -1859,26 +1937,47 @@ export class QuickActionsManager extends BaseManager {
             contentElements.push(questionsLabel);
             (questionsLabel as any).originalY = baseY + 10;
 
-            // Hover effects
-            cardBg.on('pointerover', () => {
-                cardBg.setFillStyle(0xE8D9C0);
-                quizName.setColor('#a855f7');
-            });
-            cardBg.on('pointerout', () => {
-                cardBg.setFillStyle(0xD4C4A8);
-                quizName.setColor('#5D4037');
-            });
+            // Add "Completed" badge if submitted
+            if (isSubmitted) {
+                const completedBadge = this.scene.add.text(cardX + cardWidth / 2 - 50, baseY - 18, '✓ Done', {
+                    fontSize: '8px',
+                    fontFamily: 'PixelFont',
+                    color: '#FFFFFF',
+                    backgroundColor: '#22c55e',
+                    padding: { x: 4, y: 2 },
+                    resolution: 2
+                });
+                completedBadge.setOrigin(0.5);
+                completedBadge.setDepth(5306);
+                completedBadge.setMask(scrollMask);
+                this.scene.cameras.main.ignore(completedBadge);
+                this.quizModalElements.push(completedBadge);
+                contentElements.push(completedBadge);
+                (completedBadge as any).originalY = baseY - 18;
+            }
 
-            // Click to start quiz
-            let clickStartY = 0;
-            cardBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-                clickStartY = pointer.y;
-            });
-            cardBg.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-                if (Math.abs(pointer.y - clickStartY) < 10) {
-                    this.showQuizDetails(quiz);
-                }
-            });
+            // Hover effects (only if not submitted)
+            if (!isSubmitted) {
+                cardBg.on('pointerover', () => {
+                    cardBg.setFillStyle(0xE8D9C0);
+                    quizName.setColor('#a855f7');
+                });
+                cardBg.on('pointerout', () => {
+                    cardBg.setFillStyle(0xD4C4A8);
+                    quizName.setColor('#5D4037');
+                });
+
+                // Click to start quiz
+                let clickStartY = 0;
+                cardBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+                    clickStartY = pointer.y;
+                });
+                cardBg.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+                    if (Math.abs(pointer.y - clickStartY) < 10) {
+                        this.showQuizDetails(quiz);
+                    }
+                });
+            }
         });
 
         // Scroll handling
@@ -1919,7 +2018,7 @@ export class QuickActionsManager extends BaseManager {
     /**
      * Show quiz details modal
      */
-    private showQuizDetails(quiz: Quiz): void {
+    private async showQuizDetails(quiz: Quiz): Promise<void> {
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
         const modalX = screenWidth / 2;
@@ -1954,7 +2053,7 @@ export class QuickActionsManager extends BaseManager {
             ease: 'Back.easeOut'
         });
 
-        this.scene.time.delayedCall(100, () => {
+        this.scene.time.delayedCall(100, async () => {
             // Close button
             const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
             closeBtnBg.setDisplaySize(24, 24);
@@ -2034,16 +2133,24 @@ export class QuickActionsManager extends BaseManager {
             this.scene.cameras.main.ignore(rewards);
             this.quizModalElements.push(rewards);
 
+            // Check if already attempted (from local tracking or cache)
+            const isLocallySubmitted = this.submittedQuizIds.has(quiz.id);
+            const isCachedAsAttempted = this.quizAttemptedCache.get(quiz.id) === true;
+            const isAttempted = isLocallySubmitted || isCachedAsAttempted;
+
             // Start Quiz button
             const startBtn = this.scene.add.sprite(modalX + 10, modalY + modalHeight / 2 - 40, 'square-buttons', 6);
             startBtn.setDisplaySize(140, 30);
-            startBtn.setTint(0xa855f7);
+            startBtn.setTint(isAttempted ? 0x666666 : 0xa855f7);
             startBtn.setDepth(5402);
-            startBtn.setInteractive({ useHandCursor: true });
+            if (!isAttempted) {
+                startBtn.setInteractive({ useHandCursor: true });
+            }
             this.scene.cameras.main.ignore(startBtn);
             this.quizModalElements.push(startBtn);
 
-            const startBtnText = this.scene.add.text(modalX + 10, modalY + modalHeight / 2 - 40, '🎮 Start Quiz', {
+            const startBtnText = this.scene.add.text(modalX + 10, modalY + modalHeight / 2 - 40,
+                isAttempted ? '✓ Completed' : '🎮 Start Quiz', {
                 fontSize: '10px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
@@ -2051,49 +2158,58 @@ export class QuickActionsManager extends BaseManager {
             });
             startBtnText.setOrigin(0.5);
             startBtnText.setDepth(5403);
-            startBtnText.setStroke('#7c3aed', 2);
+            startBtnText.setStroke(isAttempted ? '#444444' : '#7c3aed', 2);
             this.scene.cameras.main.ignore(startBtnText);
             this.quizModalElements.push(startBtnText);
 
-            startBtn.on('pointerdown', async () => {
-                startBtnText.setText('🎮 Starting...');
-                startBtn.disableInteractive();
-                
-                // Get quiz details with questions
-                const quizDetail = await QuizService.getQuizByEvent(quiz.event.id);
-                
-                if (!quizDetail || !quizDetail.quiz) {
-                    this.callbacks.showToastMessage?.('Failed to load quiz', 0xef4444);
-                    startBtnText.setText('🎮 Start Quiz');
-                    startBtn.setInteractive({ useHandCursor: true });
-                    return;
-                }
-                
-                if (quizDetail.hasAttempted) {
-                    this.callbacks.showToastMessage?.('You already attempted this quiz!', 0xfbbf24);
-                    startBtnText.setText('🎮 Start Quiz');
-                    startBtn.setInteractive({ useHandCursor: true });
-                    return;
-                }
-                
-                // Start quiz attempt
-                const startResult = await QuizService.startQuiz(quiz.id);
-                
-                if (!startResult.success) {
-                    this.callbacks.showToastMessage?.(startResult.error || 'Failed to start quiz', 0xef4444);
-                    startBtnText.setText('🎮 Start Quiz');
-                    startBtn.setInteractive({ useHandCursor: true });
-                    return;
-                }
-                
-                // Close modals and start quiz gameplay
-                this.closeQuizDetails();
-                this.closeQuizModal();
-                
-                this.startQuizGameplay(quizDetail.quiz);
-            });
-            startBtn.on('pointerover', () => startBtn.setTint(0xc084fc));
-            startBtn.on('pointerout', () => startBtn.setTint(0xa855f7));
+            // Only add click handler if quiz not attempted
+            if (!isAttempted) {
+                startBtn.on('pointerdown', async () => {
+                    startBtnText.setText('🎮 Starting...');
+                    startBtn.disableInteractive();
+
+                    // Get quiz details with questions
+                    const quizDetail = await QuizService.getQuizByEvent(quiz.event.id);
+
+                    if (!quizDetail || !quizDetail.quiz) {
+                        this.callbacks.showToastMessage?.('Failed to load quiz', 0xef4444);
+                        startBtnText.setText('🎮 Start Quiz');
+                        startBtn.setInteractive({ useHandCursor: true });
+                        return;
+                    }
+
+                    if (quizDetail.hasAttempted) {
+                        this.submittedQuizIds.add(quiz.id);
+                        startBtn.setTint(0x666666);
+                        startBtnText.setText('✓ Completed');
+                        startBtnText.setStroke('#444444', 2);
+                        this.callbacks.showToastMessage?.('Quiz already completed!', 0xfbbf24);
+                        return;
+                    }
+
+                    // Start quiz attempt
+                    const startResult = await QuizService.startQuiz(quiz.id);
+
+                    if (!startResult.success) {
+                        this.callbacks.showToastMessage?.(startResult.error || 'Failed to start quiz', 0xef4444);
+                        startBtnText.setText('🎮 Start Quiz');
+                        startBtn.setInteractive({ useHandCursor: true });
+                        return;
+                    }
+
+                    // Close modals and start quiz gameplay
+                    this.closeQuizDetails();
+                    this.closeQuizModal();
+
+                    this.startQuizGameplay(quizDetail.quiz);
+                });
+                startBtn.on('pointerover', () => {
+                    startBtn.setTint(0xc084fc);
+                });
+                startBtn.on('pointerout', () => {
+                    startBtn.setTint(0xa855f7);
+                });
+            }
         });
 
         overlay.on('pointerdown', () => this.closeQuizDetails());
@@ -2401,6 +2517,7 @@ export class QuickActionsManager extends BaseManager {
         this.quizGameElements.push(loadingText);
 
         // Submit answers
+        const submittedQuizId = this.currentQuizId; // Save before clearing
         const result = await QuizService.submitQuiz(this.currentQuizId, this.userAnswers);
 
         // Clear loading
@@ -2410,6 +2527,14 @@ export class QuickActionsManager extends BaseManager {
         this.quizGameElements = [];
 
         if (result && result.success) {
+            // Track submitted quiz to disable it
+            if (submittedQuizId) {
+                this.submittedQuizIds.add(submittedQuizId);
+            }
+
+            // Refresh profile/XP immediately (don't wait for close)
+            GameDataService.refreshAndUpdateUI();
+
             this.showQuizResult(result);
         } else {
             this.callbacks.showToastMessage?.('Failed to submit quiz', 0xef4444);

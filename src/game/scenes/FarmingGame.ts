@@ -36,7 +36,8 @@ import {
     PLANT_TYPES,
     CROP_DEFINITIONS,
     DEATH_TIMER_MS,
-    GAME_CONSTANTS
+    GAME_CONSTANTS,
+    getMaxWaterHours
 } from '../managers';
 import { InventoryService, InventoryItem } from '../InventoryService';
 import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
@@ -105,6 +106,13 @@ export class FarmingGame extends Scene {
 
     // Backpack items from API (used by warehouse)
     private backpackItems: InventoryItem[] = [];
+
+    // Pending water action for revert on error
+    private pendingWaterAction: {
+        tileKey: string;
+        previousWaterBalance: number;
+        previousWaterCount: number;
+    } | null = null;
 
     // Selected item for transfer between chest and warehouse
     private selectedItem: { itemType: string; amount: number; source: 'backpack' | 'storage' } | null = null;
@@ -525,7 +533,6 @@ export class FarmingGame extends Scene {
         console.log('[FarmingGame] Socket connected - real-time updates enabled');
         // Debug: Log connection state
         this.socketService.debugConnectionState();
-        this.showToastMessage('🔗 Connected', 0x4ade80);
     }
 
     /**
@@ -533,10 +540,6 @@ export class FarmingGame extends Scene {
      */
     private onSocketDisconnected(reason: string): void {
         console.log('[FarmingGame] Socket disconnected:', reason);
-        // Don't show toast for intentional disconnects
-        if (reason !== 'io client disconnect') {
-            this.showToastMessage('⚠️ Connection lost', 0xfbbf24);
-        }
     }
 
     /**
@@ -665,12 +668,55 @@ export class FarmingGame extends Scene {
     /**
      * Handle action_error event from socket
      * Shows error message to user when a game action fails
+     * Reverts optimistic UI updates
      */
     private onActionError(payload: { action: string; message: string }): void {
         console.error('[FarmingGame] Received action_error:', payload);
-        
+
         // Show error toast to user
         this.showToastMessage(payload.message || 'Action failed!', 0xef4444);
+
+        // Revert optimistic updates based on action type
+        if (payload.action === 'water_plant' && this.pendingWaterAction) {
+            const { tileKey, previousWaterBalance, previousWaterCount } = this.pendingWaterAction;
+            const state = this.farmLandStates.get(tileKey);
+
+            if (state) {
+                // Revert hydration state
+                if (state.hydration) {
+                    state.hydration.waterBalance = previousWaterBalance;
+                    state.hydration.hoursToDeath = previousWaterBalance;
+                }
+
+                // Revert health bar visual
+                const maxHours = getMaxWaterHours(state.cropType || 'algae');
+                const healthPercent = Math.min(previousWaterBalance / maxHours, 1);
+                const maxWidth = 11;
+
+                if (state.healthBarFill) {
+                    state.healthBarFill.width = Math.max(maxWidth * healthPercent, 1);
+                    if (healthPercent > 0.6) {
+                        state.healthBarFill.setFillStyle(0x4ade80); // Green
+                    } else if (healthPercent > 0.3) {
+                        state.healthBarFill.setFillStyle(0xfbbf24); // Yellow
+                    } else {
+                        state.healthBarFill.setFillStyle(0xef4444); // Red
+                    }
+                }
+
+                console.log(`[Revert] Water: reverted to ${previousWaterBalance}h`);
+            }
+
+            // Revert water count in toolbar
+            const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
+            if (wateringCan) {
+                wateringCan.count = previousWaterCount;
+                this.updateToolbar();
+            }
+
+            // Clear pending action
+            this.pendingWaterAction = null;
+        }
     }
 
     /**
@@ -1055,11 +1101,12 @@ export class FarmingGame extends Scene {
                     this.createHealthBar(x, y, tileKey);
                 }
 
-                // Update health bar based on hydration.hoursToDeath (max 72 hours = 100%)
+                // Update health bar based on waterBalance / maxWaterHours for plant type
                 const updatedState = this.farmLandStates.get(tileKey);
                 if (updatedState?.healthBarFill && state.hydration) {
-                    const maxHours = 72;
-                    const healthPercent = Math.min(state.hydration.hoursToDeath / maxHours, 1);
+                    const waterBalance = state.hydration.waterBalance ?? 0;
+                    const maxHours = getMaxWaterHours(state.cropType || 'algae');
+                    const healthPercent = Math.min(waterBalance / maxHours, 1);
                     const maxWidth = 11; // barWidth(12) - 1
                     updatedState.healthBarFill.width = Math.max(maxWidth * healthPercent, 1);
 
@@ -1073,7 +1120,7 @@ export class FarmingGame extends Scene {
                     }
                 }
 
-                console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (health: ${state.hydration?.hoursToDeath ?? 'N/A'}h)`);
+                console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (water: ${state.hydration?.waterBalance ?? 'N/A'}h)`);
             } else {
                 this.removePlant(x, y);
                 state.planted = false;
@@ -1426,11 +1473,12 @@ export class FarmingGame extends Scene {
                         this.createHealthBar(x, y, tileKey);
                     }
 
-                    // Update health bar based on hydration.hoursToDeath (max 72 hours = 100%)
+                    // Update health bar based on waterBalance / maxWaterHours for plant type
                     const updatedState = this.farmLandStates.get(tileKey);
                     if (updatedState?.healthBarFill && state.hydration) {
-                        const maxHours = 72; // Max hours to death
-                        const healthPercent = Math.min(state.hydration.hoursToDeath / maxHours, 1);
+                        const waterBalance = state.hydration.waterBalance ?? 0;
+                        const maxHours = getMaxWaterHours(state.cropType || 'algae');
+                        const healthPercent = Math.min(waterBalance / maxHours, 1);
                         const maxWidth = 11; // barWidth(12) - 1
                         updatedState.healthBarFill.width = Math.max(maxWidth * healthPercent, 1);
 
@@ -1444,7 +1492,7 @@ export class FarmingGame extends Scene {
                         }
                     }
 
-                    console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (health: ${state.hydration?.hoursToDeath ?? 'N/A'}h)`);
+                    console.log(`Restored plant at ${tileKey}: ${plantType} stage ${plantStage} (water: ${state.hydration?.waterBalance ?? 'N/A'}h)`);
                 } else {
                     // Empty plot - remove any existing plant sprite and reset state
                     this.removePlant(x, y);
@@ -2404,7 +2452,7 @@ export class FarmingGame extends Scene {
             targets: msgText,
             y: screenHeight / 2 + 60,
             alpha: 0,
-            duration: 1500,
+            duration: 5000, // 5 seconds for readability
             ease: 'Cubic.easeOut',
             onComplete: () => {
                 msgText.destroy();
@@ -2750,9 +2798,16 @@ export class FarmingGame extends Scene {
             // Update UI immediately for responsive feel
             // Server will send plant_update and inventory_update events
 
+            // Save state for potential revert on error
+            this.pendingWaterAction = {
+                tileKey,
+                previousWaterBalance: state.hydration?.waterBalance ?? 0,
+                previousWaterCount: wateringCan.count
+            };
+
             // Immediately update local state
             state.lastCareTime = Date.now();
-            this.resetHealthBar(tileKey);
+            this.updateHealthBarAfterWater(tileKey);
             wateringCan.count--;
 
             // If plant was wilted, restore it optimistically
@@ -2828,7 +2883,7 @@ export class FarmingGame extends Scene {
 
             // Immediately update local state
             state.lastCareTime = Date.now();
-            this.resetHealthBar(tileKey);
+            this.updateHealthBarAfterWater(tileKey);
 
             // If plant was wilted, restore it optimistically
             if (state.isWilted) {
@@ -3274,20 +3329,45 @@ export class FarmingGame extends Scene {
         // Health bar updates happen in loadGardenData() when fresh data is fetched
     }
 
-    private resetHealthBar(tileKey: string) {
+    /**
+     * Update health bar optimistically after watering
+     * Adds 3 hours (1 water drop) to current waterBalance
+     */
+    private updateHealthBarAfterWater(tileKey: string) {
         const state = this.farmLandStates.get(tileKey);
         if (!state || !state.healthBarFill) return;
 
-        // Reset to full health (green, full width)
-        const maxWidth = 11; // barWidth(12) - 1
-        state.healthBarFill.setSize(maxWidth, 2);
-        state.healthBarFill.setFillStyle(0x4ade80, 1); // Green
+        const WATER_DROP_HOURS = 3;
+        const plantType = state.cropType || 'algae';
+        const maxWaterHours = getMaxWaterHours(plantType);
 
-        // Reset position to match createHealthBar
-        const [x, y] = tileKey.split(',').map(Number);
-        const barX = x * this.TILE_SIZE + this.TILE_SIZE / 2;
-        const barY = y * this.TILE_SIZE - 2;
-        state.healthBarFill.setPosition(barX, barY);
+        // Calculate new waterBalance (current + 3, capped at max)
+        const currentWaterBalance = state.hydration?.waterBalance ?? 0;
+        const newWaterBalance = Math.min(currentWaterBalance + WATER_DROP_HOURS, maxWaterHours);
+
+        // Update local state so WebSocket update doesn't flash
+        if (state.hydration) {
+            state.hydration.waterBalance = newWaterBalance;
+            state.hydration.hoursToDeath = newWaterBalance;
+        }
+
+        // Calculate health percentage
+        const healthPercent = Math.min(newWaterBalance / maxWaterHours, 1);
+        const maxWidth = 11; // barWidth(12) - 1
+
+        // Update health bar size
+        state.healthBarFill.width = Math.max(maxWidth * healthPercent, 1);
+
+        // Color gradient: green -> yellow -> red
+        if (healthPercent > 0.6) {
+            state.healthBarFill.setFillStyle(0x4ade80, 1); // Green
+        } else if (healthPercent > 0.3) {
+            state.healthBarFill.setFillStyle(0xfbbf24, 1); // Yellow/Orange
+        } else {
+            state.healthBarFill.setFillStyle(0xef4444, 1); // Red
+        }
+
+        console.log(`[Optimistic] Water: ${currentWaterBalance}h -> ${newWaterBalance}h (${Math.round(healthPercent * 100)}%)`);
     }
 
     private updatePlantSprite(x: number, y: number, cropType: PlantType, stage: number, isDead: boolean = false, isWilted: boolean = false) {
