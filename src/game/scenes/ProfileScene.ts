@@ -732,6 +732,7 @@ export class ProfileScene extends Scene {
         const originalY = y;
         const isPending = badge.status === 'PENDING';
         const isLocked = badge.status === 'LOCKED';
+        // const canClaim = badge.status === 'CAN_CLAIM' || badge.status === 'COMPLETED';
         const canClaim = badge.status === 'CAN_CLAIM';
         const isClaimed = badge.status === 'CLAIMED';
         

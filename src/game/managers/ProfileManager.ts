@@ -961,6 +961,7 @@ export class ProfileManager extends BaseManager {
     private createBadgeRow(leftX: number, y: number, width: number, badge: ApiBadge): void {
         const isPending = badge.status === 'PENDING';
         const isLocked = badge.status === 'LOCKED';
+        // const canClaim = badge.status === 'CAN_CLAIM' || badge.status === 'COMPLETED';
         const canClaim = badge.status === 'CAN_CLAIM';
         
         const rowHeight = 28;

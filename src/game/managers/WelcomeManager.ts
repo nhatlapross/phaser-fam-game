@@ -281,6 +281,7 @@ export class WelcomeManager extends BaseManager {
     private createBadgeRow(centerX: number, y: number, width: number, badge: ApiBadge, index: number): void {
         const isClaimed = badge.status === 'CLAIMED';
         const isPending = badge.status === 'PENDING';
+        // const canClaim = badge.status === 'CAN_CLAIM' || badge.status === 'COMPLETED';
         const canClaim = badge.status === 'CAN_CLAIM';
         const isLocked = badge.status === 'LOCKED';
         const leftX = centerX - width / 2;

@@ -3,7 +3,8 @@
 import { UserService } from './UserService';
 
 // Badge status from API
-export type BadgeStatus = 'LOCKED' | 'CAN_CLAIM' | 'PENDING' | 'CLAIMED';
+// CAN_CLAIM and COMPLETED are treated the same - both allow direct claiming without proof
+export type BadgeStatus = 'LOCKED' | 'CAN_CLAIM' | 'COMPLETED' | 'PENDING' | 'CLAIMED';
 
 // Badge from API
 export interface ApiBadge {
