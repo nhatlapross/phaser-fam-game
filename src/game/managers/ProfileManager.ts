@@ -5,7 +5,7 @@ import { GameDataService } from '../GameDataService';
 import { EventBus } from '../EventBus';
 import { useGameState } from '../hooks/useGameState';
 import { NFTVoucherManager, SAMPLE_VOUCHERS } from './NFTVoucherManager';
-import { BadgeService, AVAILABLE_BADGES, Badge, SoulboundToken } from '../BadgeService';
+import { BadgeService, Badge, SoulboundToken, ApiBadge } from '../BadgeService';
 import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 import { QuickActionsManager } from './QuickActionsManager';
 
@@ -42,6 +42,12 @@ export class ProfileManager extends BaseManager {
     private badgesMask: Phaser.GameObjects.Graphics | null = null;
     private badgesLoading: boolean = false;
     private userBadges: SoulboundToken[] = [];
+    private allBadges: ApiBadge[] = [];
+    
+    // Claim form elements
+    private claimFormElements: Phaser.GameObjects.GameObject[] = [];
+    private claimFormOpen: boolean = false;
+    private proofInput: HTMLInputElement | null = null;
 
     // Quick actions manager (mission button, etc.)
     private quickActionsManager: QuickActionsManager | null = null;
@@ -761,69 +767,49 @@ export class ProfileManager extends BaseManager {
     }
 
     /**
-     * Create badges tab content - Grid of user's badges from API (scrollable)
+     * Create badges tab content - Shows claimed badges and unclaimed badges list
      */
     private async createBadgesTabContent(modalX: number, contentStartY: number, modalWidth: number, contentHeight: number): Promise<void> {
         // Reset scroll position
         this.badgesScrollY = 0;
 
-        // Check cache FIRST before showing any loading UI
-        const cachedData = GameDataService.getCachedData();
-        const hasCachedBadges = cachedData && cachedData.badges !== undefined;
+        // Show loading state
+        const loadingText = this.scene.add.text(modalX, contentStartY + contentHeight / 2, 'Loading badges...', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#BCAAA4',
+            resolution: 2
+        });
+        loadingText.setOrigin(0.5);
+        loadingText.setDepth(5151);
+        this.scene.cameras.main.ignore(loadingText);
+        this.profileContentElements.push(loadingText);
 
-        if (hasCachedBadges) {
-            // Use cached badges - instant load, no loading text!
-            this.userBadges = cachedData.badges;
-            console.log('[ProfileManager] Using pre-loaded badges from cache:', this.userBadges.length);
-        } else {
-            // Need to fetch - show loading state
-            const loadingText = this.scene.add.text(modalX, contentStartY + contentHeight / 2, 'Loading badges...', {
-                fontSize: '10px',
-                fontFamily: 'PixelFont',
-                color: '#BCAAA4',
-                resolution: 2
-            });
-            loadingText.setOrigin(0.5);
-            loadingText.setDepth(5151);
-            this.scene.cameras.main.ignore(loadingText);
-            this.profileContentElements.push(loadingText);
+        // Fetch all badges from API
+        this.badgesLoading = true;
+        try {
+            this.allBadges = await BadgeService.getAllBadges();
+        } catch (error) {
+            console.error('[ProfileManager] Error fetching badges:', error);
+            this.allBadges = [];
+        }
+        this.badgesLoading = false;
 
-            this.badgesLoading = true;
-            try {
-                this.userBadges = await BadgeService.fetchSoulboundTokens();
-            } catch (error) {
-                console.error('[ProfileManager] Error fetching badges:', error);
-                this.userBadges = BadgeService.getCachedTokens();
-            }
-            this.badgesLoading = false;
-
-            // Guard: Check if modal was closed while loading
-            if (!this.isOpen || this.activeTab !== 'badges') {
-                console.log('[ProfileManager] Modal closed or tab changed during badge loading, skipping render');
-                if (loadingText.active) loadingText.destroy();
-                return;
-            }
-
-            // Remove loading text
+        // Guard: Check if modal was closed while loading
+        if (!this.isOpen || this.activeTab !== 'badges') {
             if (loadingText.active) loadingText.destroy();
+            return;
         }
 
-        // If no badges, use mock data for testing
-        if (this.userBadges.length === 0) {
-            this.userBadges = this.getMockBadges();
-            console.log('[ProfileManager] Using mock badges for testing');
-        }
+        // Remove loading text
+        if (loadingText.active) loadingText.destroy();
 
-        // Grid configuration
-        const columns = 5;
-        const cellSize = 35;
-        const cellSpacing = 10;
-        const gridWidth = columns * cellSize + (columns - 1) * cellSpacing;
-        const startX = modalX - gridWidth / 2 + cellSize / 2 + 10;
-        const startY = contentStartY + 20;
+        // Filter badges by status
+        const claimedBadges = this.allBadges.filter(b => b.status === 'CLAIMED');
+        const unclaimedBadges = this.allBadges.filter(b => b.status !== 'CLAIMED');
 
         // Create container for scrollable content
-        this.badgesContainer = this.scene.add.container(0, 25);
+        this.badgesContainer = this.scene.add.container(0, 0);
         this.badgesContainer.setDepth(5150);
         this.scene.cameras.main.ignore(this.badgesContainer);
         this.profileContentElements.push(this.badgesContainer);
@@ -832,110 +818,125 @@ export class ProfileManager extends BaseManager {
         const maskGraphics = this.scene.add.graphics();
         maskGraphics.fillStyle(0xffffff);
         maskGraphics.fillRect(
-            modalX - modalWidth / 2 + 40,
+            modalX - modalWidth / 2 + 20,
             contentStartY,
-            modalWidth - 60,
-            contentHeight - 40
+            modalWidth - 40,
+            contentHeight - 10
         );
         const mask = maskGraphics.createGeometryMask();
         this.badgesContainer.setMask(mask);
         this.badgesMask = maskGraphics;
         this.scene.cameras.main.ignore(maskGraphics);
-        // Hide the mask graphics - it should only be used for masking, not visible
         maskGraphics.setVisible(false);
 
-        // Title
-        const title = this.scene.add.text(modalX, contentStartY + 5, 'My Badges', {
-            fontSize: '12px',
+        let currentY = contentStartY + 10;
+        const leftX = modalX - modalWidth / 2 + 30;
+        const rowWidth = modalWidth - 80;
+
+        // ===== MY BADGES SECTION =====
+        const myBadgesTitle = this.scene.add.text(modalX, currentY, `🏆 My Badges (${claimedBadges.length})`, {
+            fontSize: '10px',
             fontFamily: 'PixelFont',
             color: '#FFD700',
             resolution: 2
         });
-        title.setOrigin(0.5);
-        title.setDepth(5151);
-        title.setStroke('#5D4037', 2);
-        this.scene.cameras.main.ignore(title);
-        this.profileContentElements.push(title);
+        myBadgesTitle.setOrigin(0.5);
+        myBadgesTitle.setStroke('#5D4037', 2);
+        this.badgesContainer.add(myBadgesTitle);
+        currentY += 20;
 
-        // Check if user has any badges
-        if (this.userBadges.length === 0) {
-            const noBadgesText = this.scene.add.text(modalX, contentStartY + contentHeight / 2, 'No badges yet', {
-                fontSize: '10px',
-                fontFamily: 'PixelFont',
-                color: '#BCAAA4',
-                resolution: 2,
-                align: 'center'
-            });
-            noBadgesText.setOrigin(0.5);
-            noBadgesText.setDepth(5151);
-            this.scene.cameras.main.ignore(noBadgesText);
-            this.profileContentElements.push(noBadgesText);
-            return;
-        }
-
-        // Display user's badges from API
-        const rows = Math.ceil(this.userBadges.length / columns);
-
-        this.userBadges.forEach((token, index) => {
-            const col = index % columns;
-            const row = Math.floor(index / columns);
-            const x = startX + col * (cellSize + cellSpacing);
-            const y = startY + row * (cellSize + cellSpacing);
-
-            // Get rarity color
-            const rarityColor = BadgeService.getRarityColor(token.metadata?.rarity || 'COMMON');
-            const rarityColorHex = parseInt(rarityColor.replace('#', ''), 16);
-
-            // Badge background with rarity color
-            const badgeBg = this.scene.add.rectangle(x, y, cellSize, cellSize, rarityColorHex, 0.3);
-            badgeBg.setStrokeStyle(2, rarityColorHex);
-            badgeBg.setInteractive({ useHandCursor: true });
-            this.badgesContainer!.add(badgeBg);
-
-            // Badge icon - use og-badge as default image
-            const badgeIcon = this.scene.add.image(x, y - 3, 'og-badge');
-            // Scale to fit within cell (leaving some padding)
-            const iconSize = cellSize - 12;
-            badgeIcon.setDisplaySize(iconSize, iconSize);
-            badgeIcon.setOrigin(0.5);
-            this.badgesContainer!.add(badgeIcon);
-
-            // Hover tooltip
-            badgeBg.on('pointerover', () => {
-                this.showSoulboundTokenTooltip(x, y - cellSize / 2 + 10, token);
-                badgeBg.setStrokeStyle(2, 0xFFD700);
-            });
-            badgeBg.on('pointerout', () => {
-                this.hideBadgeTooltip();
-                badgeBg.setStrokeStyle(2, rarityColorHex);
-            });
-
-        });
-
-        // Calculate if scrolling is needed
-        const totalHeight = rows * (cellSize + cellSpacing);
-        const visibleHeight = contentHeight - 60;
-        const maxScroll = Math.max(0, totalHeight - visibleHeight);
-
-        // Enable scrolling if content exceeds visible area
-        if (maxScroll > 0) {
-            // Scroll indicator
-            const scrollHint = this.scene.add.text(modalX, contentStartY + contentHeight - 25, '↕ Scroll for more', {
+        if (claimedBadges.length === 0) {
+            const noBadges = this.scene.add.text(modalX, currentY + 10, 'No badges claimed yet', {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
-                color: '#BCAAA4',
+                color: '#9CA3AF',
                 resolution: 2
             });
-            scrollHint.setOrigin(0.5);
-            scrollHint.setDepth(5151);
-            this.scene.cameras.main.ignore(scrollHint);
-            this.profileContentElements.push(scrollHint);
+            noBadges.setOrigin(0.5);
+            this.badgesContainer.add(noBadges);
+            currentY += 30;
+        } else {
+            // Display claimed badges in grid
+            const columns = 5;
+            const cellSize = 32;
+            const cellSpacing = 8;
+            const gridWidth = columns * cellSize + (columns - 1) * cellSpacing;
+            const gridStartX = modalX - gridWidth / 2 + cellSize / 2;
 
+            claimedBadges.forEach((badge, index) => {
+                const col = index % columns;
+                const row = Math.floor(index / columns);
+                const x = gridStartX + col * (cellSize + cellSpacing);
+                const y = currentY + row * (cellSize + cellSpacing) + cellSize / 2;
+
+                const badgeBg = this.scene.add.rectangle(x, y, cellSize, cellSize, 0x2d5a3d, 0.8);
+                badgeBg.setStrokeStyle(2, 0x4ade80);
+                badgeBg.setInteractive({ useHandCursor: true });
+                this.badgesContainer!.add(badgeBg);
+
+                const badgeIcon = this.scene.add.text(x, y, '🏆', {
+                    fontSize: '16px',
+                    resolution: 2
+                });
+                badgeIcon.setOrigin(0.5);
+                this.badgesContainer!.add(badgeIcon);
+
+                badgeBg.on('pointerover', () => {
+                    badgeBg.setStrokeStyle(2, 0xFFD700);
+                    this.showApiBadgeTooltip(x, y - cellSize / 2 - 15, badge);
+                });
+                badgeBg.on('pointerout', () => {
+                    badgeBg.setStrokeStyle(2, 0x4ade80);
+                    this.hideBadgeTooltip();
+                });
+            });
+
+            const claimedRows = Math.ceil(claimedBadges.length / columns);
+            currentY += claimedRows * (cellSize + cellSpacing) + 15;
+        }
+
+        // ===== UNCLAIMED BADGES SECTION =====
+        currentY += 10;
+        const unclaimedTitle = this.scene.add.text(modalX, currentY, `🔓 Available Badges (${unclaimedBadges.length})`, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        unclaimedTitle.setOrigin(0.5);
+        unclaimedTitle.setStroke('#5D4037', 2);
+        this.badgesContainer.add(unclaimedTitle);
+        currentY += 20;
+
+        if (unclaimedBadges.length === 0) {
+            const allClaimed = this.scene.add.text(modalX, currentY + 10, 'All badges claimed! 🎉', {
+                fontSize: '8px',
+                fontFamily: 'PixelFont',
+                color: '#4ade80',
+                resolution: 2
+            });
+            allClaimed.setOrigin(0.5);
+            this.badgesContainer.add(allClaimed);
+            currentY += 30;
+        } else {
+            // Display unclaimed badges as rows
+            const rowHeight = 32;
+            unclaimedBadges.forEach((badge) => {
+                this.createBadgeRow(leftX + 20, currentY, rowWidth, badge);
+                currentY += rowHeight + 4;
+            });
+        }
+
+        // Calculate scrolling
+        const totalHeight = currentY - contentStartY + 20;
+        const visibleHeight = contentHeight - 10;
+        const maxScroll = Math.max(0, totalHeight - visibleHeight);
+
+        if (maxScroll > 0) {
             // Mouse wheel scrolling
             this.scene.input.on('wheel', (pointer: Phaser.Input.Pointer, _gameObjects: any[], _deltaX: number, deltaY: number) => {
                 if (!this.badgesContainer || this.activeTab !== 'badges') return;
                 
-                // Check if pointer is within modal bounds
                 const modalLeft = modalX - modalWidth / 2;
                 const modalRight = modalX + modalWidth / 2;
                 const modalTop = contentStartY;
@@ -948,22 +949,467 @@ export class ProfileManager extends BaseManager {
                         0,
                         maxScroll
                     );
-                    this.badgesContainer.y = -this.badgesScrollY;
+                    this.badgesContainer!.y = -this.badgesScrollY;
                 }
             });
         }
+    }
 
-        // Stats
-        const statsText = this.scene.add.text(modalX, contentStartY + contentHeight - 50, `${this.userBadges.length} Badge${this.userBadges.length !== 1 ? 's' : ''} Collected`, {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#000000',
+    /**
+     * Create a badge row for unclaimed badges
+     */
+    private createBadgeRow(leftX: number, y: number, width: number, badge: ApiBadge): void {
+        const isPending = badge.status === 'PENDING';
+        const isLocked = badge.status === 'LOCKED';
+        // const canClaim = badge.status === 'CAN_CLAIM' || badge.status === 'COMPLETED';
+        const canClaim = badge.status === 'CAN_CLAIM';
+        
+        const rowHeight = 28;
+        const rowCenterY = y + rowHeight / 2;
+        
+        // Row background
+        let bgColor = 0x4A4035;
+        let strokeColor = 0x6B5B4D;
+        
+        if (canClaim) {
+            bgColor = 0x2d5a3d;
+            strokeColor = 0x4ade80;
+        } else if (isPending) {
+            bgColor = 0x6B5B3D;
+            strokeColor = 0xfbbf24;
+        }
+        
+        const rowBg = this.scene.add.rectangle(leftX + width / 2, rowCenterY, width, rowHeight, bgColor, 0.9);
+        rowBg.setStrokeStyle(1, strokeColor);
+        this.badgesContainer!.add(rowBg);
+
+        // Badge icon
+        let iconEmoji = '🔒';
+        if (canClaim) iconEmoji = '🏆';
+        else if (isPending) iconEmoji = '⏳';
+        
+        const icon = this.scene.add.text(leftX + 18, rowCenterY, iconEmoji, {
+            fontSize: '12px',
             resolution: 2
         });
-        statsText.setOrigin(0.5);
-        statsText.setDepth(5151);
-        this.scene.cameras.main.ignore(statsText);
-        this.profileContentElements.push(statsText);
+        icon.setOrigin(0.5);
+        icon.setAlpha(isLocked ? 0.5 : 0.9);
+        this.badgesContainer!.add(icon);
+
+        // Badge name
+        let nameColor = '#FFFFFF';
+        if (canClaim) nameColor = '#4ade80';
+        else if (isPending) nameColor = '#fbbf24';
+        
+        const name = this.scene.add.text(leftX + 35, rowCenterY, badge.name, {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: nameColor,
+            resolution: 2
+        });
+        name.setOrigin(0, 0.5);
+        name.setStroke('#3E2723', 1);
+        this.badgesContainer!.add(name);
+
+        // Button/Status
+        const btnX = leftX + width - 35;
+        
+        if (isLocked) {
+            const unlockBtn = this.scene.add.rectangle(btnX, rowCenterY, 45, 20, 0x6b7280, 1);
+            unlockBtn.setStrokeStyle(1, 0x9ca3af);
+            unlockBtn.setInteractive({ useHandCursor: true });
+            this.badgesContainer!.add(unlockBtn);
+
+            const unlockText = this.scene.add.text(btnX, rowCenterY, 'Unlock', {
+                fontSize: '7px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            unlockText.setOrigin(0.5);
+            this.badgesContainer!.add(unlockText);
+
+            unlockBtn.on('pointerdown', () => this.openBadgeClaimForm(badge));
+            unlockBtn.on('pointerover', () => unlockBtn.setFillStyle(0x9ca3af, 1));
+            unlockBtn.on('pointerout', () => unlockBtn.setFillStyle(0x6b7280, 1));
+        } else if (isPending) {
+            const pendingText = this.scene.add.text(btnX, rowCenterY, 'Pending', {
+                fontSize: '7px',
+                fontFamily: 'PixelFont',
+                color: '#fbbf24',
+                resolution: 2
+            });
+            pendingText.setOrigin(0.5);
+            pendingText.setStroke('#3E2723', 1);
+            this.badgesContainer!.add(pendingText);
+        } else if (canClaim) {
+            const claimBtn = this.scene.add.rectangle(btnX, rowCenterY, 45, 20, 0x4ade80, 1);
+            claimBtn.setStrokeStyle(1, 0x86efac);
+            claimBtn.setInteractive({ useHandCursor: true });
+            this.badgesContainer!.add(claimBtn);
+
+            const claimText = this.scene.add.text(btnX, rowCenterY, 'Claim', {
+                fontSize: '7px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            claimText.setOrigin(0.5);
+            claimText.setStroke('#166534', 1);
+            this.badgesContainer!.add(claimText);
+
+            claimBtn.on('pointerdown', async () => {
+                claimBtn.disableInteractive();
+                claimBtn.setFillStyle(0x6b7280, 1);
+                claimText.setText('...');
+                
+                this.callbacks.showToastMessage?.('⏳ Claiming...', 0x4a90e2);
+                const result = await BadgeService.claimBadge(badge.id, '');
+                
+                if (result.success) {
+                    this.callbacks.showToastMessage?.(`🎉 "${badge.name}" claimed!`, 0x4ade80);
+                    
+                    // Update badge status in local array
+                    badge.status = 'CLAIMED';
+                    
+                    // Update UI: Change button to "Claimed" state
+                    claimBtn.setFillStyle(0x374151, 1);
+                    claimBtn.setAlpha(0.7);
+                    claimText.setText('✓ Claimed');
+                    claimText.setFontSize('6px');
+                    claimText.setColor('#9CA3AF');
+                    
+                    // Update row background color to claimed style
+                    rowBg.setFillStyle(0x3d5a3d, 0.9);
+                    rowBg.setStrokeStyle(1, 0x4ade80);
+                    
+                    // Update icon
+                    icon.setText('🏆');
+                    icon.setAlpha(0.9);
+                    
+                    // Update name color
+                    name.setColor('#4ade80');
+                } else {
+                    this.callbacks.showToastMessage?.(`❌ ${result.message}`, 0xef4444);
+                    claimBtn.setInteractive({ useHandCursor: true });
+                    claimBtn.setFillStyle(0x4ade80, 1);
+                    claimText.setText('Claim');
+                }
+            });
+            claimBtn.on('pointerover', () => claimBtn.setFillStyle(0x86efac, 1));
+            claimBtn.on('pointerout', () => claimBtn.setFillStyle(0x4ade80, 1));
+        }
+    }
+
+    /**
+     * Show tooltip for API badge
+     */
+    private showApiBadgeTooltip(x: number, y: number, badge: ApiBadge): void {
+        this.hideBadgeTooltip();
+
+        const container = this.scene.add.container(x, y);
+        container.setDepth(5200);
+        this.scene.cameras.main.ignore(container);
+
+        const bg = this.scene.add.rectangle(0, 0, 100, 28, 0x3E2723, 0.95);
+        bg.setStrokeStyle(1, 0x5D4037);
+        container.add(bg);
+
+        const nameText = this.scene.add.text(0, 0, badge.name, {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#4ade80',
+            resolution: 2
+        });
+        nameText.setOrigin(0.5);
+        container.add(nameText);
+
+        this.badgeTooltip = container;
+        this.profileContentElements.push(container);
+
+        container.setAlpha(0);
+        container.setScale(0.8);
+        this.scene.tweens.add({
+            targets: container,
+            alpha: 1,
+            scale: 1,
+            duration: 100,
+            ease: 'Back.easeOut'
+        });
+    }
+
+    /**
+     * Open claim form for LOCKED badges
+     */
+    private openBadgeClaimForm(badge: ApiBadge): void {
+        if (this.claimFormOpen) return;
+        this.claimFormOpen = true;
+
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        const formWidth = 280;
+        const formHeight = 250;
+        const formX = screenWidth / 2;
+        const formY = screenHeight / 2;
+
+        // Overlay
+        const overlay = this.scene.add.rectangle(formX, formY, screenWidth, screenHeight, 0x000000, 0.8);
+        overlay.setDepth(6000);
+        overlay.setInteractive();
+        this.scene.cameras.main.ignore(overlay);
+        this.claimFormElements.push(overlay);
+
+        // Form background
+        const formBg = this.scene.add.sprite(formX, formY, 'settings-panel', 1);
+        formBg.setDisplaySize(formWidth, formHeight);
+        formBg.setDepth(6001);
+        formBg.setInteractive();
+        formBg.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+            e.stopPropagation();
+        });
+        this.scene.cameras.main.ignore(formBg);
+        this.claimFormElements.push(formBg);
+
+        formBg.setScale(0);
+        this.scene.tweens.add({
+            targets: formBg,
+            scaleX: formWidth / 125,
+            scaleY: formHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        // Title
+        const title = this.scene.add.text(formX, formY - formHeight / 2 + 25, `🔓 ${badge.name}`, {
+            fontSize: '13px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(6002);
+        title.setStroke('#3E2723', 3);
+        this.scene.cameras.main.ignore(title);
+        this.claimFormElements.push(title);
+
+        // Description
+        const description = this.scene.add.text(formX + 10, formY - formHeight / 2 + 50, badge.description, {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#3E2723',
+            resolution: 2,
+            wordWrap: { width: formWidth - 60 },
+            align: 'center',
+            lineSpacing: 6
+        });
+        description.setOrigin(0.5);
+        description.setDepth(6002);
+        this.scene.cameras.main.ignore(description);
+        this.claimFormElements.push(description);
+
+        // Instructions
+        const instructions = this.scene.add.text(formX, formY - 15, 'Submit proof (link or description):', {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#5D4037',
+            resolution: 2
+        });
+        instructions.setOrigin(0.5);
+        instructions.setDepth(6002);
+        this.scene.cameras.main.ignore(instructions);
+        this.claimFormElements.push(instructions);
+
+        // Note
+        const note = this.scene.add.text(formX, formY + 75, '⏳ Admin will verify your proof', {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#f59e0b',
+            resolution: 2
+        });
+        note.setOrigin(0.5);
+        note.setDepth(6002);
+        note.setStroke('#3E2723', 2);
+        this.scene.cameras.main.ignore(note);
+        this.claimFormElements.push(note);
+
+        // Create input after animation
+        this.scene.time.delayedCall(150, () => {
+            this.createBadgeProofInput(formX, formY, badge);
+        });
+
+        overlay.on('pointerdown', () => this.closeBadgeClaimForm());
+    }
+
+    /**
+     * Create proof input for badge claim form
+     */
+    private createBadgeProofInput(formX: number, formY: number, badge: ApiBadge): void {
+        // HTML input
+        this.proofInput = document.createElement('input');
+        this.proofInput.type = 'text';
+        this.proofInput.placeholder = 'https://twitter.com/...';
+        this.proofInput.maxLength = 200;
+        this.proofInput.style.cssText = `
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, 5px);
+            width: 220px;
+            padding: 10px 15px;
+            font-size: 12px;
+            font-family: 'PixelFont', monospace;
+            border: 3px solid #5D4037;
+            border-radius: 8px;
+            background-color: #FFF8E1;
+            color: #5D4037;
+            outline: none;
+            text-align: center;
+            z-index: 10001;
+        `;
+        document.body.appendChild(this.proofInput);
+
+        this.proofInput.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                await this.submitBadgeProof(badge);
+                e.preventDefault();
+            } else if (e.key === 'Escape') {
+                this.closeBadgeClaimForm();
+                e.preventDefault();
+            }
+            e.stopPropagation();
+        });
+        this.proofInput.addEventListener('keyup', (e) => e.stopPropagation());
+        this.proofInput.addEventListener('keypress', (e) => e.stopPropagation());
+        this.proofInput.focus();
+
+        // Buttons
+        const btnY = formY + 50;
+
+        // Submit button - using sprite like ProfileScene
+        const submitBtnBg = this.scene.add.sprite(formX - 50, btnY, 'square-buttons', 6);
+        submitBtnBg.setDisplaySize(80, 30);
+        submitBtnBg.setDepth(6002);
+        submitBtnBg.setTint(0x4ade80);
+        submitBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(submitBtnBg);
+        this.claimFormElements.push(submitBtnBg);
+
+        const submitText = this.scene.add.text(formX - 50, btnY, 'Submit', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        submitText.setOrigin(0.5);
+        submitText.setDepth(6003);
+        submitText.setStroke('#166534', 2);
+        this.scene.cameras.main.ignore(submitText);
+        this.claimFormElements.push(submitText);
+
+        // Cancel button - using sprite like ProfileScene
+        const cancelBtnBg = this.scene.add.sprite(formX + 50, btnY, 'square-buttons', 7);
+        cancelBtnBg.setDisplaySize(80, 30);
+        cancelBtnBg.setDepth(6002);
+        cancelBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(cancelBtnBg);
+        this.claimFormElements.push(cancelBtnBg);
+
+        const cancelText = this.scene.add.text(formX + 50, btnY, 'Cancel', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        cancelText.setOrigin(0.5);
+        cancelText.setDepth(6003);
+        cancelText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(cancelText);
+        this.claimFormElements.push(cancelText);
+
+        submitBtnBg.on('pointerdown', () => this.submitBadgeProof(badge));
+        submitBtnBg.on('pointerover', () => submitBtnBg.setTint(0x86efac));
+        submitBtnBg.on('pointerout', () => submitBtnBg.setTint(0x4ade80));
+
+        cancelBtnBg.on('pointerdown', () => this.closeBadgeClaimForm());
+        cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
+        cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
+    }
+
+    /**
+     * Submit proof for badge
+     */
+    private async submitBadgeProof(badge: ApiBadge): Promise<void> {
+        const proof = this.proofInput?.value.trim();
+        if (!proof) {
+            this.callbacks.showToastMessage?.('Please enter proof', 0xfbbf24);
+            return;
+        }
+
+        this.callbacks.showToastMessage?.('⏳ Submitting proof...', 0x4a90e2);
+
+        const result = await BadgeService.claimBadge(badge.id, proof);
+
+        if (result.success) {
+            this.callbacks.showToastMessage?.('⏳ Proof submitted! Waiting for verification.', 0x4ade80);
+            
+            // Update badge status in local array
+            badge.status = 'PENDING';
+            
+            this.closeBadgeClaimForm();
+            
+            // Reload badges from API and refresh tab
+            this.allBadges = await BadgeService.getAllBadges();
+            this.refreshBadgesTab();
+        } else {
+            this.callbacks.showToastMessage?.(`❌ ${result.message}`, 0xef4444);
+        }
+    }
+
+    /**
+     * Close badge claim form
+     */
+    private closeBadgeClaimForm(): void {
+        this.claimFormOpen = false;
+
+        if (this.proofInput?.parentNode) {
+            this.proofInput.parentNode.removeChild(this.proofInput);
+        }
+        this.proofInput = null;
+
+        this.claimFormElements.forEach(el => (el as any)?.destroy?.());
+        this.claimFormElements = [];
+    }
+
+    /**
+     * Refresh badges tab content
+     */
+    private async refreshBadgesTab(): Promise<void> {
+        // Clear current content
+        this.profileContentElements.forEach(el => (el as any)?.destroy?.());
+        this.profileContentElements = [];
+        
+        if (this.badgesContainer) {
+            this.badgesContainer.destroy();
+            this.badgesContainer = null;
+        }
+        if (this.badgesMask) {
+            this.badgesMask.destroy();
+            this.badgesMask = null;
+        }
+        this.badgesScrollY = 0;
+
+        // Get modal dimensions
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        const modalWidth = Math.min(340, screenWidth - 40);
+        const modalHeight = Math.min(400, screenHeight - 80);
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+        const contentStartY = modalY - modalHeight / 2 + 60;
+        const contentHeight = modalHeight - 80;
+
+        // Recreate badges content
+        await this.createBadgesTabContent(modalX, contentStartY, modalWidth, contentHeight);
     }
 
     /**

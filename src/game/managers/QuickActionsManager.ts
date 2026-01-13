@@ -5,6 +5,7 @@ import { GameDataService } from '../GameDataService';
 import { SocialSubmissionManager } from './SocialSubmissionManager';
 import { EventService, GameEvent } from '../EventService';
 import { RedeemService } from '../RedeemService';
+import { QuizService, Quiz, QuizQuestion, QuizAnswer } from '../QuizService';
 
 interface QuickActionsCallbacks {
     showToastMessage?: (text: string, color: number) => void;
@@ -45,6 +46,27 @@ export class QuickActionsManager extends BaseManager {
     private eventBtnBg: Phaser.GameObjects.Sprite | null = null;
     private eventPulseTween: Phaser.Tweens.Tween | null = null;
     private eventButtonGlowTween: Phaser.Tweens.Tween | null = null;
+    
+    // Quiz elements
+    private quizModalOpen: boolean = false;
+    private quizModalElements: Phaser.GameObjects.GameObject[] = [];
+    private cachedQuizzes: Quiz[] | null = null;
+    private quizNotificationBadge: Phaser.GameObjects.Container | null = null;
+    private quizBtnBg: Phaser.GameObjects.Sprite | null = null;
+    private quizPulseTween: Phaser.Tweens.Tween | null = null;
+    private quizButtonGlowTween: Phaser.Tweens.Tween | null = null;
+    
+    // Quiz gameplay elements
+    private quizGameElements: Phaser.GameObjects.GameObject[] = [];
+    private currentQuizId: string | null = null;
+    private currentQuestions: QuizQuestion[] = [];
+    private currentQuestionIndex: number = 0;
+    private userAnswers: QuizAnswer[] = [];
+    private quizTimer: Phaser.Time.TimerEvent | null = null;
+    private timeRemaining: number = 0;
+    private timerText: Phaser.GameObjects.Text | null = null;
+    private questionStartTime: number = 0; // Real timestamp when question started
+    private questionTimeLimit: number = 0; // Time limit for current question
 
     constructor(scene: Phaser.Scene, callbacks: QuickActionsCallbacks = {}) {
         super(scene);
@@ -140,6 +162,46 @@ export class QuickActionsManager extends BaseManager {
 
         // Check for active events
         this.updateEventNotificationBadge();
+
+        // Quiz button - below events button
+        const quizBtnY = eventBtnY + 32;
+        
+        this.quizBtnBg = this.scene.add.sprite(panelX, quizBtnY, 'square-buttons', 6);
+        this.quizBtnBg.setDisplaySize(panelWidth - 10, 28);
+        this.quizBtnBg.setDepth(5020);
+        this.quizBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(this.quizBtnBg);
+        this.buttonElements.push(this.quizBtnBg);
+
+        const quizBtnText = this.scene.add.text(panelX, quizBtnY, '❓ Quiz', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        quizBtnText.setOrigin(0.5);
+        quizBtnText.setDepth(5021);
+        quizBtnText.setStroke('#5D4037', 1);
+        this.scene.cameras.main.ignore(quizBtnText);
+        this.buttonElements.push(quizBtnText);
+
+        this.quizBtnBg.on('pointerdown', () => this.openQuizModal());
+        this.quizBtnBg.on('pointerover', () => {
+            if (!this.quizButtonGlowTween) {
+                this.quizBtnBg?.setTint(0xcccccc);
+            }
+        });
+        this.quizBtnBg.on('pointerout', () => {
+            if (!this.quizButtonGlowTween) {
+                this.quizBtnBg?.clearTint();
+            }
+        });
+
+        // Create quiz notification badge (hidden by default)
+        this.createQuizNotificationBadge(panelX - 28, quizBtnY);
+
+        // Check for active quizzes
+        this.updateQuizNotificationBadge();
     }
 
     /**
@@ -407,6 +469,130 @@ export class QuickActionsManager extends BaseManager {
     }
 
     /**
+     * Create notification badge for quizzes
+     */
+    private createQuizNotificationBadge(x: number, y: number): void {
+        this.quizNotificationBadge = this.scene.add.container(x, y);
+        this.quizNotificationBadge.setDepth(5022);
+        this.scene.cameras.main.ignore(this.quizNotificationBadge);
+        
+        // Badge background (purple circle for quiz)
+        const badgeBg = this.scene.add.circle(0, 0, 8, 0xa855f7);
+        badgeBg.setStrokeStyle(1, 0x7c3aed);
+        this.quizNotificationBadge.add(badgeBg);
+        
+        // Badge text
+        const badgeText = this.scene.add.text(0, 0, '!', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        badgeText.setOrigin(0.5);
+        badgeText.setName('badgeText');
+        this.quizNotificationBadge.add(badgeText);
+        
+        // Initially hidden
+        this.quizNotificationBadge.setVisible(false);
+        this.buttonElements.push(this.quizNotificationBadge);
+    }
+
+    /**
+     * Update quiz notification badge based on active quizzes
+     */
+    public async updateQuizNotificationBadge(): Promise<void> {
+        if (!this.quizNotificationBadge) return;
+
+        let quizzes: Quiz[] | null = this.cachedQuizzes;
+        
+        if (!quizzes) {
+            quizzes = await QuizService.getActiveQuizzes();
+            if (quizzes) {
+                this.cachedQuizzes = quizzes;
+            }
+        }
+
+        if (!quizzes || quizzes.length === 0) {
+            this.quizNotificationBadge.setVisible(false);
+            this.stopQuizPulseEffect();
+            return;
+        }
+
+        const count = quizzes.length;
+        
+        if (count > 0) {
+            const badgeText = this.quizNotificationBadge.getByName('badgeText') as Phaser.GameObjects.Text;
+            if (badgeText) {
+                badgeText.setText(count > 9 ? '9+' : count.toString());
+            }
+            
+            this.quizNotificationBadge.setVisible(true);
+            this.startQuizPulseEffect();
+        } else {
+            this.quizNotificationBadge.setVisible(false);
+            this.stopQuizPulseEffect();
+        }
+    }
+
+    /**
+     * Start pulse animation effect for quiz badge and button
+     */
+    private startQuizPulseEffect(): void {
+        if (!this.quizPulseTween && this.quizNotificationBadge) {
+            this.quizPulseTween = this.scene.tweens.add({
+                targets: this.quizNotificationBadge,
+                scaleX: 1.2,
+                scaleY: 1.2,
+                duration: 500,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+        }
+        
+        if (!this.quizButtonGlowTween && this.quizBtnBg) {
+            const glowTarget = { progress: 0 };
+            this.quizButtonGlowTween = this.scene.tweens.add({
+                targets: glowTarget,
+                progress: 1,
+                duration: 600,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut',
+                onUpdate: () => {
+                    if (this.quizBtnBg) {
+                        if (glowTarget.progress > 0.5) {
+                            this.quizBtnBg.setTint(0xa855f7); // Purple color for quiz
+                        } else {
+                            this.quizBtnBg.clearTint();
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    /**
+     * Stop quiz pulse animation effect
+     */
+    private stopQuizPulseEffect(): void {
+        if (this.quizPulseTween) {
+            this.quizPulseTween.stop();
+            this.quizPulseTween = null;
+        }
+        if (this.quizButtonGlowTween) {
+            this.quizButtonGlowTween.stop();
+            this.quizButtonGlowTween = null;
+        }
+        if (this.quizNotificationBadge) {
+            this.quizNotificationBadge.setScale(1);
+        }
+        if (this.quizBtnBg) {
+            this.quizBtnBg.clearTint();
+        }
+    }
+
+    /**
      * Get button elements for camera ignore
      */
     public getButtonElements(): Phaser.GameObjects.GameObject[] {
@@ -419,10 +605,13 @@ export class QuickActionsManager extends BaseManager {
     private destroyButtonElements(): void {
         this.stopPulseEffect();
         this.stopEventPulseEffect();
+        this.stopQuizPulseEffect();
         this.notificationBadge = null;
         this.missionBtnBg = null;
         this.eventNotificationBadge = null;
         this.eventBtnBg = null;
+        this.quizNotificationBadge = null;
+        this.quizBtnBg = null;
         this.buttonElements.forEach(el => {
             if (el && el.destroy) el.destroy();
         });
@@ -1377,6 +1566,1007 @@ export class QuickActionsManager extends BaseManager {
     }
 
     /**
+     * Open quiz modal
+     */
+    public async openQuizModal(): Promise<void> {
+        if (this.quizModalOpen) return;
+        this.quizModalOpen = true;
+
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        const modalWidth = 300;
+        const modalHeight = 340;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+
+        // Overlay
+        const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.6);
+        overlay.setDepth(5300);
+        overlay.setInteractive();
+        this.scene.cameras.main.ignore(overlay);
+        this.quizModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.scene.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5301);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+            event.stopPropagation();
+        });
+        this.scene.cameras.main.ignore(modalBg);
+        this.quizModalElements.push(modalBg);
+
+        // Animate modal
+        modalBg.setScale(0);
+        this.scene.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        this.scene.time.delayedCall(100, () => {
+            this.createQuizModalContent(modalX, modalY, modalWidth, modalHeight);
+        });
+
+        overlay.on('pointerdown', () => this.closeQuizModal());
+    }
+
+    /**
+     * Close quiz modal
+     */
+    public closeQuizModal(): void {
+        this.quizModalOpen = false;
+        this.quizModalElements.forEach(el => {
+            if (el && el.destroy) el.destroy();
+        });
+        this.quizModalElements = [];
+        
+        // Update notification badge after closing modal
+        this.updateQuizNotificationBadge();
+    }
+
+    /**
+     * Create quiz modal content
+     */
+    private async createQuizModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): Promise<void> {
+        // Title
+        const title = this.scene.add.text(modalX + 15, modalY - modalHeight / 2 + 40, '❓ Quizzes', {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(5302);
+        title.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(title);
+        this.quizModalElements.push(title);
+
+        // Close button
+        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
+        closeBtnBg.setDisplaySize(24, 24);
+        closeBtnBg.setDepth(5302);
+        closeBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(closeBtnBg);
+        this.quizModalElements.push(closeBtnBg);
+
+        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'X', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        closeText.setOrigin(0.5);
+        closeText.setDepth(5303);
+        closeText.setStroke('#5D4037', 1);
+        this.scene.cameras.main.ignore(closeText);
+        this.quizModalElements.push(closeText);
+
+        closeBtnBg.on('pointerdown', () => this.closeQuizModal());
+        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+
+        // Scrollable area setup
+        const scrollAreaTop = modalY - modalHeight / 2 + 65;
+        const scrollAreaHeight = 240;
+
+        // Create mask
+        const maskGraphics = this.scene.make.graphics({ x: 0, y: 0 });
+        maskGraphics.fillStyle(0xffffff);
+        maskGraphics.fillRect(modalX - modalWidth / 2 + 10, scrollAreaTop, modalWidth - 20, scrollAreaHeight);
+        const scrollMask = maskGraphics.createGeometryMask();
+        this.quizModalElements.push(maskGraphics);
+
+        // Load quizzes
+        let quizzes: Quiz[] | null = this.cachedQuizzes;
+        
+        if (!quizzes) {
+            quizzes = await QuizService.getActiveQuizzes();
+            if (quizzes) {
+                this.cachedQuizzes = quizzes;
+            }
+        }
+
+        if (!quizzes || quizzes.length === 0) {
+            const noQuizzesText = this.scene.add.text(modalX, modalY, 'No quizzes available', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#999999',
+                resolution: 2
+            });
+            noQuizzesText.setOrigin(0.5);
+            noQuizzesText.setDepth(5302);
+            this.scene.cameras.main.ignore(noQuizzesText);
+            this.quizModalElements.push(noQuizzesText);
+            return;
+        }
+
+        this.renderQuizList(quizzes, modalX, scrollAreaTop, scrollAreaHeight, scrollMask);
+    }
+
+    /**
+     * Render quiz list with scroll support
+     */
+    private renderQuizList(
+        quizzes: Quiz[], 
+        modalX: number, 
+        scrollAreaTop: number, 
+        scrollAreaHeight: number,
+        scrollMask: Phaser.Display.Masks.GeometryMask
+    ): void {
+        const contentElements: Phaser.GameObjects.GameObject[] = [];
+        const cardHeight = 55;
+        const cardSpacing = 62;
+        const totalContentHeight = quizzes.length * cardSpacing;
+        let scrollOffset = 0;
+        const maxScrollOffset = Math.max(0, totalContentHeight - scrollAreaHeight);
+
+        const updateScrollPositions = () => {
+            contentElements.forEach((el: Phaser.GameObjects.GameObject) => {
+                const gameObj = el as unknown as { y: number; originalY?: number };
+                if (gameObj.originalY !== undefined) {
+                    gameObj.y = gameObj.originalY - scrollOffset;
+                }
+            });
+        };
+
+        quizzes.forEach((quiz, index) => {
+            const baseY = scrollAreaTop + 30 + index * cardSpacing;
+            const cardWidth = 230;
+            const cardX = modalX + 10;
+
+            // Card border
+            const cardBorder = this.scene.add.rectangle(cardX, baseY, cardWidth + 3, cardHeight + 3, 0x7c3aed);
+            cardBorder.setDepth(5302);
+            cardBorder.setMask(scrollMask);
+            this.scene.cameras.main.ignore(cardBorder);
+            this.quizModalElements.push(cardBorder);
+            contentElements.push(cardBorder);
+            (cardBorder as any).originalY = baseY;
+
+            // Card background
+            const cardBg = this.scene.add.rectangle(cardX, baseY, cardWidth, cardHeight, 0xD4C4A8);
+            cardBg.setDepth(5303);
+            cardBg.setInteractive({ useHandCursor: true });
+            cardBg.setMask(scrollMask);
+            this.scene.cameras.main.ignore(cardBg);
+            this.quizModalElements.push(cardBg);
+            contentElements.push(cardBg);
+            (cardBg as any).originalY = baseY;
+
+            // Quiz icon
+            const iconX = cardX - cardWidth / 2 + 15;
+            const iconBg = this.scene.add.circle(iconX, baseY - 8, 8, 0xa855f7);
+            iconBg.setDepth(5304);
+            iconBg.setMask(scrollMask);
+            this.scene.cameras.main.ignore(iconBg);
+            this.quizModalElements.push(iconBg);
+            contentElements.push(iconBg);
+            (iconBg as any).originalY = baseY - 8;
+
+            const quizIcon = this.scene.add.text(iconX, baseY - 8, '❓', {
+                fontSize: '8px',
+                fontFamily: 'Arial',
+                resolution: 2
+            });
+            quizIcon.setOrigin(0.5);
+            quizIcon.setDepth(5305);
+            quizIcon.setMask(scrollMask);
+            this.scene.cameras.main.ignore(quizIcon);
+            this.quizModalElements.push(quizIcon);
+            contentElements.push(quizIcon);
+            (quizIcon as any).originalY = baseY - 8;
+
+            // Quiz title
+            const nameX = cardX - cardWidth / 2 + 30;
+            const nameY = baseY - 12;
+            const quizName = this.scene.add.text(nameX, nameY, quiz.title, {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#5D4037',
+                resolution: 2
+            });
+            quizName.setOrigin(0, 0.5);
+            quizName.setDepth(5304);
+            quizName.setMask(scrollMask);
+            this.scene.cameras.main.ignore(quizName);
+            this.quizModalElements.push(quizName);
+            contentElements.push(quizName);
+            (quizName as any).originalY = nameY;
+
+            // Event name
+            const eventNameY = baseY + 2;
+            const eventName = this.scene.add.text(nameX, eventNameY, `📍 ${quiz.event.name}`, {
+                fontSize: '7px',
+                fontFamily: 'PixelFont',
+                color: '#8B7355',
+                resolution: 2
+            });
+            eventName.setOrigin(0, 0.5);
+            eventName.setDepth(5304);
+            eventName.setMask(scrollMask);
+            this.scene.cameras.main.ignore(eventName);
+            this.quizModalElements.push(eventName);
+            contentElements.push(eventName);
+            (eventName as any).originalY = eventNameY;
+
+            // Rewards info
+            const rewardY = baseY + 16;
+            const rewardText = this.scene.add.text(nameX, rewardY, `🏆 ${quiz.rewardXp} XP  💰 ${quiz.rewardGold} Gold`, {
+                fontSize: '7px',
+                fontFamily: 'PixelFont',
+                color: '#166534',
+                resolution: 2
+            });
+            rewardText.setOrigin(0, 0.5);
+            rewardText.setDepth(5304);
+            rewardText.setMask(scrollMask);
+            this.scene.cameras.main.ignore(rewardText);
+            this.quizModalElements.push(rewardText);
+            contentElements.push(rewardText);
+            (rewardText as any).originalY = rewardY;
+
+            // Questions count on right side
+            const questionsX = cardX + cardWidth / 2 - 25;
+            const questionsText = this.scene.add.text(questionsX, baseY - 5, `${quiz.questionCount}`, {
+                fontSize: '14px',
+                fontFamily: 'PixelFont',
+                color: '#7c3aed',
+                resolution: 2
+            });
+            questionsText.setOrigin(0.5);
+            questionsText.setDepth(5304);
+            questionsText.setMask(scrollMask);
+            this.scene.cameras.main.ignore(questionsText);
+            this.quizModalElements.push(questionsText);
+            contentElements.push(questionsText);
+            (questionsText as any).originalY = baseY - 5;
+
+            const questionsLabel = this.scene.add.text(questionsX, baseY + 10, 'Qs', {
+                fontSize: '7px',
+                fontFamily: 'PixelFont',
+                color: '#8B7355',
+                resolution: 2
+            });
+            questionsLabel.setOrigin(0.5);
+            questionsLabel.setDepth(5304);
+            questionsLabel.setMask(scrollMask);
+            this.scene.cameras.main.ignore(questionsLabel);
+            this.quizModalElements.push(questionsLabel);
+            contentElements.push(questionsLabel);
+            (questionsLabel as any).originalY = baseY + 10;
+
+            // Hover effects
+            cardBg.on('pointerover', () => {
+                cardBg.setFillStyle(0xE8D9C0);
+                quizName.setColor('#a855f7');
+            });
+            cardBg.on('pointerout', () => {
+                cardBg.setFillStyle(0xD4C4A8);
+                quizName.setColor('#5D4037');
+            });
+
+            // Click to start quiz
+            let clickStartY = 0;
+            cardBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+                clickStartY = pointer.y;
+            });
+            cardBg.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+                if (Math.abs(pointer.y - clickStartY) < 10) {
+                    this.showQuizDetails(quiz);
+                }
+            });
+        });
+
+        // Scroll handling
+        const wheelHandler = (_pointer: Phaser.Input.Pointer, _gameObjects: Phaser.GameObjects.GameObject[], _dx: number, _dy: number, dz: number) => {
+            if (this.quizModalOpen) {
+                scrollOffset = Phaser.Math.Clamp(scrollOffset + dz * 0.5, 0, maxScrollOffset);
+                updateScrollPositions();
+            }
+        };
+        this.scene.input.on('wheel', wheelHandler);
+
+        // Drag scroll
+        let isDragging = false;
+        let dragStartY = 0;
+        let dragStartOffset = 0;
+
+        this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            if (this.quizModalOpen && pointer.y > scrollAreaTop && pointer.y < scrollAreaTop + scrollAreaHeight) {
+                isDragging = true;
+                dragStartY = pointer.y;
+                dragStartOffset = scrollOffset;
+            }
+        });
+
+        this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            if (isDragging && this.quizModalOpen) {
+                const deltaY = dragStartY - pointer.y;
+                scrollOffset = Phaser.Math.Clamp(dragStartOffset + deltaY, 0, maxScrollOffset);
+                updateScrollPositions();
+            }
+        });
+
+        this.scene.input.on('pointerup', () => {
+            isDragging = false;
+        });
+    }
+
+    /**
+     * Show quiz details modal
+     */
+    private showQuizDetails(quiz: Quiz): void {
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+        const modalWidth = 280;
+        const modalHeight = 220;
+
+        // Overlay
+        const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.7);
+        overlay.setDepth(5400);
+        overlay.setInteractive();
+        this.scene.cameras.main.ignore(overlay);
+        this.quizModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.scene.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5401);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, e: Phaser.Types.Input.EventData) => {
+            e.stopPropagation();
+        });
+        this.scene.cameras.main.ignore(modalBg);
+        this.quizModalElements.push(modalBg);
+
+        modalBg.setScale(0);
+        this.scene.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        this.scene.time.delayedCall(100, () => {
+            // Close button
+            const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
+            closeBtnBg.setDisplaySize(24, 24);
+            closeBtnBg.setDepth(5402);
+            closeBtnBg.setInteractive({ useHandCursor: true });
+            this.scene.cameras.main.ignore(closeBtnBg);
+            this.quizModalElements.push(closeBtnBg);
+
+            const closeText = this.scene.add.text(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'X', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            closeText.setOrigin(0.5);
+            closeText.setDepth(5403);
+            closeText.setStroke('#5D4037', 1);
+            this.scene.cameras.main.ignore(closeText);
+            this.quizModalElements.push(closeText);
+
+            closeBtnBg.on('pointerdown', () => this.closeQuizDetails());
+            closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+            closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+
+            // Quiz title
+            const title = this.scene.add.text(modalX, modalY - modalHeight / 2 + 50, `❓ ${quiz.title}`, {
+                fontSize: '11px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2,
+                wordWrap: { width: modalWidth - 60 }
+            });
+            title.setOrigin(0.5);
+            title.setDepth(5402);
+            title.setStroke('#7c3aed', 2);
+            this.scene.cameras.main.ignore(title);
+            this.quizModalElements.push(title);
+
+            // Description
+            const desc = this.scene.add.text(modalX + 10, modalY - 30, quiz.description, {
+                fontSize: '8px',
+                fontFamily: 'PixelFont',
+                color: '#5D4037',
+                resolution: 2,
+                wordWrap: { width: modalWidth - 50 },
+                align: 'center',
+                lineSpacing: 6
+            });
+            desc.setOrigin(0.5);
+            desc.setDepth(5402);
+            this.scene.cameras.main.ignore(desc);
+            this.quizModalElements.push(desc);
+
+            // Quiz info
+            const infoY = modalY + 10;
+            const info = this.scene.add.text(modalX, infoY, `📝 ${quiz.questionCount} Questions  ⏱️ ${quiz.timePerQuestion}s each`, {
+                fontSize: '8px',
+                fontFamily: 'PixelFont',
+                color: '#8B7355',
+                resolution: 2
+            });
+            info.setOrigin(0.5);
+            info.setDepth(5402);
+            this.scene.cameras.main.ignore(info);
+            this.quizModalElements.push(info);
+
+            // Rewards
+            const rewardsY = modalY + 30;
+            const rewards = this.scene.add.text(modalX, rewardsY, `🏆 ${quiz.rewardXp} XP  💰 ${quiz.rewardGold} Gold`, {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#166534',
+                resolution: 2
+            });
+            rewards.setOrigin(0.5);
+            rewards.setDepth(5402);
+            this.scene.cameras.main.ignore(rewards);
+            this.quizModalElements.push(rewards);
+
+            // Start Quiz button
+            const startBtn = this.scene.add.sprite(modalX + 10, modalY + modalHeight / 2 - 40, 'square-buttons', 6);
+            startBtn.setDisplaySize(140, 30);
+            startBtn.setTint(0xa855f7);
+            startBtn.setDepth(5402);
+            startBtn.setInteractive({ useHandCursor: true });
+            this.scene.cameras.main.ignore(startBtn);
+            this.quizModalElements.push(startBtn);
+
+            const startBtnText = this.scene.add.text(modalX + 10, modalY + modalHeight / 2 - 40, '🎮 Start Quiz', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            startBtnText.setOrigin(0.5);
+            startBtnText.setDepth(5403);
+            startBtnText.setStroke('#7c3aed', 2);
+            this.scene.cameras.main.ignore(startBtnText);
+            this.quizModalElements.push(startBtnText);
+
+            startBtn.on('pointerdown', async () => {
+                startBtnText.setText('🎮 Starting...');
+                startBtn.disableInteractive();
+                
+                // Get quiz details with questions
+                const quizDetail = await QuizService.getQuizByEvent(quiz.event.id);
+                
+                if (!quizDetail || !quizDetail.quiz) {
+                    this.callbacks.showToastMessage?.('Failed to load quiz', 0xef4444);
+                    startBtnText.setText('🎮 Start Quiz');
+                    startBtn.setInteractive({ useHandCursor: true });
+                    return;
+                }
+                
+                if (quizDetail.hasAttempted) {
+                    this.callbacks.showToastMessage?.('You already attempted this quiz!', 0xfbbf24);
+                    startBtnText.setText('🎮 Start Quiz');
+                    startBtn.setInteractive({ useHandCursor: true });
+                    return;
+                }
+                
+                // Start quiz attempt
+                const startResult = await QuizService.startQuiz(quiz.id);
+                
+                if (!startResult.success) {
+                    this.callbacks.showToastMessage?.(startResult.error || 'Failed to start quiz', 0xef4444);
+                    startBtnText.setText('🎮 Start Quiz');
+                    startBtn.setInteractive({ useHandCursor: true });
+                    return;
+                }
+                
+                // Close modals and start quiz gameplay
+                this.closeQuizDetails();
+                this.closeQuizModal();
+                
+                this.startQuizGameplay(quizDetail.quiz);
+            });
+            startBtn.on('pointerover', () => startBtn.setTint(0xc084fc));
+            startBtn.on('pointerout', () => startBtn.setTint(0xa855f7));
+        });
+
+        overlay.on('pointerdown', () => this.closeQuizDetails());
+    }
+
+    /**
+     * Close quiz details
+     */
+    private closeQuizDetails(): void {
+        // Remove only detail elements (overlay and detail modal)
+        // Keep the main quiz list modal
+        const detailDepths = [5400, 5401, 5402, 5403];
+        this.quizModalElements = this.quizModalElements.filter(el => {
+            const depth = (el as any).depth;
+            if (detailDepths.includes(depth)) {
+                if (el && el.destroy) el.destroy();
+                return false;
+            }
+            return true;
+        });
+    }
+
+    /**
+     * Start quiz gameplay
+     */
+    private startQuizGameplay(quiz: { id: string; title: string; timePerQuestion: number; questions: QuizQuestion[] }): void {
+        this.currentQuizId = quiz.id;
+        this.currentQuestions = quiz.questions.sort((a, b) => a.orderIndex - b.orderIndex);
+        this.currentQuestionIndex = 0;
+        this.userAnswers = [];
+        this.timeRemaining = quiz.timePerQuestion;
+        
+        this.showQuestion();
+    }
+
+    /**
+     * Show current question
+     */
+    private showQuestion(): void {
+        // Clear previous question elements
+        this.quizGameElements.forEach(el => {
+            if (el && el.destroy) el.destroy();
+        });
+        this.quizGameElements = [];
+        
+        if (this.quizTimer) {
+            this.quizTimer.destroy();
+            this.quizTimer = null;
+        }
+
+        const question = this.currentQuestions[this.currentQuestionIndex];
+        if (!question) {
+            this.submitQuizAnswers();
+            return;
+        }
+
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+        const modalWidth = 320;
+        const modalHeight = 380;
+
+        // Overlay
+        const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.8);
+        overlay.setDepth(5600);
+        overlay.setInteractive();
+        this.scene.cameras.main.ignore(overlay);
+        this.quizGameElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.scene.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5601);
+        modalBg.setInteractive();
+        this.scene.cameras.main.ignore(modalBg);
+        this.quizGameElements.push(modalBg);
+
+        // Progress text
+        const progressText = this.scene.add.text(modalX + 10, modalY - modalHeight / 2 + 50, 
+            `Question ${this.currentQuestionIndex + 1}/${this.currentQuestions.length}`, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#8B7355',
+            resolution: 2
+        });
+        progressText.setOrigin(0.5);
+        progressText.setDepth(5602);
+        this.scene.cameras.main.ignore(progressText);
+        this.quizGameElements.push(progressText);
+
+        // Timer - use real time to prevent cheating by switching tabs
+        // Get timePerQuestion from quiz (stored when starting)
+        const quizzes = this.cachedQuizzes;
+        const currentQuiz = quizzes?.find(q => q.id === this.currentQuizId);
+        this.questionTimeLimit = currentQuiz?.timePerQuestion || 30;
+        this.questionStartTime = Date.now();
+        this.timeRemaining = this.questionTimeLimit;
+        
+        this.timerText = this.scene.add.text(modalX + modalWidth / 2 - 30, modalY - modalHeight / 2 + 25, 
+            `⏱️ ${this.timeRemaining}s`, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#22c55e',
+            resolution: 2
+        });
+        this.timerText.setOrigin(0.5);
+        this.timerText.setDepth(5602);
+        this.scene.cameras.main.ignore(this.timerText);
+        this.quizGameElements.push(this.timerText);
+
+        // Start timer using real time calculation
+        this.quizTimer = this.scene.time.addEvent({
+            delay: 100, // Check more frequently for accuracy
+            callback: () => {
+                // Calculate remaining time based on real elapsed time
+                const elapsed = Math.floor((Date.now() - this.questionStartTime) / 1000);
+                this.timeRemaining = Math.max(0, this.questionTimeLimit - elapsed);
+                
+                if (this.timerText) {
+                    this.timerText.setText(`⏱️ ${this.timeRemaining}s`);
+                    if (this.timeRemaining <= 10) {
+                        this.timerText.setColor('#ef4444');
+                    } else if (this.timeRemaining <= 20) {
+                        this.timerText.setColor('#fbbf24');
+                    } else {
+                        this.timerText.setColor('#22c55e');
+                    }
+                }
+                
+                if (this.timeRemaining <= 0) {
+                    // Time's up - auto submit with no answer
+                    this.selectAnswer(-1);
+                }
+            },
+            loop: true
+        });
+
+        // Question text
+        const questionText = this.scene.add.text(modalX + 10, modalY - 90, question.question, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#5D4037',
+            resolution: 2,
+            wordWrap: { width: modalWidth - 80 },
+            align: 'center',
+            lineSpacing: 6
+        });
+        questionText.setOrigin(0.5);
+        questionText.setDepth(5602);
+        this.scene.cameras.main.ignore(questionText);
+        this.quizGameElements.push(questionText);
+
+        // Answer options
+        const options = [
+            { label: 'A', text: question.optionA, index: 0 },
+            { label: 'B', text: question.optionB, index: 1 },
+            { label: 'C', text: question.optionC, index: 2 },
+            { label: 'D', text: question.optionD, index: 3 }
+        ];
+
+        const optionStartY = modalY - 30;
+        const optionWidth = modalWidth - 90;
+        const optionCenterX = modalX + 10;
+        const optionLeftX = optionCenterX - optionWidth / 2;
+        const baseOptionHeight = 38;
+        const optionGap = 7;
+
+        let currentY = optionStartY;
+
+        options.forEach((option) => {
+            // Calculate text height to determine option height
+            const tempText = this.scene.add.text(0, 0, option.text, {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                resolution: 2,
+                wordWrap: { width: optionWidth - 50 }
+            });
+            const textHeight = tempText.height;
+            tempText.destroy();
+            
+            // Option height based on text (min 38px)
+            const optionHeight = Math.max(baseOptionHeight, textHeight + 16);
+            const optionY = currentY;
+            
+            // Option background
+            const optionBg = this.scene.add.rectangle(optionCenterX, optionY, optionWidth, optionHeight, 0xFFF8E1);
+            optionBg.setStrokeStyle(2, 0x8B7355);
+            optionBg.setDepth(5602);
+            optionBg.setInteractive({ useHandCursor: true });
+            this.scene.cameras.main.ignore(optionBg);
+            this.quizGameElements.push(optionBg);
+
+            // Option label (A, B, C, D) - positioned inside option bg
+            const labelX = optionLeftX + 18;
+            const labelBg = this.scene.add.circle(labelX, optionY, 12, 0xa855f7);
+            labelBg.setDepth(5603);
+            this.scene.cameras.main.ignore(labelBg);
+            this.quizGameElements.push(labelBg);
+
+            const labelText = this.scene.add.text(labelX, optionY, option.label, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            labelText.setOrigin(0.5);
+            labelText.setDepth(5604);
+            this.scene.cameras.main.ignore(labelText);
+            this.quizGameElements.push(labelText);
+
+            // Option text - positioned after label with proper wrapping
+            const textX = optionLeftX + 38;
+            const optionText = this.scene.add.text(textX, optionY, option.text, {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#5D4037',
+                resolution: 2,
+                wordWrap: { width: optionWidth - 50 },
+                lineSpacing: 6
+            });
+            optionText.setOrigin(0, 0.5);
+            optionText.setDepth(5603);
+            this.scene.cameras.main.ignore(optionText);
+            this.quizGameElements.push(optionText);
+
+            // Hover effects
+            optionBg.on('pointerover', () => {
+                optionBg.setFillStyle(0xE8D9C0);
+                labelBg.setFillStyle(0xc084fc);
+            });
+            optionBg.on('pointerout', () => {
+                optionBg.setFillStyle(0xFFF8E1);
+                labelBg.setFillStyle(0xa855f7);
+            });
+
+            // Click to select answer
+            optionBg.on('pointerdown', () => {
+                this.selectAnswer(option.index);
+            });
+
+            // Update Y for next option
+            currentY += optionHeight + optionGap;
+        });
+    }
+
+    /**
+     * Select an answer and move to next question
+     */
+    private selectAnswer(selectedIndex: number): void {
+        if (this.quizTimer) {
+            this.quizTimer.destroy();
+            this.quizTimer = null;
+        }
+
+        const question = this.currentQuestions[this.currentQuestionIndex];
+        if (question && selectedIndex >= 0) {
+            // Convert index to letter: 0=A, 1=B, 2=C, 3=D
+            const answerLetter = ['A', 'B', 'C', 'D'][selectedIndex] || '';
+            this.userAnswers.push({
+                questionId: question.id,
+                answer: answerLetter
+            });
+        }
+
+        this.currentQuestionIndex++;
+        
+        if (this.currentQuestionIndex >= this.currentQuestions.length) {
+            this.submitQuizAnswers();
+        } else {
+            this.showQuestion();
+        }
+    }
+
+    /**
+     * Submit quiz answers
+     */
+    private async submitQuizAnswers(): Promise<void> {
+        // Clear game elements
+        this.quizGameElements.forEach(el => {
+            if (el && el.destroy) el.destroy();
+        });
+        this.quizGameElements = [];
+
+        if (!this.currentQuizId) return;
+
+        // Show loading
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        
+        const loadingOverlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.8);
+        loadingOverlay.setDepth(5600);
+        this.scene.cameras.main.ignore(loadingOverlay);
+        this.quizGameElements.push(loadingOverlay);
+
+        const loadingText = this.scene.add.text(screenWidth / 2, screenHeight / 2, 'Submitting...', {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        loadingText.setOrigin(0.5);
+        loadingText.setDepth(5601);
+        this.scene.cameras.main.ignore(loadingText);
+        this.quizGameElements.push(loadingText);
+
+        // Submit answers
+        const result = await QuizService.submitQuiz(this.currentQuizId, this.userAnswers);
+
+        // Clear loading
+        this.quizGameElements.forEach(el => {
+            if (el && el.destroy) el.destroy();
+        });
+        this.quizGameElements = [];
+
+        if (result && result.success) {
+            this.showQuizResult(result);
+        } else {
+            this.callbacks.showToastMessage?.('Failed to submit quiz', 0xef4444);
+        }
+
+        // Reset quiz state
+        this.currentQuizId = null;
+        this.currentQuestions = [];
+        this.currentQuestionIndex = 0;
+        this.userAnswers = [];
+    }
+
+    /**
+     * Show quiz result
+     */
+    private showQuizResult(result: { result: { score: number; correctAnswers: number; totalQuestions: number; xpEarned: number; goldEarned: number; isPerfect: boolean }; message: string }): void {
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+        const modalWidth = 280;
+        const modalHeight = 280;
+
+        // Overlay
+        const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.8);
+        overlay.setDepth(5600);
+        overlay.setInteractive();
+        this.scene.cameras.main.ignore(overlay);
+        this.quizGameElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.scene.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5601);
+        modalBg.setInteractive();
+        this.scene.cameras.main.ignore(modalBg);
+        this.quizGameElements.push(modalBg);
+
+        // Title
+        const isPerfect = result.result.isPerfect;
+        const titleEmoji = isPerfect ? '🏆' : (result.result.correctAnswers > 0 ? '✨' : '😢');
+        const title = this.scene.add.text(modalX + 10, modalY - modalHeight / 2 + 40, `${titleEmoji} Quiz Complete!`, {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(5602);
+        title.setStroke(isPerfect ? '#166534' : '#5D4037', 2);
+        this.scene.cameras.main.ignore(title);
+        this.quizGameElements.push(title);
+
+        // Score
+        const scoreText = this.scene.add.text(modalX + 10, modalY - 50, 
+            `${result.result.correctAnswers}/${result.result.totalQuestions}`, {
+            fontSize: '32px',
+            fontFamily: 'PixelFont',
+            color: isPerfect ? '#22c55e' : '#a855f7',
+            resolution: 2
+        });
+        scoreText.setOrigin(0.5);
+        scoreText.setDepth(5602);
+        this.scene.cameras.main.ignore(scoreText);
+        this.quizGameElements.push(scoreText);
+
+        const correctLabel = this.scene.add.text(modalX + 10, modalY - 20, 'Correct Answers', {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#8B7355',
+            resolution: 2
+        });
+        correctLabel.setOrigin(0.5);
+        correctLabel.setDepth(5602);
+        this.scene.cameras.main.ignore(correctLabel);
+        this.quizGameElements.push(correctLabel);
+
+        // Rewards
+        const rewardsY = modalY + 20;
+        const rewards = this.scene.add.text(modalX + 10, rewardsY, 
+            `🏆 +${result.result.xpEarned} XP   💰 +${result.result.goldEarned} Gold`, {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#166534',
+            resolution: 2
+        });
+        rewards.setOrigin(0.5);
+        rewards.setDepth(5602);
+        this.scene.cameras.main.ignore(rewards);
+        this.quizGameElements.push(rewards);
+
+        // Message
+        const message = this.scene.add.text(modalX + 10, modalY + 55, result.message, {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#8B7355',
+            resolution: 2,
+            wordWrap: { width: modalWidth - 40 },
+            align: 'center'
+        });
+        message.setOrigin(0.5);
+        message.setDepth(5602);
+        this.scene.cameras.main.ignore(message);
+        this.quizGameElements.push(message);
+
+        // Close button
+        const closeBtn = this.scene.add.sprite(modalX + 10, modalY + modalHeight / 2 - 40, 'square-buttons', 6);
+        closeBtn.setDisplaySize(100, 30);
+        closeBtn.setDepth(5602);
+        closeBtn.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(closeBtn);
+        this.quizGameElements.push(closeBtn);
+
+        const closeBtnText = this.scene.add.text(modalX + 10, modalY + modalHeight / 2 - 40, 'Close', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        closeBtnText.setOrigin(0.5);
+        closeBtnText.setDepth(5603);
+        closeBtnText.setStroke('#5D4037', 1);
+        this.scene.cameras.main.ignore(closeBtnText);
+        this.quizGameElements.push(closeBtnText);
+
+        closeBtn.on('pointerdown', () => {
+            this.closeQuizGame();
+            GameDataService.refreshAndUpdateUI();
+            if (result.result.xpEarned > 0 || result.result.goldEarned > 0) {
+                this.callbacks.playSuccessSound?.();
+            }
+        });
+        closeBtn.on('pointerover', () => closeBtn.setTint(0xcccccc));
+        closeBtn.on('pointerout', () => closeBtn.clearTint());
+
+        overlay.on('pointerdown', () => {
+            this.closeQuizGame();
+            GameDataService.refreshAndUpdateUI();
+        });
+    }
+
+    /**
+     * Close quiz game
+     */
+    private closeQuizGame(): void {
+        if (this.quizTimer) {
+            this.quizTimer.destroy();
+            this.quizTimer = null;
+        }
+        this.quizGameElements.forEach(el => {
+            if (el && el.destroy) el.destroy();
+        });
+        this.quizGameElements = [];
+        this.timerText = null;
+    }
+
+    /**
      * Create event modal content
      */
     private async createEventModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): Promise<void> {
@@ -1975,7 +3165,7 @@ export class QuickActionsManager extends BaseManager {
             const checkInInput = this.eventCheckInInput;
 
             // Submit button - centered
-            const submitBtn = this.scene.add.sprite(modalX, modalY + 45, 'square-buttons', 6);
+            const submitBtn = this.scene.add.sprite(modalX + 10, modalY + 45, 'square-buttons', 6);
             submitBtn.setDisplaySize(100, 28);
             submitBtn.setDepth(5502);
             submitBtn.setInteractive({ useHandCursor: true });
@@ -2174,6 +3364,8 @@ export class QuickActionsManager extends BaseManager {
         this.closeMissionModal();
         this.closeEventDetails();
         this.closeEventModal();
+        this.closeQuizModal();
+        this.closeQuizGame();
         this.closeEventQRScanner();
         this.destroyButtonElements();
         super.destroy();
