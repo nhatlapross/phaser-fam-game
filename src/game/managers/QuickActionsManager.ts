@@ -3165,7 +3165,7 @@ export class QuickActionsManager extends BaseManager {
             const checkInInput = this.eventCheckInInput;
 
             // Submit button - centered
-            const submitBtn = this.scene.add.sprite(modalX, modalY + 45, 'square-buttons', 6);
+            const submitBtn = this.scene.add.sprite(modalX + 10, modalY + 45, 'square-buttons', 6);
             submitBtn.setDisplaySize(100, 28);
             submitBtn.setDepth(5502);
             submitBtn.setInteractive({ useHandCursor: true });
