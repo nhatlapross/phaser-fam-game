@@ -6,6 +6,7 @@ import { SocialSubmissionManager } from './SocialSubmissionManager';
 import { EventService, GameEvent } from '../EventService';
 import { RedeemService } from '../RedeemService';
 import { QuizService, Quiz, QuizQuestion, QuizAnswer } from '../QuizService';
+import { EventBus } from '../EventBus';
 
 interface QuickActionsCallbacks {
     showToastMessage?: (text: string, color: number) => void;
@@ -70,10 +71,170 @@ export class QuickActionsManager extends BaseManager {
     private submittedQuizIds: Set<string> = new Set(); // Track quizzes submitted this session
     private quizAttemptedCache: Map<string, boolean> = new Map(); // Cache hasAttempted status from API
     private isPreloadingQuizStatus: boolean = false;
+    
+    // Pending claim tracking
+    private pendingClaimMissionId: string | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: QuickActionsCallbacks = {}) {
         super(scene);
         this.callbacks = callbacks;
+        
+        // Listen for mission updates from WebSocket
+        this.setupMissionSocketListeners();
+        
+        // Auto-connect MissionSocket
+        this.connectMissionSocket();
+    }
+
+    /**
+     * Connect to MissionSocket service
+     */
+    private connectMissionSocket(): void {
+        const { getMissionSocketService } = require('../MissionSocketService');
+        const missionSocketService = getMissionSocketService();
+        
+        if (!missionSocketService.isConnected()) {
+            console.log('[QuickActionsManager] Auto-connecting MissionSocket...');
+            missionSocketService.connect();
+        }
+    }
+
+    /**
+     * Setup listeners for mission socket events
+     */
+    private setupMissionSocketListeners(): void {
+        // Listen for mission updates (status change, progress, etc.)
+        EventBus.on('mission_socket:mission_updated', this.onMissionUpdated, this);
+        
+        // Listen for mission claimed (rewards received)
+        EventBus.on('mission_socket:mission_claimed', this.onMissionClaimed, this);
+    }
+
+    /**
+     * Handle mission updated event from WebSocket
+     */
+    private onMissionUpdated(payload: any): void {
+        console.log('[QuickActionsManager] Mission updated via WebSocket:', payload);
+        
+        // Update cached missions with new data
+        if (this.cachedMissions) {
+            const index = this.cachedMissions.findIndex(m => m.id === payload.id || m.id === payload.missionId);
+            if (index !== -1) {
+                // Merge payload into existing mission
+                this.cachedMissions[index] = { 
+                    ...this.cachedMissions[index], 
+                    status: payload.status,
+                    progress: payload.progress ?? this.cachedMissions[index].progress,
+                    proof: payload.proof ?? this.cachedMissions[index].proof,
+                };
+                console.log('[QuickActionsManager] Updated cached mission:', this.cachedMissions[index]);
+            }
+        }
+        
+        // Also update GameDataService cache
+        const cachedData = GameDataService.getCachedData();
+        if (cachedData?.missions) {
+            const index = cachedData.missions.findIndex(m => m.id === payload.id || m.id === payload.missionId);
+            if (index !== -1) {
+                cachedData.missions[index] = {
+                    ...cachedData.missions[index],
+                    status: payload.status,
+                    progress: payload.progress ?? cachedData.missions[index].progress,
+                    proof: payload.proof ?? cachedData.missions[index].proof,
+                };
+            }
+        }
+        
+        // Refresh UI if mission modal is open
+        if (this.missionModalOpen) {
+            this.refreshMissionList();
+        }
+        
+        // Show toast notification
+        if (payload.status === 'completed') {
+            this.callbacks.showToastMessage?.(`🎉 Mission "${payload.name}" completed!`, 0x4ade80);
+        } else if (payload.status === 'pending') {
+            this.callbacks.showToastMessage?.(`⏳ Proof submitted for "${payload.name}"`, 0x4a90e2);
+        }
+    }
+
+    /**
+     * Handle mission claimed event from WebSocket
+     */
+    private async onMissionClaimed(payload: any): Promise<void> {
+        console.log('[QuickActionsManager] Mission claimed via WebSocket:', payload);
+        
+        if (payload.success) {
+            // Use pendingClaimMissionId (UUID) to find mission in cache
+            const missionUUID = this.pendingClaimMissionId;
+            console.log('[QuickActionsManager] Pending claim mission UUID:', missionUUID);
+            
+            // Clear pending
+            this.pendingClaimMissionId = null;
+            
+            // Update cached mission status
+            if (this.cachedMissions && missionUUID) {
+                const index = this.cachedMissions.findIndex(m => m.id === missionUUID);
+                console.log('[QuickActionsManager] Found mission at index:', index);
+                if (index !== -1) {
+                    this.cachedMissions[index].status = 'claimed';
+                    console.log('[QuickActionsManager] Updated cached mission status to claimed');
+                }
+            }
+            
+            // Also update GameDataService cache
+            const cachedData = GameDataService.getCachedData();
+            if (cachedData?.missions && missionUUID) {
+                const index = cachedData.missions.findIndex(m => m.id === missionUUID);
+                if (index !== -1) {
+                    cachedData.missions[index].status = 'claimed';
+                }
+            }
+            
+            // Close detail modal if open, then refresh list
+            this.closeMissionDetails();
+            
+            // Refresh UI if mission modal is open
+            if (this.missionModalOpen) {
+                this.refreshMissionList();
+            }
+            
+            // Show reward notification first (instant feedback)
+            const rewards = payload.rewards;
+            if (rewards) {
+                let rewardText = '🎁 Rewards: ';
+                if (rewards.xp) rewardText += `+${rewards.xp} XP `;
+                if (rewards.reputation) rewardText += `+${rewards.reputation} Rep `;
+                if (rewards.items?.length) {
+                    rewards.items.forEach((item: any) => {
+                        rewardText += `+${item.amount} ${item.type} `;
+                    });
+                }
+                this.callbacks.showToastMessage?.(rewardText.trim(), 0x4ade80);
+            }
+            
+            // Refresh game data (currency, inventory, XP, etc.) - await to ensure UI updates with new data
+            console.log('[QuickActionsManager] Refreshing game data after claim...');
+            await GameDataService.refreshAndUpdateUI();
+            console.log('[QuickActionsManager] Game data refreshed, UI should be updated');
+        } else {
+            // Claim failed - show error
+            this.callbacks.showToastMessage?.('❌ Failed to claim reward', 0xef4444);
+        }
+    }
+
+    /**
+     * Refresh mission list UI (called when mission data changes)
+     */
+    private refreshMissionList(): void {
+        // Close and reopen mission modal to refresh (keep cache)
+        if (this.missionModalOpen) {
+            this.closeMissionModal();
+            // Small delay to allow cleanup
+            this.scene.time.delayedCall(100, () => {
+                this.openMissionModal();
+            });
+        }
     }
 
     /**
@@ -1106,18 +1267,98 @@ export class QuickActionsManager extends BaseManager {
 
         claimBtnBg.on('pointerover', () => claimBtnBg.setFillStyle(0x4ade80));
         claimBtnBg.on('pointerout', () => claimBtnBg.setFillStyle(0x22c55e));
-        claimBtnBg.on('pointerdown', async () => {
-            const result = await MissionService.claimMissionReward(mission.id);
-            if (result) {
-                if (this.callbacks.showToastMessage) {
-                    this.callbacks.showToastMessage('🎉 Reward claimed!', 0x22c55e);
-                }
-                this.cachedMissions = null;
-                this.closeMissionModal();
-                this.openMissionModal();
-                GameDataService.refreshAndUpdateUI();
-            }
+        claimBtnBg.on('pointerdown', () => {
+            // Disable button while claiming
+            claimBtnBg.disableInteractive();
+            claimBtnBg.setFillStyle(0x6b7280);
+            claimBtnText.setText('Claiming...');
+            
+            // Use WebSocket to claim reward
+            this.claimMissionRewardWS(mission.id);
         });
+    }
+
+    /**
+     * Claim mission reward via WebSocket (with auto-connect)
+     */
+    private async claimMissionRewardWS(missionId: string): Promise<void> {
+        const { getMissionSocketService } = require('../MissionSocketService');
+        const missionSocketService = getMissionSocketService();
+        
+        // Store the mission UUID for matching with response
+        this.pendingClaimMissionId = missionId;
+        
+        // Auto-connect if not connected
+        if (!missionSocketService.isConnected()) {
+            console.log('[QuickActionsManager] MissionSocket not connected, attempting to connect...');
+            const connected = await this.waitForMissionSocketConnection(missionSocketService, 3000);
+            
+            if (connected) {
+                console.log('[QuickActionsManager] MissionSocket connected successfully');
+            }
+        }
+        
+        if (missionSocketService.isConnected()) {
+            console.log('[QuickActionsManager] Claiming reward via WebSocket:', missionId);
+            missionSocketService.claimReward(missionId);
+            
+            // Response will come via 'mission_socket:mission_claimed' event
+            // which is handled by onMissionClaimed()
+        } else {
+            // Fallback to REST API
+            console.log('[QuickActionsManager] WebSocket not connected, using REST API');
+            this.pendingClaimMissionId = null;
+            this.claimMissionRewardREST(missionId);
+        }
+    }
+
+    /**
+     * Wait for MissionSocketService to connect with timeout
+     */
+    private waitForMissionSocketConnection(socketService: any, timeout: number): Promise<boolean> {
+        return new Promise((resolve) => {
+            if (socketService.isConnected()) {
+                resolve(true);
+                return;
+            }
+
+            let resolved = false;
+
+            const onConnected = () => {
+                if (!resolved) {
+                    resolved = true;
+                    EventBus.off('mission_socket:connected', onConnected);
+                    resolve(true);
+                }
+            };
+
+            EventBus.on('mission_socket:connected', onConnected);
+            socketService.connect();
+
+            setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    EventBus.off('mission_socket:connected', onConnected);
+                    resolve(socketService.isConnected());
+                }
+            }, timeout);
+        });
+    }
+
+    /**
+     * Claim mission reward via REST API (fallback)
+     */
+    private async claimMissionRewardREST(missionId: string): Promise<void> {
+        const result = await MissionService.claimMissionReward(missionId);
+        if (result) {
+            if (this.callbacks.showToastMessage) {
+                this.callbacks.showToastMessage('🎉 Reward claimed!', 0x22c55e);
+            }
+            this.cachedMissions = null;
+            this.closeMissionModal();
+            this.openMissionModal();
+            GameDataService.refreshAndUpdateUI();
+        }
     }
 
     /**
@@ -1415,10 +1656,9 @@ export class QuickActionsManager extends BaseManager {
                         showToastMessage: (text, color) => this.callbacks.showToastMessage?.(text, color),
                         playSuccessSound: () => this.callbacks.playSuccessSound?.(),
                         onSubmitSuccess: () => {
-                            this.cachedMissions = null;
+                            // Don't clear cache - WebSocket will update it
                             this.closeMissionDetails();
-                            this.closeMissionModal();
-                            this.openMissionModal();
+                            this.refreshMissionList();
                         }
                     });
                     this.socialSubmissionManager.create({
@@ -1481,18 +1721,14 @@ export class QuickActionsManager extends BaseManager {
                 this.scene.cameras.main.ignore(claimText);
                 this.missionDetailElements.push(claimText);
 
-                claimBtnBg.on('pointerdown', async () => {
-                    const result = await MissionService.claimMissionReward(mission.id);
-                    if (result) {
-                        if (this.callbacks.showToastMessage) {
-                            this.callbacks.showToastMessage('🎉 Reward claimed!', 0x22c55e);
-                        }
-                        this.cachedMissions = null;
-                        this.closeMissionDetails();
-                        this.closeMissionModal();
-                        this.openMissionModal();
-                        GameDataService.refreshAndUpdateUI();
-                    }
+                claimBtnBg.on('pointerdown', () => {
+                    // Disable button while claiming
+                    claimBtnBg.disableInteractive();
+                    claimBtnBg.setTint(0x6b7280);
+                    claimText.setText('Claiming...');
+                    
+                    // Use WebSocket to claim reward
+                    this.claimMissionRewardWS(mission.id);
                 });
                 claimBtnBg.on('pointerover', () => claimBtnBg.setTint(0x86efac));
                 claimBtnBg.on('pointerout', () => claimBtnBg.setTint(0x4ade80));
@@ -3485,6 +3721,10 @@ export class QuickActionsManager extends BaseManager {
      * Destroy manager and cleanup
      */
     public destroy(): void {
+        // Remove EventBus listeners
+        EventBus.off('mission_socket:mission_updated', this.onMissionUpdated, this);
+        EventBus.off('mission_socket:mission_claimed', this.onMissionClaimed, this);
+        
         this.closeMissionDetails();
         this.closeMissionModal();
         this.closeEventDetails();

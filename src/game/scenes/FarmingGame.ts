@@ -307,6 +307,9 @@ export class FarmingGame extends Scene {
         // This will be called automatically when any refresh method completes
         GameDataService.setUIUpdateCallback(() => this.refreshAllUI());
 
+        // Also listen for EventBus event as backup (in case callback is not registered)
+        EventBus.on('gamedata:updated', this.onGameDataUpdated, this);
+
         // Listen for game state changes to auto-update UI
         // Use a flag to prevent infinite loops when refreshAllUI syncs state
         let isRefreshingUI = false;
@@ -2381,8 +2384,12 @@ export class FarmingGame extends Scene {
      * Called by GameDataService when data is refreshed
      */
     private refreshAllUI(): void {
+        console.log('[FarmingGame] refreshAllUI called');
+        
         // Sync global state with latest API data (if available)
         const cachedData = GameDataService.getCachedData();
+        console.log('[FarmingGame] Cached user XP:', cachedData?.user?.xp, 'Rep:', cachedData?.user?.reputationScore);
+        
         if (cachedData && this.gameState.isReady()) {
             // Update currency from API cache - use user.balanceGold as primary source
             const apiGold = cachedData.user?.balanceGold ?? cachedData.currencies?.gold ?? 0;
@@ -2412,13 +2419,22 @@ export class FarmingGame extends Scene {
             }
         }
 
-        // Update profile display (gold, gems, etc.)
+        // Update profile display (gold, gems, XP, etc.)
         this.createUserProfileUI();
 
         // Update toolbar (seeds, water, fertilizers, etc.)
         this.updateToolbar();
 
-        console.log('UI refreshed');
+        console.log('[FarmingGame] UI refresh completed');
+    }
+
+    /**
+     * Handle gamedata:updated event from EventBus
+     * This is a backup mechanism when callback is not registered
+     */
+    private onGameDataUpdated(): void {
+        console.log('[FarmingGame] Received gamedata:updated event');
+        this.refreshAllUI();
     }
 
     // Delegate methods for other managers:

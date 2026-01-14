@@ -14,6 +14,7 @@ import { InventoryService, StorageResponse, BackpackResponse } from './Inventory
 import { BadgeService, SoulboundToken } from './BadgeService';
 import { PlantType } from './types/GameTypes';
 import { GameCache, CACHE_KEYS, CACHE_TTL } from './utils/GameCache';
+import { EventBus } from './EventBus';
 
 // Types for pre-loaded data
 export interface UserData {
@@ -494,7 +495,9 @@ export class GameDataService {
      * Useful when you know only certain data has changed
      */
     static async refreshUserProfile(): Promise<UserData | null> {
+        console.log('[GameDataService] refreshUserProfile called');
         const user = await UserService.getUserProfile();
+        console.log('[GameDataService] refreshUserProfile result - XP:', user?.xp, 'Rep:', user?.reputationScore);
         if (cachedGameData) {
             cachedGameData.user = user;
         }
@@ -856,9 +859,15 @@ export class GameDataService {
      * Trigger UI update callback if registered
      */
     private static triggerUIUpdate(): void {
+        console.log('[GameDataService] triggerUIUpdate called, callback registered:', !!this.uiUpdateCallback);
         if (this.uiUpdateCallback) {
+            console.log('[GameDataService] Calling UI update callback...');
             this.uiUpdateCallback();
+            console.log('[GameDataService] UI update callback completed');
         }
+        // Always emit EventBus event for any listeners (backup mechanism)
+        console.log('[GameDataService] Emitting gamedata:updated event');
+        EventBus.emit('gamedata:updated');
     }
 
     /**

@@ -12,9 +12,11 @@ export const MISSION_SOCKET_EVENTS = {
     
     // Client -> Server
     SUBMIT_PROOF: 'mission:submit_proof',
+    CLAIM_REWARD: 'mission:claim_reward',
     
     // Server -> Client
     MISSION_UPDATED: 'mission:updated',
+    MISSION_CLAIMED: 'mission:claimed',
 } as const;
 
 // Payload types
@@ -23,8 +25,24 @@ export interface SubmitProofPayload {
     proof: string;
 }
 
+export interface ClaimRewardPayload {
+    missionId: string;
+}
+
+export interface MissionReward {
+    xp: number;
+    reputation: number;
+    items: Array<{ type: string; amount: number }>;
+}
+
 export interface MissionUpdatedPayload extends Mission {
     missionId: string; // config id (different from id which is db uuid)
+}
+
+export interface MissionClaimedPayload {
+    success: boolean;
+    missionId: string;
+    rewards: MissionReward;
 }
 
 export type MissionSocketConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -33,15 +51,17 @@ export type MissionSocketConnectionStatus = 'disconnected' | 'connecting' | 'con
  * MissionSocketService - Manages WebSocket connection for mission features
  * 
  * IMPORTANT: Connects to the /mission namespace on the backend
- * Auth: Uses query param ?userId=USER_UUID (different from other gateways)
+ * Auth: Uses query param ?token=JWT_TOKEN
  * 
  * Events emitted via EventBus (Server -> Client):
  * - 'mission_socket:connected' - When connection is established
  * - 'mission_socket:disconnected' - When connection is lost
  * - 'mission_socket:mission_updated' - When a mission is updated
+ * - 'mission_socket:mission_claimed' - When a mission reward is claimed
  * 
  * Client -> Server Events:
  * - 'mission:submit_proof' - Submit proof for a mission
+ * - 'mission:claim_reward' - Claim reward for a completed mission
  */
 export class MissionSocketService {
     private static instance: MissionSocketService | null = null;
@@ -85,31 +105,31 @@ export class MissionSocketService {
 
     /**
      * Connect to the WebSocket server
-     * @param userId - User UUID for authentication (query param)
+     * @param token - JWT access token for authentication (query param)
      */
-    public connect(userId?: string): void {
+    public connect(token?: string): void {
         if (this.socket?.connected) {
             console.log('[MissionSocketService] Already connected');
             return;
         }
 
-        // Get userId from parameter or localStorage
-        const authUserId = userId || this.getUserId();
-        if (!authUserId) {
-            console.warn('[MissionSocketService] No userId available, skipping connection');
+        // Get token from parameter or localStorage
+        const authToken = token || this.getAccessToken();
+        if (!authToken) {
+            console.warn('[MissionSocketService] No token available, skipping connection');
             return;
         }
 
         this.status = 'connecting';
         
-        // Connect to the /mission namespace with userId as query param
+        // Connect to the /mission namespace with token as query param
         const socketUrl = `${MissionSocketService.API_BASE_URL}${MissionSocketService.SOCKET_NAMESPACE}`;
         console.log('[MissionSocketService] Connecting to:', socketUrl);
-        console.log('[MissionSocketService] UserId:', authUserId);
+        console.log('[MissionSocketService] Token (first 20 chars):', authToken.substring(0, 20) + '...');
 
         this.socket = io(socketUrl, {
             query: {
-                userId: authUserId,
+                token: authToken,
             },
             transports: ['websocket', 'polling'],
             reconnection: true,
@@ -172,6 +192,14 @@ export class MissionSocketService {
             console.log('📋 [MissionSocketService] RECEIVED mission:updated:', payload);
             EventBus.emit('mission_socket:mission_updated', payload);
         });
+
+        this.socket.on(MISSION_SOCKET_EVENTS.MISSION_CLAIMED, (payload: MissionClaimedPayload) => {
+            console.log('🎁 [MissionSocketService] RECEIVED mission:claimed:', payload);
+            if (payload.rewards) {
+                console.log(`🎁 [MissionSocketService] Rewards - XP: ${payload.rewards.xp}, Rep: ${payload.rewards.reputation}, Items: ${payload.rewards.items?.length || 0}`);
+            }
+            EventBus.emit('mission_socket:mission_claimed', payload);
+        });
     }
 
     /**
@@ -198,20 +226,11 @@ export class MissionSocketService {
     }
 
     /**
-     * Get userId from localStorage (from stored user data)
+     * Get access token from localStorage
      */
-    private getUserId(): string | null {
+    private getAccessToken(): string | null {
         if (typeof window === 'undefined') return null;
-        const userData = localStorage.getItem('fam_game_user');
-        if (userData) {
-            try {
-                const user = JSON.parse(userData);
-                return user.id || null;
-            } catch {
-                return null;
-            }
-        }
-        return null;
+        return localStorage.getItem('fam_game_access_token');
     }
 
     /**
@@ -242,6 +261,25 @@ export class MissionSocketService {
         const payload: SubmitProofPayload = { missionId, proof };
         console.log('📋 [MissionSocketService] Emitting mission:submit_proof:', payload);
         this.socket.emit(MISSION_SOCKET_EVENTS.SUBMIT_PROOF, payload);
+        return true;
+    }
+
+    /**
+     * Claim reward for a completed mission via WebSocket
+     * Emit: 'mission:claim_reward', { missionId: string }
+     * Response comes via 'mission:claimed' event
+     * @param missionId - The mission ID to claim reward for
+     * @returns true if emitted successfully, false if not connected
+     */
+    public claimReward(missionId: string): boolean {
+        if (!this.socket?.connected) {
+            console.warn('[MissionSocketService] Cannot claim reward, socket not connected');
+            return false;
+        }
+
+        const payload: ClaimRewardPayload = { missionId };
+        console.log('🎁 [MissionSocketService] Emitting mission:claim_reward:', payload);
+        this.socket.emit(MISSION_SOCKET_EVENTS.CLAIM_REWARD, payload);
         return true;
     }
 

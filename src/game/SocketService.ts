@@ -13,6 +13,10 @@ import {
     WaterPlantPayload,
     HarvestPlantPayload,
     BuyShopItemPayload,
+    MissionSubmitProofPayload,
+    MissionClaimRewardPayload,
+    MissionUpdatedPayload,
+    MissionClaimedPayload,
 } from './types/SocketTypes';
 
 /**
@@ -29,12 +33,16 @@ import {
  * - 'socket:currency_update' - When gold or gems change
  * - 'socket:action_success' - When a game action completes successfully
  * - 'socket:action_error' - When a game action fails
+ * - 'socket:mission_updated' - When a mission is updated
+ * - 'socket:mission_claimed' - When a mission reward is claimed
  * 
  * Client -> Server Events (fire-and-forget, responses come via events above):
  * - 'claim_water' - Claim free water from well
  * - 'water_plant' - Water a plant
  * - 'harvest_plant' - Harvest a mature plant
  * - 'buy_land' - Buy a new land plot
+ * - 'mission:submit_proof' - Submit proof for a mission
+ * - 'mission:claim_reward' - Claim reward for a completed mission
  */
 export class SocketService {
     private static instance: SocketService | null = null;
@@ -199,6 +207,22 @@ export class SocketService {
             console.error(`❌ [SocketService] Action: ${payload.action}, Message: ${payload.message}`);
             EventBus.emit('socket:action_error', payload);
         });
+
+        // Mission events - Server -> Client
+        this.socket.on(SOCKET_EVENTS.MISSION_UPDATED, (payload: MissionUpdatedPayload) => {
+            console.log('📋 [SocketService] RECEIVED mission:updated:', payload);
+            console.log(`📋 [SocketService] Mission: ${payload.name}, Status: ${payload.status}, Progress: ${payload.progress}/${payload.target}`);
+            EventBus.emit('socket:mission_updated', payload);
+        });
+
+        this.socket.on(SOCKET_EVENTS.MISSION_CLAIMED, (payload: MissionClaimedPayload) => {
+            console.log('🎁 [SocketService] RECEIVED mission:claimed:', payload);
+            console.log(`🎁 [SocketService] Mission: ${payload.missionId}, Success: ${payload.success}`);
+            if (payload.rewards) {
+                console.log(`🎁 [SocketService] Rewards - XP: ${payload.rewards.xp}, Rep: ${payload.rewards.reputation}, Items: ${payload.rewards.items?.length || 0}`);
+            }
+            EventBus.emit('socket:mission_claimed', payload);
+        });
     }
 
     /**
@@ -355,6 +379,46 @@ export class SocketService {
         const payload: BuyShopItemPayload = { shopType, itemKey };
         console.log('🛒 [SocketService] Emitting buy_shop_item:', payload);
         this.socket.emit(SOCKET_EVENTS.BUY_SHOP_ITEM, payload);
+    }
+
+    // ==========================================
+    // Mission Action Methods (Client -> Server)
+    // Fire-and-forget: responses come via event listeners
+    // ==========================================
+
+    /**
+     * Submit proof for a mission
+     * Emit: 'mission:submit_proof', { missionId: string, proof: string }
+     * Response comes via 'mission:updated' event
+     * @param missionId - The mission ID
+     * @param proof - The proof string (URL or description)
+     */
+    public submitMissionProof(missionId: string, proof: string): void {
+        if (!this.socket?.connected) {
+            console.warn('[SocketService] Cannot submit mission proof, socket not connected');
+            return;
+        }
+
+        const payload: MissionSubmitProofPayload = { missionId, proof };
+        console.log('📋 [SocketService] Emitting mission:submit_proof:', payload);
+        this.socket.emit(SOCKET_EVENTS.MISSION_SUBMIT_PROOF, payload);
+    }
+
+    /**
+     * Claim reward for a completed mission
+     * Emit: 'mission:claim_reward', { missionId: string }
+     * Response comes via 'mission:claimed' event
+     * @param missionId - The mission ID to claim reward for
+     */
+    public claimMissionReward(missionId: string): void {
+        if (!this.socket?.connected) {
+            console.warn('[SocketService] Cannot claim mission reward, socket not connected');
+            return;
+        }
+
+        const payload: MissionClaimRewardPayload = { missionId };
+        console.log('🎁 [SocketService] Emitting mission:claim_reward:', payload);
+        this.socket.emit(SOCKET_EVENTS.MISSION_CLAIM_REWARD, payload);
     }
 
     /**
