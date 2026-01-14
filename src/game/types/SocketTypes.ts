@@ -153,6 +153,148 @@ export interface ClaimWaterResponse {
     nextClaimAt?: string;
 }
 
+// ==========================================
+// Mission WebSocket Types
+// ==========================================
+
+/**
+ * Mission reward structure
+ */
+export interface MissionReward {
+    xp: number;
+    reputation: number;
+    items: Array<{ type: string; amount: number }>;
+}
+
+/**
+ * Mission status from WebSocket
+ */
+export type MissionStatus = 'active' | 'completed' | 'claimed' | 'pending';
+
+/**
+ * Payload for mission:submit_proof event (Client -> Server)
+ */
+export interface MissionSubmitProofPayload {
+    missionId: string;
+    proof: string;
+}
+
+/**
+ * Payload for mission:claim_reward event (Client -> Server)
+ */
+export interface MissionClaimRewardPayload {
+    missionId: string;
+}
+
+/**
+ * Payload for mission:updated event (Server -> Client)
+ * Received when a mission is updated (progress, status change, etc.)
+ */
+export interface MissionUpdatedPayload {
+    id: string;
+    userId: string;
+    missionType: string;
+    progress: number;
+    target: number;
+    status: MissionStatus;
+    proof: string | null;
+    createdAt: string;
+    updatedAt: string;
+    missionId: string;
+    name: string;
+    description: string;
+    reward: MissionReward;
+}
+
+/**
+ * Payload for mission:claimed event (Server -> Client)
+ * Received when a mission reward is successfully claimed
+ */
+export interface MissionClaimedPayload {
+    success: boolean;
+    missionId: string;
+    rewards: MissionReward;
+}
+
+// ==========================================
+// Quiz WebSocket Types
+// ==========================================
+
+/**
+ * Payload for quiz:start event (Client -> Server)
+ */
+export interface QuizStartPayload {
+    quizId: string;
+}
+
+/**
+ * Quiz answer structure for submission
+ */
+export interface QuizAnswerSubmit {
+    questionId: string;
+    answer: string;
+}
+
+/**
+ * Payload for quiz:submit event (Client -> Server)
+ */
+export interface QuizSubmitPayload {
+    quizId: string;
+    answers: QuizAnswerSubmit[];
+}
+
+/**
+ * Quiz info in started response
+ */
+export interface QuizStartedInfo {
+    id: string;
+    title: string;
+    timePerQuestion: number;
+    totalQuestions: number;
+}
+
+/**
+ * Payload for quiz:started event (Server -> Client)
+ */
+export interface QuizStartedPayload {
+    success: boolean;
+    attemptId: string;
+    quiz: QuizStartedInfo;
+    message: string;
+}
+
+/**
+ * Quiz result structure
+ */
+export interface QuizResultData {
+    score: number;
+    correctAnswers: number;
+    totalQuestions: number;
+    xpEarned: number;
+    goldEarned: number;
+    isPerfect: boolean;
+}
+
+/**
+ * Answer result in quiz result
+ */
+export interface QuizAnswerResult {
+    questionId: string;
+    userAnswer: string;
+    correctAnswer: string;
+    isCorrect: boolean;
+}
+
+/**
+ * Payload for quiz:result event (Server -> Client)
+ */
+export interface QuizResultPayload {
+    success: boolean;
+    result: QuizResultData;
+    answers: QuizAnswerResult[];
+    message: string;
+}
+
 /**
  * Socket event names
  */
@@ -165,12 +307,28 @@ export const SOCKET_EVENTS = {
     ACTION_SUCCESS: 'action_success',
     ACTION_ERROR: 'action_error',
     
+    // Mission events (Server -> Client)
+    MISSION_UPDATED: 'mission:updated',
+    MISSION_CLAIMED: 'mission:claimed',
+    
+    // Quiz events (Server -> Client)
+    QUIZ_STARTED: 'quiz:started',
+    QUIZ_RESULT: 'quiz:result',
+    
     // Client -> Server events
     CLAIM_WATER: 'claim_water',
     WATER_PLANT: 'water_plant',
     HARVEST_PLANT: 'harvest_plant',
     BUY_LAND: 'buy_land',
     BUY_SHOP_ITEM: 'buy_shop_item',
+    
+    // Mission events (Client -> Server)
+    MISSION_SUBMIT_PROOF: 'mission:submit_proof',
+    MISSION_CLAIM_REWARD: 'mission:claim_reward',
+    
+    // Quiz events (Client -> Server)
+    QUIZ_START: 'quiz:start',
+    QUIZ_SUBMIT: 'quiz:submit',
     
     // Connection events
     CONNECT: 'connect',

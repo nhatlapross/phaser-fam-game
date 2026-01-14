@@ -277,6 +277,9 @@ export class TownSquare extends Scene {
         // Initialize lobby WebSocket and setup chat listeners
         this.initializeLobbySocket();
 
+        // Listen for game data updates (from mission claims, etc.)
+        EventBus.on('gamedata:updated', this.onGameDataUpdated, this);
+
         // Handle resize
         this.scale.on('resize', this.onResize, this);
 
@@ -1037,6 +1040,22 @@ export class TownSquare extends Scene {
     }
 
     /**
+     * Handle gamedata:updated event from EventBus
+     * Refreshes UI when game data changes (e.g., after mission claim)
+     */
+    private onGameDataUpdated(): void {
+        console.log('[TownSquare] Received gamedata:updated event');
+        
+        // Refresh profile UI (XP, reputation, currency)
+        this.profileManager?.createProfileUI();
+        
+        // Refresh toolbar if needed
+        this.toolbarManager?.updateToolbar();
+        
+        console.log('[TownSquare] UI refreshed');
+    }
+
+    /**
      * Called when scene is stopped (via scene.start or scene.stop)
      * CRITICAL: This is where cleanup must happen for scene transitions!
      */
@@ -1045,6 +1064,7 @@ export class TownSquare extends Scene {
 
         // Remove event listeners
         this.scale.off('resize', this.onResize, this);
+        EventBus.off('gamedata:updated', this.onGameDataUpdated, this);
 
         // Cleanup managers
         this.soundManager?.destroy();

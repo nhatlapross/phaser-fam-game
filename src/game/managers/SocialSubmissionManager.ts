@@ -353,6 +353,20 @@ export class SocialSubmissionManager {
 
         const missionSocketService = getMissionSocketService();
 
+        // Auto-connect if not connected and wait for connection
+        if (!missionSocketService.isConnected()) {
+            console.log('[SocialSubmissionManager] MissionSocket not connected, attempting to connect...');
+            
+            // Try to connect and wait for connection event
+            const connected = await this.waitForMissionSocketConnection(missionSocketService, 3000);
+            
+            if (connected) {
+                console.log('[SocialSubmissionManager] MissionSocket connected successfully');
+            } else {
+                console.log('[SocialSubmissionManager] MissionSocket connection timeout, using REST API');
+            }
+        }
+
         if (missionSocketService.isConnected()) {
             console.log('[SocialSubmissionManager] Submitting proof via WebSocket');
             
@@ -395,6 +409,44 @@ export class SocialSubmissionManager {
                 this.callbacks.showToastMessage(`❌ ${errorMsg}`, 0xef4444);
             }
         }
+    }
+
+    /**
+     * Wait for MissionSocketService to connect with timeout
+     */
+    private waitForMissionSocketConnection(socketService: ReturnType<typeof getMissionSocketService>, timeout: number): Promise<boolean> {
+        return new Promise((resolve) => {
+            // If already connected, resolve immediately
+            if (socketService.isConnected()) {
+                resolve(true);
+                return;
+            }
+
+            let resolved = false;
+
+            const onConnected = () => {
+                if (!resolved) {
+                    resolved = true;
+                    EventBus.off('mission_socket:connected', onConnected);
+                    resolve(true);
+                }
+            };
+
+            // Listen for connection event
+            EventBus.on('mission_socket:connected', onConnected);
+
+            // Trigger connect
+            socketService.connect();
+
+            // Timeout fallback
+            setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    EventBus.off('mission_socket:connected', onConnected);
+                    resolve(socketService.isConnected());
+                }
+            }, timeout);
+        });
     }
 
     /**

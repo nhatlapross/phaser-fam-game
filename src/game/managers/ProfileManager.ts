@@ -73,6 +73,7 @@ export class ProfileManager extends BaseManager {
         // Use GameDataService (pre-fetched data) as primary source, fallback to localStorage
         const cachedData = GameDataService.getCachedData();
         const user = cachedData?.user || UserService.getStoredUser();
+        console.log('[ProfileManager] createProfileUI - XP:', user?.xp, 'Rep:', user?.reputationScore);
         if (!user) return;
 
         const screenWidth = this.scene.scale.width;

@@ -250,6 +250,7 @@ export class UserService {
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('[UserService] getUserProfile API response - XP:', data.xp, 'Rep:', data.reputationScore);
 
                 // Get existing stored user to preserve wallet addresses and characterType
                 const existingUser = UserService.getStoredUser();
