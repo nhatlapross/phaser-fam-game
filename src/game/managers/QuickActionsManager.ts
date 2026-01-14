@@ -7,6 +7,7 @@ import { EventService, GameEvent } from '../EventService';
 import { RedeemService } from '../RedeemService';
 import { QuizService, Quiz, QuizQuestion, QuizAnswer } from '../QuizService';
 import { EventBus } from '../EventBus';
+import { QuizStartedPayload, QuizResultPayload } from '../types/SocketTypes';
 
 interface QuickActionsCallbacks {
     showToastMessage?: (text: string, color: number) => void;
@@ -74,6 +75,9 @@ export class QuickActionsManager extends BaseManager {
     
     // Pending claim tracking
     private pendingClaimMissionId: string | null = null;
+    
+    // Pending quiz tracking for WebSocket
+    private pendingQuizId: string | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: QuickActionsCallbacks = {}) {
         super(scene);
@@ -82,8 +86,14 @@ export class QuickActionsManager extends BaseManager {
         // Listen for mission updates from WebSocket
         this.setupMissionSocketListeners();
         
+        // Listen for quiz updates from WebSocket
+        this.setupQuizSocketListeners();
+        
         // Auto-connect MissionSocket
         this.connectMissionSocket();
+        
+        // Auto-connect QuizSocket
+        this.connectQuizSocket();
     }
 
     /**
@@ -96,6 +106,71 @@ export class QuickActionsManager extends BaseManager {
         if (!missionSocketService.isConnected()) {
             console.log('[QuickActionsManager] Auto-connecting MissionSocket...');
             missionSocketService.connect();
+        }
+    }
+
+    /**
+     * Connect to QuizSocket service
+     */
+    private connectQuizSocket(): void {
+        const { getQuizSocketService } = require('../QuizSocketService');
+        const quizSocketService = getQuizSocketService();
+        
+        if (!quizSocketService.isConnected()) {
+            console.log('[QuickActionsManager] Auto-connecting QuizSocket...');
+            quizSocketService.connect();
+        }
+    }
+
+    /**
+     * Setup listeners for quiz socket events
+     */
+    private setupQuizSocketListeners(): void {
+        // Listen for quiz started (response to quiz:start)
+        EventBus.on('quiz_socket:started', this.onQuizStarted, this);
+        
+        // Listen for quiz result (response to quiz:submit)
+        EventBus.on('quiz_socket:result', this.onQuizResult, this);
+    }
+
+    /**
+     * Handle quiz started event from WebSocket
+     */
+    private onQuizStarted(payload: QuizStartedPayload): void {
+        console.log('[QuickActionsManager] Quiz started via WebSocket:', payload);
+        
+        if (payload.success && payload.quiz) {
+            // Quiz started successfully - the gameplay is already started via REST API
+            // This is just a confirmation from WebSocket
+            this.callbacks.showToastMessage?.(`🎯 Quiz "${payload.quiz.title}" started!`, 0xa855f7);
+        } else {
+            this.callbacks.showToastMessage?.('❌ Failed to start quiz', 0xef4444);
+        }
+    }
+
+    /**
+     * Handle quiz result event from WebSocket
+     */
+    private async onQuizResult(payload: QuizResultPayload): Promise<void> {
+        console.log('[QuickActionsManager] Quiz result via WebSocket:', payload);
+        
+        if (payload.success && payload.result) {
+            // Track submitted quiz
+            if (this.pendingQuizId) {
+                this.submittedQuizIds.add(this.pendingQuizId);
+                this.pendingQuizId = null;
+            }
+            
+            // Show full result modal (same as REST API)
+            this.showQuizResult({
+                result: payload.result,
+                message: payload.message
+            });
+            
+            // Refresh game data (XP, gold, etc.)
+            await GameDataService.refreshAndUpdateUI();
+        } else {
+            this.callbacks.showToastMessage?.('❌ Failed to submit quiz', 0xef4444);
         }
     }
 
@@ -2423,14 +2498,35 @@ export class QuickActionsManager extends BaseManager {
                         return;
                     }
 
-                    // Start quiz attempt
-                    const startResult = await QuizService.startQuiz(quiz.id);
-
-                    if (!startResult.success) {
-                        this.callbacks.showToastMessage?.(startResult.error || 'Failed to start quiz', 0xef4444);
-                        startBtnText.setText('🎮 Start Quiz');
-                        startBtn.setInteractive({ useHandCursor: true });
-                        return;
+                    // Try WebSocket first, fallback to REST API
+                    const { getQuizSocketService } = require('../QuizSocketService');
+                    const quizSocketService = getQuizSocketService();
+                    
+                    let startSuccess = false;
+                    
+                    if (quizSocketService.isConnected()) {
+                        console.log('[QuickActionsManager] Starting quiz via WebSocket:', quiz.id);
+                        // Store pending quiz ID for WebSocket response
+                        this.pendingQuizId = quiz.id;
+                        const emitted = quizSocketService.startQuiz(quiz.id);
+                        if (emitted) {
+                            // WebSocket will handle the response via quiz_socket:started event
+                            // For now, proceed with gameplay since we have quiz details
+                            startSuccess = true;
+                        }
+                    }
+                    
+                    if (!startSuccess) {
+                        // Fallback to REST API
+                        console.log('[QuickActionsManager] WebSocket not connected, using REST API');
+                        const startResult = await QuizService.startQuiz(quiz.id);
+                        
+                        if (!startResult.success) {
+                            this.callbacks.showToastMessage?.(startResult.error || 'Failed to start quiz', 0xef4444);
+                            startBtnText.setText('🎮 Start Quiz');
+                            startBtn.setInteractive({ useHandCursor: true });
+                            return;
+                        }
                     }
 
                     // Close modals and start quiz gameplay
@@ -2752,28 +2848,64 @@ export class QuickActionsManager extends BaseManager {
         this.scene.cameras.main.ignore(loadingText);
         this.quizGameElements.push(loadingText);
 
-        // Submit answers
-        const submittedQuizId = this.currentQuizId; // Save before clearing
-        const result = await QuizService.submitQuiz(this.currentQuizId, this.userAnswers);
-
-        // Clear loading
-        this.quizGameElements.forEach(el => {
-            if (el && el.destroy) el.destroy();
-        });
-        this.quizGameElements = [];
-
-        if (result && result.success) {
-            // Track submitted quiz to disable it
-            if (submittedQuizId) {
-                this.submittedQuizIds.add(submittedQuizId);
+        // Save quiz ID before clearing
+        const submittedQuizId = this.currentQuizId;
+        
+        // Try WebSocket first, fallback to REST API
+        const { getQuizSocketService } = require('../QuizSocketService');
+        const quizSocketService = getQuizSocketService();
+        
+        let useWebSocket = false;
+        
+        if (quizSocketService.isConnected()) {
+            console.log('[QuickActionsManager] Submitting quiz via WebSocket:', submittedQuizId);
+            // Store pending quiz ID for WebSocket response
+            this.pendingQuizId = submittedQuizId;
+            
+            // Convert answers to WebSocket format
+            const wsAnswers = this.userAnswers.map(a => ({
+                questionId: a.questionId,
+                answer: a.answer
+            }));
+            
+            const emitted = quizSocketService.submitQuiz(submittedQuizId, wsAnswers);
+            if (emitted) {
+                useWebSocket = true;
+                // WebSocket will handle the response via quiz_socket:result event
+                // Clear loading after a short delay (WebSocket response will show result)
+                this.scene.time.delayedCall(500, () => {
+                    this.quizGameElements.forEach(el => {
+                        if (el && el.destroy) el.destroy();
+                    });
+                    this.quizGameElements = [];
+                });
             }
+        }
+        
+        if (!useWebSocket) {
+            // Fallback to REST API
+            console.log('[QuickActionsManager] WebSocket not connected, using REST API');
+            const result = await QuizService.submitQuiz(this.currentQuizId, this.userAnswers);
 
-            // Refresh profile/XP immediately (don't wait for close)
-            GameDataService.refreshAndUpdateUI();
+            // Clear loading
+            this.quizGameElements.forEach(el => {
+                if (el && el.destroy) el.destroy();
+            });
+            this.quizGameElements = [];
 
-            this.showQuizResult(result);
-        } else {
-            this.callbacks.showToastMessage?.('Failed to submit quiz', 0xef4444);
+            if (result && result.success) {
+                // Track submitted quiz to disable it
+                if (submittedQuizId) {
+                    this.submittedQuizIds.add(submittedQuizId);
+                }
+
+                // Refresh profile/XP immediately (don't wait for close)
+                GameDataService.refreshAndUpdateUI();
+
+                this.showQuizResult(result);
+            } else {
+                this.callbacks.showToastMessage?.('Failed to submit quiz', 0xef4444);
+            }
         }
 
         // Reset quiz state
