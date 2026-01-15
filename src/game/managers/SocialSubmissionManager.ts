@@ -36,6 +36,11 @@ export class SocialSubmissionManager {
     private uploadedImageUrl: string | null = null;
     private socialLinkInput: HTMLInputElement | null = null;
     private imageFileInput: HTMLInputElement | null = null;
+    
+    // Submit button state
+    private submitBtnBg: Phaser.GameObjects.Sprite | null = null;
+    private submitText: Phaser.GameObjects.Text | null = null;
+    private isSubmitting: boolean = false;
 
     constructor(scene: Phaser.Scene, callbacks: SocialSubmissionCallbacks) {
         this.scene = scene;
@@ -137,26 +142,29 @@ export class SocialSubmissionManager {
         });
 
         // Submit button
-        const submitBtnBg = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 38, 'square-buttons', 6);
-        submitBtnBg.setDisplaySize(100, 28);
-        submitBtnBg.setDepth(baseDepth);
-        submitBtnBg.setInteractive({ useHandCursor: true });
-        this.scene.cameras.main.ignore(submitBtnBg);
-        this.elements.push(submitBtnBg);
+        this.submitBtnBg = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 38, 'square-buttons', 6);
+        this.submitBtnBg.setDisplaySize(100, 28);
+        this.submitBtnBg.setDepth(baseDepth);
+        this.submitBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(this.submitBtnBg);
+        this.elements.push(this.submitBtnBg);
 
-        const submitText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 38, 'Submit', {
+        this.submitText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 38, 'Submit', {
             fontSize: '11px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2
         });
-        submitText.setOrigin(0.5);
-        submitText.setDepth(baseDepth + 1);
-        submitText.setStroke('#5D4037', 2);
-        this.scene.cameras.main.ignore(submitText);
-        this.elements.push(submitText);
+        this.submitText.setOrigin(0.5);
+        this.submitText.setDepth(baseDepth + 1);
+        this.submitText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(this.submitText);
+        this.elements.push(this.submitText);
 
-        submitBtnBg.on('pointerdown', () => {
+        this.submitBtnBg.on('pointerdown', () => {
+            // Prevent double-click while submitting
+            if (this.isSubmitting) return;
+            
             if (this.currentSubmissionType === 'link') {
                 const link = this.socialLinkInput?.value.trim();
                 if (link) {
@@ -172,8 +180,12 @@ export class SocialSubmissionManager {
                 }
             }
         });
-        submitBtnBg.on('pointerover', () => submitBtnBg.setTint(0xcccccc));
-        submitBtnBg.on('pointerout', () => submitBtnBg.clearTint());
+        this.submitBtnBg.on('pointerover', () => {
+            if (!this.isSubmitting) this.submitBtnBg?.setTint(0xcccccc);
+        });
+        this.submitBtnBg.on('pointerout', () => {
+            if (!this.isSubmitting) this.submitBtnBg?.clearTint();
+        });
     }
 
     /**
@@ -349,6 +361,9 @@ export class SocialSubmissionManager {
      */
     private async submitMissionProof(missionId: string, type: SubmissionType, proof: string): Promise<void> {
         const isImage = type === 'image';
+        
+        // Show loading state
+        this.setSubmitLoading(true);
         this.callbacks.showToastMessage(isImage ? 'Submitting image proof...' : 'Submitting link...', 0x4a90e2);
 
         const missionSocketService = getMissionSocketService();
@@ -374,6 +389,9 @@ export class SocialSubmissionManager {
                 if (payload.id === missionId || payload.missionId === missionId) {
                     EventBus.off('mission_socket:mission_updated', handleMissionUpdated);
                     
+                    // Reset loading state
+                    this.setSubmitLoading(false);
+                    
                     if (payload.status === 'pending') {
                         this.callbacks.showToastMessage('✅ Proof submitted! Pending review.', 0x22c55e);
                         this.callbacks.playSuccessSound?.();
@@ -386,8 +404,14 @@ export class SocialSubmissionManager {
 
             EventBus.on('mission_socket:mission_updated', handleMissionUpdated);
             
+            // Timeout to reset loading state if no response
             this.scene.time.delayedCall(10000, () => {
                 EventBus.off('mission_socket:mission_updated', handleMissionUpdated);
+                // Reset loading state on timeout
+                if (this.isSubmitting) {
+                    this.setSubmitLoading(false);
+                    this.callbacks.showToastMessage('⏱️ Request timed out. Please try again.', 0xef4444);
+                }
             });
 
             missionSocketService.submitProof(missionId, proof);
@@ -395,6 +419,9 @@ export class SocialSubmissionManager {
             console.log('[SocialSubmissionManager] WebSocket not connected, using REST API');
             try {
                 const result = await MissionService.submitProof(missionId, proof);
+
+                // Reset loading state
+                this.setSubmitLoading(false);
 
                 if (result) {
                     this.callbacks.showToastMessage('✅ Proof submitted! Pending review.', 0x22c55e);
@@ -404,9 +431,33 @@ export class SocialSubmissionManager {
                     this.callbacks.showToastMessage('❌ Failed to submit. Please try again.', 0xef4444);
                 }
             } catch (error: any) {
+                // Reset loading state on error
+                this.setSubmitLoading(false);
+                
                 console.error('Error submitting proof:', error);
                 const errorMsg = error?.message || 'Network error. Please check your connection.';
                 this.callbacks.showToastMessage(`❌ ${errorMsg}`, 0xef4444);
+            }
+        }
+    }
+
+    /**
+     * Set submit button loading state
+     */
+    private setSubmitLoading(loading: boolean): void {
+        this.isSubmitting = loading;
+        
+        if (this.submitBtnBg && this.submitText) {
+            if (loading) {
+                // Disable button and show loading state
+                this.submitBtnBg.disableInteractive();
+                this.submitBtnBg.setTint(0x6b7280); // Gray tint
+                this.submitText.setText('⏳ Submitting...');
+            } else {
+                // Re-enable button and reset state
+                this.submitBtnBg.setInteractive({ useHandCursor: true });
+                this.submitBtnBg.clearTint();
+                this.submitText.setText('Submit');
             }
         }
     }
@@ -472,6 +523,11 @@ export class SocialSubmissionManager {
         this.imageFileInput = null;
         this.uploadedImageUrl = null;
         this.currentSubmissionType = 'link';
+        
+        // Reset submit button state
+        this.submitBtnBg = null;
+        this.submitText = null;
+        this.isSubmitting = false;
 
         // Destroy Phaser elements
         this.elements.forEach(el => {
