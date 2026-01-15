@@ -136,7 +136,6 @@ export class MailboxManager extends BaseManager {
         if (missions) {
             this.cachedMissions = missions;
             this.missionsCacheTime = Date.now();
-            console.log('MailboxManager: Missions set from external cache:', missions.length);
         }
     }
 
@@ -1555,7 +1554,6 @@ export class MailboxManager extends BaseManager {
                 statusText.setColor('#4ade80');
                 this.callbacks.showToastMessage('Image uploaded successfully!', 0x4ade80);
             } catch (error: any) {
-                console.error('Upload error:', error);
                 uploadText.setText('❌ Upload failed');
                 uploadBg.setFillStyle(0x7f1d1d, 0.8); // Red background on error
                 statusText.setText('Click to try again');
@@ -1595,7 +1593,6 @@ export class MailboxManager extends BaseManager {
 
         // Try WebSocket first
         if (missionSocketService.isConnected()) {
-            console.log('[MailboxManager] Submitting proof via WebSocket');
             
             // Setup one-time listener for mission update response
             const handleMissionUpdated = (payload: MissionUpdatedPayload) => {
@@ -1640,7 +1637,6 @@ export class MailboxManager extends BaseManager {
             missionSocketService.submitProof(missionId, proof);
         } else {
             // Fallback to REST API
-            console.log('[MailboxManager] WebSocket not connected, using REST API');
             try {
                 const result = await MissionService.submitProof(missionId, proof);
 
@@ -1659,7 +1655,6 @@ export class MailboxManager extends BaseManager {
                     this.callbacks.showToastMessage('❌ Failed to submit. Please try again.', 0xef4444);
                 }
             } catch (error: any) {
-                console.error('Error submitting proof:', error);
                 const errorMsg = error?.message || 'Network error. Please check your connection.';
                 this.callbacks.showToastMessage(`❌ ${errorMsg}`, 0xef4444);
             }

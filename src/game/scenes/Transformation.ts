@@ -208,7 +208,6 @@ export class Transformation extends Scene {
         const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
         const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
 
-        console.log(`[Transformation] Showing character: ${characterKey} (type: ${characterType})`);
 
         // Character appears with scale animation
         this.characterSprite = this.add.sprite(centerX, centerY, characterKey, 0);

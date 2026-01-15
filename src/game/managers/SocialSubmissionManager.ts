@@ -328,7 +328,6 @@ export class SocialSubmissionManager {
                 statusText.setColor('#4ade80');
                 this.callbacks.showToastMessage('Image uploaded successfully!', 0x4ade80);
             } catch (error: any) {
-                console.error('Upload error:', error);
                 uploadText.setText('❌ Upload failed');
                 uploadBg.setFillStyle(0x7f1d1d, 0.8);
                 statusText.setText('Click to try again');
@@ -370,20 +369,16 @@ export class SocialSubmissionManager {
 
         // Auto-connect if not connected and wait for connection
         if (!missionSocketService.isConnected()) {
-            console.log('[SocialSubmissionManager] MissionSocket not connected, attempting to connect...');
             
             // Try to connect and wait for connection event
             const connected = await this.waitForMissionSocketConnection(missionSocketService, 3000);
             
             if (connected) {
-                console.log('[SocialSubmissionManager] MissionSocket connected successfully');
             } else {
-                console.log('[SocialSubmissionManager] MissionSocket connection timeout, using REST API');
             }
         }
 
         if (missionSocketService.isConnected()) {
-            console.log('[SocialSubmissionManager] Submitting proof via WebSocket');
             
             const handleMissionUpdated = (payload: MissionUpdatedPayload) => {
                 if (payload.id === missionId || payload.missionId === missionId) {
@@ -416,7 +411,6 @@ export class SocialSubmissionManager {
 
             missionSocketService.submitProof(missionId, proof);
         } else {
-            console.log('[SocialSubmissionManager] WebSocket not connected, using REST API');
             try {
                 const result = await MissionService.submitProof(missionId, proof);
 
@@ -434,7 +428,6 @@ export class SocialSubmissionManager {
                 // Reset loading state on error
                 this.setSubmitLoading(false);
                 
-                console.error('Error submitting proof:', error);
                 const errorMsg = error?.message || 'Network error. Please check your connection.';
                 this.callbacks.showToastMessage(`❌ ${errorMsg}`, 0xef4444);
             }

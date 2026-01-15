@@ -212,7 +212,6 @@ export class ShopService {
     static async getGoldShop(): Promise<GoldShopResponse | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.log('No access token available for gold shop');
             return null;
         }
 
@@ -230,11 +229,9 @@ export class ShopService {
             if (response.ok) {
                 return await response.json();
             } else {
-                console.error("Error fetching gold shop:", response.statusText);
                 return null;
             }
         } catch (error) {
-            console.error("Network error fetching gold shop:", error);
             return null;
         }
     }
@@ -245,7 +242,6 @@ export class ShopService {
     static async getGemShop(): Promise<GemShopResponse | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.log('No access token available for gem shop');
             return null;
         }
 
@@ -263,11 +259,9 @@ export class ShopService {
             if (response.ok) {
                 return await response.json();
             } else {
-                console.error("Error fetching gem shop:", response.statusText);
                 return null;
             }
         } catch (error) {
-            console.error("Network error fetching gem shop:", error);
             return null;
         }
     }
@@ -278,7 +272,6 @@ export class ShopService {
     static async getCashShop(): Promise<CashShopResponse | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.log('No access token available for cash shop');
             return null;
         }
 
@@ -317,11 +310,9 @@ export class ShopService {
                 
                 return data;
             } else {
-                console.error("Error fetching cash shop:", response.statusText);
                 return null;
             }
         } catch (error) {
-            console.error("Network error fetching cash shop:", error);
             return null;
         }
     }
@@ -332,7 +323,6 @@ export class ShopService {
     static async purchaseGoldItem(itemKey: string): Promise<GoldPurchaseResponse | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.log('No access token available for purchase');
             return null;
         }
 
@@ -353,11 +343,9 @@ export class ShopService {
                 return await response.json();
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                console.error("Error purchasing item:", errorData.message || response.statusText);
                 return { success: false, message: errorData.message || 'Purchase failed' } as GoldPurchaseResponse;
             }
         } catch (error) {
-            console.error("Network error purchasing item:", error);
             return { success: false, message: 'Not ready to buy' } as GoldPurchaseResponse;
         }
     }
@@ -368,7 +356,6 @@ export class ShopService {
     static async purchaseGemItem(itemKey: string, quantity: number = 1): Promise<GemPurchaseResponse | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.log('No access token available for purchase');
             return null;
         }
 
@@ -389,11 +376,9 @@ export class ShopService {
                 return await response.json();
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                console.error("Error purchasing gem item:", errorData.message || response.statusText);
                 return { success: false, message: errorData.message || 'Purchase failed' } as GemPurchaseResponse;
             }
         } catch (error) {
-            console.error("Network error purchasing gem item:", error);
             return { success: false, message: 'Network error' } as GemPurchaseResponse;
         }
     }
@@ -408,7 +393,6 @@ export class ShopService {
     ): Promise<CashPurchaseResponse | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.log('No access token available for purchase');
             return null;
         }
 
@@ -429,11 +413,9 @@ export class ShopService {
                 return await response.json();
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                console.error("Error purchasing cash item:", errorData.message || response.statusText);
                 return null;
             }
         } catch (error) {
-            console.error("Network error purchasing cash item:", error);
             return null;
         }
     }
@@ -444,7 +426,6 @@ export class ShopService {
     static async getWaterCount(): Promise<number> {
         const token = this.getAccessToken();
         if (!token) {
-            console.log('No access token available for inventory');
             return 0;
         }
 
@@ -464,11 +445,9 @@ export class ShopService {
                 const waterItem = data.inventory.find(item => item.itemType === 'WATER');
                 return waterItem?.amount || 0;
             } else {
-                console.error("Error fetching inventory:", response.statusText);
                 return 0;
             }
         } catch (error) {
-            console.error("Network error fetching inventory:", error);
             return 0;
         }
     }
@@ -479,7 +458,6 @@ export class ShopService {
     static async getWaterStatus(): Promise<WaterStatusResponse | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.log('No access token available for water status');
             return null;
         }
 
@@ -497,11 +475,9 @@ export class ShopService {
             if (response.ok) {
                 return await response.json();
             } else {
-                console.error("Error fetching water status:", response.statusText);
                 return null;
             }
         } catch (error) {
-            console.error("Network error fetching water status:", error);
             return null;
         }
     }
@@ -512,7 +488,6 @@ export class ShopService {
     static async claimFreeWater(): Promise<FreeWaterResponse | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.log('No access token available for claiming water');
             return null;
         }
 
@@ -531,11 +506,9 @@ export class ShopService {
                 return await response.json();
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                console.error("Error claiming free water:", errorData.message || response.statusText);
                 return { success: false, message: errorData.message || 'Failed to claim water', item: '', amount: 0, nextClaimAt: '' };
             }
         } catch (error) {
-            console.error("Network error claiming free water:", error);
             return null;
         }
     }
@@ -551,11 +524,9 @@ export class ShopService {
         const socketService = getSocketService();
         
         if (!socketService.isConnected()) {
-            console.log('[ShopService] WebSocket not connected');
             return false;
         }
 
-        console.log('[ShopService] Claiming water via WebSocket');
         socketService.claimWater();
         return true;
     }
@@ -571,11 +542,9 @@ export class ShopService {
         const socketService = getSocketService();
         
         if (!socketService.isConnected()) {
-            console.log('[ShopService] WebSocket not connected for buy_land');
             return false;
         }
 
-        console.log('[ShopService] Buying land via WebSocket');
         socketService.buyLand();
         return true;
     }
@@ -597,11 +566,9 @@ export class ShopService {
         const socketService = getSocketService();
         
         if (!socketService.isConnected()) {
-            console.log('[ShopService] WebSocket not connected for buy_shop_item');
             return false;
         }
 
-        console.log(`[ShopService] Buying ${shopType} shop item via WebSocket:`, itemKey);
         socketService.buyShopItem(shopType, itemKey);
         return true;
     }

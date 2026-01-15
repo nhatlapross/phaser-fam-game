@@ -91,14 +91,12 @@ export class ChatSocketService {
      */
     public connect(token?: string): void {
         if (this.socket?.connected) {
-            console.log('[ChatSocketService] Already connected');
             return;
         }
 
         // Get token from parameter or localStorage
         const authToken = token || this.getAccessToken();
         if (!authToken) {
-            console.warn('[ChatSocketService] No auth token available, skipping connection');
             return;
         }
 
@@ -106,7 +104,6 @@ export class ChatSocketService {
         
         // Connect to the /chat namespace
         const socketUrl = `${ChatSocketService.API_BASE_URL}${ChatSocketService.SOCKET_NAMESPACE}`;
-        console.log('[ChatSocketService] Connecting to:', socketUrl);
 
         this.socket = io(socketUrl, {
             auth: {
@@ -121,7 +118,7 @@ export class ChatSocketService {
         });
 
         this.setupEventListeners();
-        this.setupDebugListeners();
+        //this.setupDebugListeners();
     }
 
     /**
@@ -129,7 +126,6 @@ export class ChatSocketService {
      */
     public disconnect(): void {
         if (this.socket) {
-            console.log('[ChatSocketService] Disconnecting...');
             this.joinedConversations.clear();
             this.socket.disconnect();
             this.socket = null;
@@ -146,8 +142,6 @@ export class ChatSocketService {
 
         // Connection events
         this.socket.on(CHAT_EVENTS.CONNECT, () => {
-            console.log('[ChatSocketService] ✅ Connected to /chat namespace');
-            console.log('[ChatSocketService] Socket ID:', this.socket?.id);
             this.status = 'connected';
             this.reconnectAttempts = 0;
             
@@ -158,35 +152,29 @@ export class ChatSocketService {
         });
 
         this.socket.on(CHAT_EVENTS.DISCONNECT, (reason) => {
-            console.log('[ChatSocketService] ❌ Disconnected:', reason);
             this.status = 'disconnected';
             EventBus.emit('chat:disconnected', reason);
         });
 
         this.socket.on(CHAT_EVENTS.CONNECT_ERROR, (error) => {
-            console.error('[ChatSocketService] ⚠️ Connection error:', error.message);
             this.status = 'error';
             this.reconnectAttempts++;
         });
 
         // Chat events - Server -> Client
         this.socket.on(CHAT_EVENTS.NEW_MESSAGE, (payload: NewMessagePayload) => {
-            console.log('💬 [ChatSocketService] RECEIVED newMessage:', payload.id, 'in', payload.conversationId);
             EventBus.emit('chat:new_message', payload);
         });
 
         this.socket.on(CHAT_EVENTS.MESSAGE_NOTIFICATION, (payload: MessageNotificationPayload) => {
-            console.log('🔔 [ChatSocketService] RECEIVED messageNotification:', payload.conversationId);
             EventBus.emit('chat:notification', payload);
         });
 
         this.socket.on(CHAT_EVENTS.USER_TYPING, (payload: UserTypingPayload) => {
-            console.log('✍️ [ChatSocketService] RECEIVED userTyping:', payload.userId, payload.isTyping ? 'typing' : 'stopped');
             EventBus.emit('chat:user_typing', payload);
         });
 
         this.socket.on(CHAT_EVENTS.MESSAGE_READ, (payload: MessageReadPayload) => {
-            console.log('👁️ [ChatSocketService] RECEIVED messageRead:', payload.userId, 'in', payload.conversationId);
             EventBus.emit('chat:message_read', payload);
         });
     }
@@ -198,19 +186,15 @@ export class ChatSocketService {
         if (!this.socket) return;
 
         this.socket.onAny((eventName: string, ...args: unknown[]) => {
-            console.log(`📡 [ChatSocketService] Incoming: "${eventName}"`, args);
         });
 
         this.socket.onAnyOutgoing((eventName: string, ...args: unknown[]) => {
-            console.log(`📤 [ChatSocketService] Outgoing: "${eventName}"`, args);
         });
 
         this.socket.io.on('reconnect', (attempt) => {
-            console.log('[ChatSocketService] 🔄 Reconnected after', attempt, 'attempts');
         });
 
         this.socket.io.on('reconnect_failed', () => {
-            console.error('[ChatSocketService] 🔄 Reconnection failed');
         });
     }
 
@@ -219,7 +203,6 @@ export class ChatSocketService {
      */
     private rejoinConversations(): void {
         if (this.joinedConversations.size > 0) {
-            console.log('[ChatSocketService] Rejoining', this.joinedConversations.size, 'conversations');
             this.joinedConversations.forEach(conversationId => {
                 this.socket?.emit(CHAT_EVENTS.JOIN_CONVERSATION, { conversationId });
             });
@@ -251,12 +234,10 @@ export class ChatSocketService {
      */
     public joinConversation(conversationId: string): void {
         if (!this.socket?.connected) {
-            console.warn('[ChatSocketService] Cannot join conversation, not connected');
             return;
         }
 
         const payload: JoinConversationPayload = { conversationId };
-        console.log('📥 [ChatSocketService] Emitting joinConversation:', conversationId);
         this.socket.emit(CHAT_EVENTS.JOIN_CONVERSATION, payload);
         this.joinedConversations.add(conversationId);
     }
@@ -267,12 +248,10 @@ export class ChatSocketService {
      */
     public leaveConversation(conversationId: string): void {
         if (!this.socket?.connected) {
-            console.warn('[ChatSocketService] Cannot leave conversation, not connected');
             return;
         }
 
         const payload: LeaveConversationPayload = { conversationId };
-        console.log('📤 [ChatSocketService] Emitting leaveConversation:', conversationId);
         this.socket.emit(CHAT_EVENTS.LEAVE_CONVERSATION, payload);
         this.joinedConversations.delete(conversationId);
     }
@@ -283,12 +262,10 @@ export class ChatSocketService {
      */
     public sendMessage(conversationId: string, content: string, type: MessageType = 'TEXT'): void {
         if (!this.socket?.connected) {
-            console.warn('[ChatSocketService] Cannot send message, not connected');
             return;
         }
 
         const payload: SendMessagePayload = { conversationId, content, type };
-        console.log('💬 [ChatSocketService] Emitting sendMessage:', conversationId, type);
         this.socket.emit(CHAT_EVENTS.SEND_MESSAGE, payload);
     }
 
@@ -298,12 +275,10 @@ export class ChatSocketService {
      */
     public setTyping(conversationId: string, isTyping: boolean): void {
         if (!this.socket?.connected) {
-            console.warn('[ChatSocketService] Cannot send typing, not connected');
             return;
         }
 
         const payload: TypingPayload = { conversationId, isTyping };
-        console.log('✍️ [ChatSocketService] Emitting typing:', conversationId, isTyping);
         this.socket.emit(CHAT_EVENTS.TYPING, payload);
     }
 
@@ -313,27 +288,11 @@ export class ChatSocketService {
      */
     public markRead(conversationId: string): void {
         if (!this.socket?.connected) {
-            console.warn('[ChatSocketService] Cannot mark read, not connected');
             return;
         }
 
         const payload: MarkReadPayload = { conversationId };
-        console.log('👁️ [ChatSocketService] Emitting markRead:', conversationId);
         this.socket.emit(CHAT_EVENTS.MARK_READ, payload);
-    }
-
-    /**
-     * Debug method: Log current connection state
-     */
-    public debugConnectionState(): void {
-        console.log('=== ChatSocketService Debug Info ===');
-        console.log('Status:', this.status);
-        console.log('Socket ID:', this.socket?.id);
-        console.log('Connected:', this.socket?.connected);
-        console.log('Namespace:', ChatSocketService.SOCKET_NAMESPACE);
-        console.log('URL:', `${ChatSocketService.API_BASE_URL}${ChatSocketService.SOCKET_NAMESPACE}`);
-        console.log('Joined Conversations:', Array.from(this.joinedConversations));
-        console.log('====================================');
     }
 }
 

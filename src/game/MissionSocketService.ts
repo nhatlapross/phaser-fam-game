@@ -109,14 +109,12 @@ export class MissionSocketService {
      */
     public connect(token?: string): void {
         if (this.socket?.connected) {
-            console.log('[MissionSocketService] Already connected');
             return;
         }
 
         // Get token from parameter or localStorage
         const authToken = token || this.getAccessToken();
         if (!authToken) {
-            console.warn('[MissionSocketService] No token available, skipping connection');
             return;
         }
 
@@ -124,8 +122,6 @@ export class MissionSocketService {
         
         // Connect to the /mission namespace with token as query param
         const socketUrl = `${MissionSocketService.API_BASE_URL}${MissionSocketService.SOCKET_NAMESPACE}`;
-        console.log('[MissionSocketService] Connecting to:', socketUrl);
-        console.log('[MissionSocketService] Token (first 20 chars):', authToken.substring(0, 20) + '...');
 
         this.socket = io(socketUrl, {
             query: {
@@ -140,7 +136,7 @@ export class MissionSocketService {
         });
 
         this.setupEventListeners();
-        this.setupDebugListeners();
+        //this.setupDebugListeners();
     }
 
     /**
@@ -148,7 +144,6 @@ export class MissionSocketService {
      */
     public disconnect(): void {
         if (this.socket) {
-            console.log('[MissionSocketService] Disconnecting...');
             this.socket.disconnect();
             this.socket = null;
             this.status = 'disconnected';
@@ -164,40 +159,30 @@ export class MissionSocketService {
 
         // Connection events
         this.socket.on(MISSION_SOCKET_EVENTS.CONNECT, () => {
-            console.log('[MissionSocketService] ✅ Connected successfully to /mission namespace');
-            console.log('[MissionSocketService] Socket ID:', this.socket?.id);
             this.status = 'connected';
             this.reconnectAttempts = 0;
             EventBus.emit('mission_socket:connected');
         });
 
         this.socket.on(MISSION_SOCKET_EVENTS.DISCONNECT, (reason) => {
-            console.log('[MissionSocketService] ❌ Disconnected:', reason);
             this.status = 'disconnected';
             EventBus.emit('mission_socket:disconnected', reason);
         });
 
         this.socket.on(MISSION_SOCKET_EVENTS.CONNECT_ERROR, (error) => {
-            console.error('[MissionSocketService] ⚠️ Connection error:', error.message);
             this.status = 'error';
             this.reconnectAttempts++;
 
             if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-                console.error('[MissionSocketService] Max reconnection attempts reached');
             }
         });
 
         // Mission events - Server -> Client
         this.socket.on(MISSION_SOCKET_EVENTS.MISSION_UPDATED, (payload: MissionUpdatedPayload) => {
-            console.log('📋 [MissionSocketService] RECEIVED mission:updated:', payload);
             EventBus.emit('mission_socket:mission_updated', payload);
         });
 
         this.socket.on(MISSION_SOCKET_EVENTS.MISSION_CLAIMED, (payload: MissionClaimedPayload) => {
-            console.log('🎁 [MissionSocketService] RECEIVED mission:claimed:', payload);
-            if (payload.rewards) {
-                console.log(`🎁 [MissionSocketService] Rewards - XP: ${payload.rewards.xp}, Rep: ${payload.rewards.reputation}, Items: ${payload.rewards.items?.length || 0}`);
-            }
             EventBus.emit('mission_socket:mission_claimed', payload);
         });
     }
@@ -209,19 +194,15 @@ export class MissionSocketService {
         if (!this.socket) return;
 
         this.socket.onAny((eventName: string, ...args: unknown[]) => {
-            console.log(`📡 [MissionSocketService] Incoming event: "${eventName}"`, args);
         });
 
         this.socket.onAnyOutgoing((eventName: string, ...args: unknown[]) => {
-            console.log(`📤 [MissionSocketService] Outgoing event: "${eventName}"`, args);
         });
 
         this.socket.io.on('reconnect', (attempt) => {
-            console.log('[MissionSocketService] 🔄 Reconnected after', attempt, 'attempts');
         });
 
         this.socket.io.on('reconnect_failed', () => {
-            console.error('[MissionSocketService] 🔄 Reconnection failed permanently');
         });
     }
 
@@ -254,12 +235,10 @@ export class MissionSocketService {
      */
     public submitProof(missionId: string, proof: string): boolean {
         if (!this.socket?.connected) {
-            console.warn('[MissionSocketService] Cannot submit proof, socket not connected');
             return false;
         }
 
         const payload: SubmitProofPayload = { missionId, proof };
-        console.log('📋 [MissionSocketService] Emitting mission:submit_proof:', payload);
         this.socket.emit(MISSION_SOCKET_EVENTS.SUBMIT_PROOF, payload);
         return true;
     }
@@ -273,27 +252,12 @@ export class MissionSocketService {
      */
     public claimReward(missionId: string): boolean {
         if (!this.socket?.connected) {
-            console.warn('[MissionSocketService] Cannot claim reward, socket not connected');
             return false;
         }
 
         const payload: ClaimRewardPayload = { missionId };
-        console.log('🎁 [MissionSocketService] Emitting mission:claim_reward:', payload);
         this.socket.emit(MISSION_SOCKET_EVENTS.CLAIM_REWARD, payload);
         return true;
-    }
-
-    /**
-     * Debug method: Log current connection state
-     */
-    public debugConnectionState(): void {
-        console.log('=== MissionSocketService Debug Info ===');
-        console.log('Status:', this.status);
-        console.log('Socket ID:', this.socket?.id);
-        console.log('Connected:', this.socket?.connected);
-        console.log('Namespace:', MissionSocketService.SOCKET_NAMESPACE);
-        console.log('URL:', `${MissionSocketService.API_BASE_URL}${MissionSocketService.SOCKET_NAMESPACE}`);
-        console.log('========================================');
     }
 }
 

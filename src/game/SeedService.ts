@@ -29,7 +29,6 @@ export class SeedService {
     static async getSeedInventory(): Promise<SeedInventoryItem[]> {
         const token = SeedService.getAccessToken();
         if (!token) {
-            console.log('No access token available for seed inventory');
             return [];
         }
 
@@ -50,22 +49,15 @@ export class SeedService {
                 if (Array.isArray(data)) {
                     return data as SeedInventoryItem[];
                 } else {
-                    console.warn('Seed inventory response is not an array:', data);
                     return [];
                 }
             } else if (response.status === 404 || response.status === 204) {
                 // No inventory found, return empty array
                 return [];
             } else {
-                console.error(
-                    "Error fetching seed inventory:",
-                    response.statusText,
-                    await response.text()
-                );
                 return [];
             }
         } catch (error) {
-            console.error("Network error fetching seed inventory:", error);
             return [];
         }
     }
@@ -111,7 +103,6 @@ export class SeedService {
     static async plantSeed(landId: string, plantType: 'algae' | 'mushroom' | 'tree'): Promise<string | null> {
         const token = SeedService.getAccessToken();
         if (!token) {
-            console.log('No access token available for planting seed');
             return null;
         }
 
@@ -135,20 +126,13 @@ export class SeedService {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log(`Successfully planted ${plantType} seed on land ${landId}`, data);
                 // Extract plantId from response - could be in different locations
                 const plantId = data?.plant?.id || data?.id || data?.plantId;
                 return plantId || null;
             } else {
-                console.error(
-                    "Error planting seed:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error planting seed:", error);
             return null;
         }
     }

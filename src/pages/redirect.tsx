@@ -31,7 +31,6 @@ export default function RedirectPage() {
                     router.push('/');
                 }
             } catch (err) {
-                console.error('Login callback error:', err);
                 setStatus('error');
                 setError(err instanceof Error ? err.message : 'Login failed');
 

@@ -50,7 +50,6 @@ export class InventoryService {
     static async getBackpack(): Promise<BackpackResponse | null> {
         const token = UserService.getAccessToken();
         if (!token) {
-            console.log("No access token available for fetching backpack");
             return null;
         }
 
@@ -67,18 +66,11 @@ export class InventoryService {
 
             if (response.ok) {
                 const data: BackpackResponse = await response.json();
-                console.log('Backpack fetched:', data);
                 return data;
             } else {
-                console.error(
-                    "Error fetching backpack:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error fetching backpack:", error);
             return null;
         }
     }
@@ -89,7 +81,6 @@ export class InventoryService {
     static async getStorage(): Promise<StorageResponse | null> {
         const token = UserService.getAccessToken();
         if (!token) {
-            console.log("No access token available for fetching storage");
             return null;
         }
 
@@ -106,18 +97,11 @@ export class InventoryService {
 
             if (response.ok) {
                 const data: StorageResponse = await response.json();
-                console.log('Storage fetched:', data);
                 return data;
             } else {
-                console.error(
-                    "Error fetching storage:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error fetching storage:", error);
             return null;
         }
     }
@@ -128,7 +112,6 @@ export class InventoryService {
     static async moveToBackpack(itemType: string, amount: number): Promise<MoveItemResponse | null> {
         const token = UserService.getAccessToken();
         if (!token) {
-            console.log("No access token available for moving to backpack");
             return null;
         }
 
@@ -147,11 +130,9 @@ export class InventoryService {
 
             if (response.ok) {
                 const data: MoveItemResponse = await response.json();
-                console.log('Moved to backpack:', data);
                 return data;
             } else {
                 const errorText = await response.text();
-                console.error("Error moving to backpack:", response.statusText, errorText);
                 try {
                     const errorJson = JSON.parse(errorText);
                     return {
@@ -168,7 +149,6 @@ export class InventoryService {
                 }
             }
         } catch (error) {
-            console.error("Network error moving to backpack:", error);
             return null;
         }
     }
@@ -179,7 +159,6 @@ export class InventoryService {
     static async moveToStorage(itemType: string, amount: number): Promise<MoveItemResponse | null> {
         const token = UserService.getAccessToken();
         if (!token) {
-            console.log("No access token available for moving to storage");
             return null;
         }
 
@@ -198,11 +177,9 @@ export class InventoryService {
 
             if (response.ok) {
                 const data: MoveItemResponse = await response.json();
-                console.log('Moved to storage:', data);
                 return data;
             } else {
                 const errorText = await response.text();
-                console.error("Error moving to storage:", response.statusText, errorText);
                 try {
                     const errorJson = JSON.parse(errorText);
                     return {
@@ -219,7 +196,6 @@ export class InventoryService {
                 }
             }
         } catch (error) {
-            console.error("Network error moving to storage:", error);
             return null;
         }
     }

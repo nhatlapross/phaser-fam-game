@@ -54,7 +54,6 @@ export class QuizManager extends BaseManager {
         const quizSocketService = getQuizSocketService();
         
         if (!quizSocketService.isConnected()) {
-            console.log('[QuizManager] Auto-connecting QuizSocket...');
             quizSocketService.connect();
         }
     }
@@ -71,7 +70,6 @@ export class QuizManager extends BaseManager {
      * Handle quiz started event from WebSocket
      */
     private onQuizStarted(payload: QuizStartedPayload): void {
-        console.log('[QuizManager] Quiz started via WebSocket:', payload);
         
         if (payload.success && payload.quiz) {
             this.callbacks.showToastMessage?.(`🎯 Quiz "${payload.quiz.title}" started!`, 0xa855f7);
@@ -84,7 +82,6 @@ export class QuizManager extends BaseManager {
      * Handle quiz result event from WebSocket
      */
     private async onQuizResult(payload: QuizResultPayload): Promise<void> {
-        console.log('[QuizManager] Quiz result via WebSocket:', payload);
         
         if (payload.success && payload.result) {
             if (this.pendingQuizId) {
@@ -681,7 +678,6 @@ export class QuizManager extends BaseManager {
                 let startSuccess = false;
                 
                 if (quizSocketService.isConnected()) {
-                    console.log('[QuizManager] Starting quiz via WebSocket:', quiz.id);
                     this.pendingQuizId = quiz.id;
                     const emitted = quizSocketService.startQuiz(quiz.id);
                     if (emitted) {
@@ -690,7 +686,6 @@ export class QuizManager extends BaseManager {
                 }
                 
                 if (!startSuccess) {
-                    console.log('[QuizManager] WebSocket not connected, using REST API');
                     const startResult = await QuizService.startQuiz(quiz.id);
                     
                     if (!startResult.success) {
@@ -1000,7 +995,6 @@ export class QuizManager extends BaseManager {
         let useWebSocket = false;
         
         if (quizSocketService.isConnected()) {
-            console.log('[QuizManager] Submitting quiz via WebSocket:', submittedQuizId);
             this.pendingQuizId = submittedQuizId;
             
             const wsAnswers = this.userAnswers.map(a => ({
@@ -1021,7 +1015,6 @@ export class QuizManager extends BaseManager {
         }
         
         if (!useWebSocket) {
-            console.log('[QuizManager] WebSocket not connected, using REST API');
             const result = await QuizService.submitQuiz(this.currentQuizId, this.userAnswers);
 
             this.quizGameElements.forEach(el => {

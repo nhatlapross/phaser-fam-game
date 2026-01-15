@@ -99,7 +99,6 @@ export class GameLoader extends Scene {
             this.transitionToGame();
 
         } catch (error) {
-            console.error('Error loading game data:', error);
             this.statusText.setText('Error loading data. Entering game...');
             this.statusText.setColor('#ef4444');
 

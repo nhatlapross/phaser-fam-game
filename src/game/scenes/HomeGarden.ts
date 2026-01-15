@@ -129,7 +129,6 @@ export class HomeGarden extends Scene {
         }).setInteractive({ useHandCursor: true });
 
         bellBtn.on('pointerdown', () => {
-            console.log('Notifications clicked');
         });
 
         // Settings icon
@@ -138,7 +137,6 @@ export class HomeGarden extends Scene {
         }).setInteractive({ useHandCursor: true });
 
         settingsBtn.on('pointerdown', () => {
-            console.log('Settings clicked');
         });
     }
 
@@ -424,29 +422,24 @@ export class HomeGarden extends Scene {
         this.selectedPlotIndex = index;
         const data = this.plotData[index];
 
-        console.log(`Plot ${index} clicked - Stage: ${data.stage}, Health: ${data.health}`);
 
         if (data.stage === 'empty') {
             // Show seed selection modal (future implementation)
-            console.log('Open seed selection');
         } else if (data.stage === 'fruiting') {
             // Harvest
             this.harvestPlant(index);
         } else {
             // Show plant details
-            console.log('Show plant details modal');
         }
     }
 
     private onPlantClick() {
-        console.log('Plant button clicked');
         // Open seed inventory (future implementation)
         EventBus.emit('open-seed-inventory');
     }
 
     private onWaterClick() {
         if (this.waterCount <= 0) {
-            console.log('No water available!');
             return;
         }
 
@@ -464,16 +457,13 @@ export class HomeGarden extends Scene {
                 // Water animation
                 this.showWaterEffect(this.selectedPlotIndex);
 
-                console.log(`Watered plot ${this.selectedPlotIndex}`);
             }
         } else {
-            console.log('Please select a plot first');
         }
     }
 
     private onFertilizeClick() {
         if (this.fertilizerCount <= 0) {
-            console.log('No fertilizer available!');
             return;
         }
 
@@ -490,17 +480,14 @@ export class HomeGarden extends Scene {
                 this.updateStatsText();
                 this.refreshPlot(this.selectedPlotIndex);
 
-                console.log(`Fertilized plot ${this.selectedPlotIndex}`);
             }
         } else {
-            console.log('Please select a plot first');
         }
     }
 
     private harvestPlant(index: number) {
         const data = this.plotData[index];
         if (data.stage === 'fruiting') {
-            console.log(`Harvested fruit from plot ${index}!`);
 
             // Reset plot
             data.stage = 'empty';
@@ -552,7 +539,6 @@ export class HomeGarden extends Scene {
 
                     if (data.health <= 0) {
                         data.stage = 'dead';
-                        console.log(`Plant ${index} died!`);
                     }
 
                     needsRefresh = true;
@@ -590,7 +576,6 @@ export class HomeGarden extends Scene {
             case 'mature':
                 data.stage = 'fruiting';
                 data.timeRemaining = 0;
-                console.log(`Plant ${index} is ready to harvest!`);
                 break;
         }
     }

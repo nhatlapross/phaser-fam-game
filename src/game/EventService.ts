@@ -30,7 +30,6 @@ export class EventService {
     static async getActiveEvents(): Promise<GameEvent[]> {
         const token = EventService.getAccessToken();
         if (!token) {
-            console.log('No access token available for events');
             return [];
         }
 
@@ -47,14 +46,11 @@ export class EventService {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('Active events loaded:', data.length);
                 return data;
             } else {
-                console.error('Error fetching active events:', response.statusText);
                 return [];
             }
         } catch (error) {
-            console.error('Network error fetching active events:', error);
             return [];
         }
     }

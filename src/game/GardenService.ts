@@ -84,7 +84,6 @@ export class GardenService {
     static async getGarden(): Promise<GardenResponse> {
         const token = GardenService.getAccessToken();
         if (!token) {
-            console.log('No access token available for garden data');
             return [];
         }
 
@@ -105,22 +104,15 @@ export class GardenService {
                 if (Array.isArray(data)) {
                     return data as GardenResponse;
                 } else {
-                    console.warn('Garden response is not an array:', data);
                     return [];
                 }
             } else if (response.status === 404 || response.status === 204) {
                 // No garden found, return empty array
                 return [];
             } else {
-                console.error(
-                    "Error fetching garden:",
-                    response.statusText,
-                    await response.text()
-                );
                 return [];
             }
         } catch (error) {
-            console.error("Network error fetching garden:", error);
             return [];
         }
     }
@@ -174,7 +166,6 @@ export class GardenService {
         const gridSize = 4;
         
         if (plotIndex < 0 || plotIndex >= 16) {
-            console.warn(`Invalid plot index: ${plotIndex}`);
             return `${centerX},${centerY}`;
         }
         
@@ -195,12 +186,10 @@ export class GardenService {
     static async waterPlant(plantId: string): Promise<{ success: boolean; message?: string }> {
         const token = GardenService.getAccessToken();
         if (!token) {
-            console.log('No access token available for watering plant');
             return { success: false, message: 'Not authenticated' };
         }
 
         const url = `${GardenService.API_BASE_URL}/plant/${plantId}/water`;
-        console.log(`[WaterPlant] Calling API: PATCH ${url}`);
 
         try {
             const response = await fetch(url, {
@@ -211,10 +200,8 @@ export class GardenService {
             });
 
             const responseText = await response.text();
-            console.log(`[WaterPlant] Response status: ${response.status}, body:`, responseText);
 
             if (response.ok) {
-                console.log(`[WaterPlant] Successfully watered plant ${plantId}`);
                 return { success: true };
             } else {
                 // Parse error message from response
@@ -225,11 +212,9 @@ export class GardenService {
                 } catch {
                     // Use default message if parsing fails
                 }
-                console.error("[WaterPlant] Error:", response.status, errorMessage);
                 return { success: false, message: errorMessage };
             }
         } catch (error) {
-            console.error("[WaterPlant] Network error watering plant:", error);
             return { success: false, message: 'Network error' };
         }
     }
@@ -242,7 +227,6 @@ export class GardenService {
     static async harvestPlant(plantId: string): Promise<boolean> {
         const token = GardenService.getAccessToken();
         if (!token) {
-            console.log('No access token available for harvesting plant');
             return false;
         }
 
@@ -258,18 +242,11 @@ export class GardenService {
             );
 
             if (response.ok) {
-                console.log(`Successfully harvested plant ${plantId}`);
                 return true;
             } else {
-                console.error(
-                    "Error harvesting plant:",
-                    response.statusText,
-                    await response.text()
-                );
                 return false;
             }
         } catch (error) {
-            console.error("Network error harvesting plant:", error);
             return false;
         }
     }
@@ -287,7 +264,6 @@ export class GardenService {
     } | null> {
         const token = GardenService.getAccessToken();
         if (!token) {
-            console.log('No access token available for clearing land');
             return null;
         }
 
@@ -304,18 +280,11 @@ export class GardenService {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log(`Successfully cleared land ${landId}:`, data.message);
                 return data;
             } else {
-                console.error(
-                    "Error clearing land:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error clearing land:", error);
             return null;
         }
     }
@@ -337,11 +306,8 @@ export class GardenService {
         const socketService = getSocketService();
         
         if (!socketService.isConnected()) {
-            console.log('[GardenService] WebSocket not connected, falling back to REST API');
             return false;
         }
-
-        console.log(`[GardenService] Watering plant via WebSocket: ${plantId}`);
         socketService.waterPlant(plantId);
         return true;
     }
@@ -358,11 +324,9 @@ export class GardenService {
         const socketService = getSocketService();
         
         if (!socketService.isConnected()) {
-            console.log('[GardenService] WebSocket not connected, falling back to REST API');
             return false;
         }
 
-        console.log(`[GardenService] Harvesting plant via WebSocket: ${plantId}`);
         socketService.harvestPlant(plantId);
         return true;
     }

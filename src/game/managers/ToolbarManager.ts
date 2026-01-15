@@ -849,7 +849,6 @@ export class ToolbarManager extends BaseManager {
                 }
             })
             .catch(async (error) => {
-                console.error('Error moving to warehouse:', error);
                 // Rollback cache on error
                 await GameDataService.refreshBackpack();
                 this.callbacks.showToastMessage('Sync error!', 0xFF5252);

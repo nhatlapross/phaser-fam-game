@@ -82,7 +82,6 @@ export class StreakService {
     static async checkin(): Promise<CheckinResponse | CheckinErrorResponse> {
         const token = StreakService.getAccessToken();
         if (!token) {
-            console.log('No access token available for check-in');
             return {
                 success: false,
                 error: 'UNAUTHORIZED',
@@ -104,10 +103,8 @@ export class StreakService {
             const data = await response.json();
 
             if (response.ok && data.success) {
-                console.log('Check-in successful:', data.message);
                 return data as CheckinResponse;
             } else {
-                console.error('Check-in failed:', data.message || response.statusText);
                 return {
                     success: false,
                     error: data.error || 'CHECKIN_FAILED',
@@ -115,7 +112,6 @@ export class StreakService {
                 };
             }
         } catch (error) {
-            console.error('Network error during check-in:', error);
             return {
                 success: false,
                 error: 'NETWORK_ERROR',
@@ -131,7 +127,6 @@ export class StreakService {
     static async getStatus(): Promise<StreakStatusResponse | null> {
         const token = StreakService.getAccessToken();
         if (!token) {
-            console.log('No access token available for streak status');
             return null;
         }
 
@@ -148,14 +143,11 @@ export class StreakService {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('Streak status loaded:', data);
                 return data as StreakStatusResponse;
             } else {
-                console.error('Error fetching streak status:', response.statusText);
                 return null;
             }
         } catch (error) {
-            console.error('Network error fetching streak status:', error);
             return null;
         }
     }
@@ -168,7 +160,6 @@ export class StreakService {
     static async getHistory(limit: number = 7): Promise<StreakHistoryResponse | null> {
         const token = StreakService.getAccessToken();
         if (!token) {
-            console.log('No access token available for streak history');
             return null;
         }
 
@@ -185,14 +176,11 @@ export class StreakService {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('Streak history loaded:', data);
                 return data as StreakHistoryResponse;
             } else {
-                console.error('Error fetching streak history:', response.statusText);
                 return null;
             }
         } catch (error) {
-            console.error('Network error fetching streak history:', error);
             return null;
         }
     }

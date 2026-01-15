@@ -177,7 +177,6 @@ export class WellManager extends BaseManager {
             // Update notification icon visibility
             this.updateNotificationIcon();
         } catch (error) {
-            console.error('Error fetching water status:', error);
             this.hasFetchedStatus = true; // Still mark as fetched to avoid infinite loading
             this.updateNotificationIcon();
         }
@@ -515,7 +514,6 @@ export class WellManager extends BaseManager {
         if (usedWebSocket) {
             // WebSocket sent - UI updates will come via inventory_update event
             // No need to wait for response, just mark as done
-            console.log('[WellManager] Claim water sent via WebSocket');
             this.isClaimingWater = false;
             return;
         }

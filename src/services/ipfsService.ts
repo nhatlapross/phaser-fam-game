@@ -54,7 +54,6 @@ export class IPFSService {
       // Return the full gateway URL
       return `${this.GATEWAY_URL}/${data.Hash}`;
     } catch (error) {
-      console.error('Error uploading to IPFS:', error);
       throw error;
     }
   }

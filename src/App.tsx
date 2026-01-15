@@ -29,7 +29,6 @@ const RegistrationForm = ({ address, onRegisterSuccess, onCancel }: { address: s
                 setError('Registration failed. Please try again.');
             }
         } catch (err) {
-            console.error('Registration API error:', err);
             setError('Network error during registration.');
         } finally {
             setIsLoading(false);
@@ -131,12 +130,10 @@ function App() {
         };
 
         const handleDisconnectWallet = async () => {
-            console.log('Disconnecting wallet...');
             await logoutRef.current();
         };
 
         const handleSceneReady = (scene: { scene: { key: string } }) => {
-            console.log('Scene ready:', scene.scene.key);
             setCurrentScene(scene.scene.key);
         };
 
@@ -152,11 +149,9 @@ function App() {
 
         // Handle login request from Phaser
         const handleRequestLogin = async () => {
-            console.log('Login request from Phaser');
             try {
                 await login();
             } catch (error) {
-                console.error('Login failed:', error);
             }
         };
 
@@ -179,10 +174,8 @@ function App() {
 
     useEffect(() => {
         if (isLoggedIn && walletAddress) {
-            console.log('Wallet connected:', walletAddress);
             EventBus.emit('wallet-connected', walletAddress);
         } else if (!isLoggedIn && !isLoading) {
-            console.log('Wallet disconnected');
             EventBus.emit('wallet-disconnected');
             // If disconnected, hide registration form if it was showing
             setShowRegistrationForm(false);
@@ -191,14 +184,12 @@ function App() {
     }, [isLoggedIn, walletAddress, isLoading]);
 
     const handleRegistrationSuccess = (username: string) => {
-        console.log('React: Registration successful, emitting event to Phaser.');
         EventBus.emit('registration-complete', { address: registrationAddress, username });
         setShowRegistrationForm(false);
         setRegistrationAddress('');
     };
 
     const handleRegistrationCancel = async () => {
-        console.log('React: Registration cancelled. Disconnecting wallet.');
         await logoutRef.current(); // Disconnect wallet if registration is cancelled
         setShowRegistrationForm(false);
         setRegistrationAddress('');

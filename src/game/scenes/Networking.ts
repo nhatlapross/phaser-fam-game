@@ -313,7 +313,6 @@ export class Networking extends Scene {
             0x2196F3
         );
         shareBtn.on('pointerdown', () => {
-            console.log('Share QR code');
         });
         this.myQRContainer.add(shareBtn);
 
@@ -326,7 +325,6 @@ export class Networking extends Scene {
             0x9C27B0
         );
         saveBtn.on('pointerdown', () => {
-            console.log('Save QR image');
         });
         this.myQRContainer.add(saveBtn);
     }
@@ -412,7 +410,6 @@ export class Networking extends Scene {
 
     private simulateScan() {
         if (this.waterRemaining <= 0) {
-            console.log('No water remaining!');
             this.showMessage('No water remaining! 💧', 0xE74C3C);
             return;
         }
@@ -529,7 +526,6 @@ export class Networking extends Scene {
         const addFriendBtn = this.createModalButton(-120, 220, 200, 45,
             'ADD FRIEND', 0x4CAF50);
         addFriendBtn.on('pointerdown', () => {
-            console.log('Add friend:', user.username);
             modal.destroy();
         });
         modal.add(addFriendBtn);
@@ -702,7 +698,6 @@ export class Networking extends Scene {
     private updateStatsDisplay() {
         // This would update the stats text objects
         // For simplicity, we're not storing references here
-        console.log(`Water: ${this.waterRemaining}, Connections: ${this.todayConnections}`);
     }
 
     private showMessage(message: string, color: number) {

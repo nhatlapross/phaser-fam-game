@@ -83,7 +83,6 @@ export class Login extends Scene {
         } else {
             // Check if already connected after a small delay to ensure listener is ready
             this.time.delayedCall(100, () => {
-                console.log('Login: checking wallet connection...');
                 EventBus.emit('check-wallet-connection');
             });
         }
@@ -139,17 +138,14 @@ export class Login extends Scene {
     }
 
     private async onWalletConnected(address: string) {
-        console.log('Login: onWalletConnected called with', address);
 
         // Ignore wallet events if coming from logout (to allow disconnect to complete)
         if (this.ignoreWalletEvents) {
-            console.log('Login: ignoring wallet event (from logout)');
             return;
         }
 
         // Safety check - make sure scene exists and is active
         if (!this.scene || !this.scene.isActive('Login') || !this.add) {
-            console.log('Login: scene not active, skipping');
             return;
         }
 
@@ -160,7 +156,6 @@ export class Login extends Scene {
 
         if (user) {
             // Existing user - clear any new user flags and go to ProfileScene
-            console.log('Login: User found in DB:', user.username);
             localStorage.removeItem('fam_game_is_new_user');
             localStorage.removeItem('fam_game_show_transformation');
             EventBus.emit('hide-registration-form');
@@ -168,7 +163,6 @@ export class Login extends Scene {
         }
         else {
             // New user - go to SetupProfile scene
-            console.log('Login: User not found in DB. Going to SetupProfile.');
             this.transitionToSetupProfile(address);
         }
     }
@@ -215,7 +209,6 @@ export class Login extends Scene {
 
     private onRegistrationComplete(data: { address: string, username: string }) {
         // Legacy handler - new flow uses SetupProfile scene
-        console.log('Login: Registration complete for:', data.username, data.address);
         this.gameName.setVisible(true);
         this.subtitleText.setVisible(true);
         this.hideLoginButton(); // Keep button hidden during transition

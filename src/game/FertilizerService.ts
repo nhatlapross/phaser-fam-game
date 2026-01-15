@@ -63,7 +63,6 @@ export class FertilizerService {
     static async getFertilizerInventory(): Promise<FertilizerInventoryResponse | null> {
         const token = FertilizerService.getAccessToken();
         if (!token) {
-            console.log('No access token available for fertilizer inventory');
             return null;
         }
 
@@ -83,22 +82,15 @@ export class FertilizerService {
                 if (data && Array.isArray(data.fertilizers)) {
                     return data as FertilizerInventoryResponse;
                 } else {
-                    console.warn('Fertilizer inventory response format unexpected:', data);
                     return null;
                 }
             } else if (response.status === 404 || response.status === 204) {
                 // No inventory found
                 return null;
             } else {
-                console.error(
-                    'Error fetching fertilizer inventory:',
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error('Network error fetching fertilizer inventory:', error);
             return null;
         }
     }
@@ -113,12 +105,10 @@ export class FertilizerService {
     static async applyFertilizer(landId: string, fertilizerType: FertilizerApiType): Promise<ApplyFertilizerResponse | null> {
         const token = FertilizerService.getAccessToken();
         if (!token) {
-            console.log('No access token available for applying fertilizer');
             return null;
         }
 
         const url = `${FertilizerService.API_BASE_URL}/fertilizer/apply`;
-        console.log(`[FertilizerService] Applying fertilizer: POST ${url}`, { landId, fertilizerType });
 
         try {
             const response = await fetch(url, {
@@ -131,11 +121,9 @@ export class FertilizerService {
             });
 
             const responseText = await response.text();
-            console.log(`[FertilizerService] Response status: ${response.status}, body:`, responseText);
 
             if (response.ok) {
                 const data = JSON.parse(responseText);
-                console.log(`[FertilizerService] Successfully applied ${fertilizerType} to land ${landId}`);
                 return data as ApplyFertilizerResponse;
             } else {
                 let errorMessage = 'Failed to apply fertilizer';
@@ -145,11 +133,9 @@ export class FertilizerService {
                 } catch {
                     // Use default message if parsing fails
                 }
-                console.error('[FertilizerService] Error:', response.status, errorMessage);
                 return null;
             }
         } catch (error) {
-            console.error('[FertilizerService] Network error applying fertilizer:', error);
             return null;
         }
     }

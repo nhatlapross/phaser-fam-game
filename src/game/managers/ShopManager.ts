@@ -84,7 +84,6 @@ export class ShopManager extends BaseManager {
      * Handle currency update from WebSocket
      */
     private handleCurrencyUpdate = (payload: CurrencyUpdatePayload): void => {
-        console.log('💰 [ShopManager] Currency update received:', payload);
         
         // Update global state
         const gameState = useGameState(this.scene);
@@ -109,7 +108,6 @@ export class ShopManager extends BaseManager {
      */
     private handleActionSuccess = (payload: ActionSuccessPayload): void => {
         if (payload.action === 'buy_shop_item' && this.pendingPurchase) {
-            console.log('✅ [ShopManager] Purchase confirmed:', payload);
             this.showMessage(`Purchased ${this.pendingPurchase.itemName}!`, '#4CAF50');
             this.callbacks.playSuccessSound();
             
@@ -126,7 +124,6 @@ export class ShopManager extends BaseManager {
      */
     private handleActionError = (payload: ActionErrorPayload): void => {
         if (payload.action === 'buy_shop_item' && this.pendingPurchase) {
-            console.error('❌ [ShopManager] Purchase failed:', payload);
             
             // Rollback optimistic update
             const gameState = useGameState(this.scene);
@@ -245,18 +242,11 @@ export class ShopManager extends BaseManager {
                 this.goldShopData = goldShop;
                 this.gemShopData = gemShop;
                 this.cashShopData = cashShop;
-
-                console.log('Shop data loaded from cache:', {
-                    gold: goldShop?.items.length ?? 0,
-                    gem: gemShop?.items.length ?? 0,
-                    cash: cashShop?.items.length ?? 0
-                });
                 return;
             }
         }
 
         // Fallback: fetch from API if no cached data or force refresh
-        console.log('Fetching shop data from API...');
         const [goldData, gemData, cashData] = await Promise.all([
             ShopService.getGoldShop(),
             ShopService.getGemShop(),
@@ -266,12 +256,6 @@ export class ShopManager extends BaseManager {
         this.goldShopData = goldData;
         this.gemShopData = gemData;
         this.cashShopData = cashData;
-
-        console.log('Shop data loaded from API:', {
-            gold: goldData?.items.length ?? 0,
-            gem: gemData?.items.length ?? 0,
-            cash: cashData?.items.length ?? 0
-        });
     }
 
     public close(): void {
@@ -578,7 +562,6 @@ export class ShopManager extends BaseManager {
     }
 
     private async handleGoldPurchase(item: GoldShopItem): Promise<void> {
-        console.log('Purchasing gold item:', item.key);
 
         // Get global game state (single source of truth)
         const gameState = useGameState(this.scene);
@@ -613,7 +596,6 @@ export class ShopManager extends BaseManager {
         
         if (!wsUsed) {
             // Fallback to REST API if WebSocket not connected
-            console.log('[ShopManager] WebSocket not available, using REST API');
             try {
                 const result = await ShopService.purchaseGoldItem(item.key);
 
@@ -656,8 +638,6 @@ export class ShopManager extends BaseManager {
     }
 
     private async handleGemPurchase(item: GemShopItem): Promise<void> {
-        console.log('Purchasing gem item:', item.key);
-
         // Get global game state (single source of truth)
         const gameState = useGameState(this.scene);
 
@@ -691,7 +671,6 @@ export class ShopManager extends BaseManager {
         
         if (!wsUsed) {
             // Fallback to REST API if WebSocket not connected
-            console.log('[ShopManager] WebSocket not available, using REST API');
             try {
                 const result = await ShopService.purchaseGemItem(item.key, 1);
 
@@ -738,8 +717,6 @@ export class ShopManager extends BaseManager {
     }
 
     private async handleCashPurchase(item: CashShopItem): Promise<void> {
-        console.log('Purchasing cash item:', item.key);
-        
         // Cash purchases require payment integration
         // For now, show a message that payment is required
         // In production, this would integrate with Stripe or another payment provider
