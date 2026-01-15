@@ -432,9 +432,9 @@ export class MissionManager extends BaseManager {
             contentElements.push(iconBg);
             (iconBg as any).originalY = baseY;
 
-            const statusIconText = isPending ? '⏳' : (isDone ? '✓' : '!');
+            const statusIconText = isPending ? '✓' : (isDone ? '✓' : '!');
             const statusIcon = this.scene.add.text(iconX, baseY, statusIconText, {
-                fontSize: isPending ? '8px' : '10px',
+                fontSize: '10px',
                 fontFamily: 'Arial',
                 color: '#FFFFFF',
                 resolution: 2
@@ -588,7 +588,7 @@ export class MissionManager extends BaseManager {
         contentElements.push(pendingBtnBg);
         (pendingBtnBg as any).originalY = y;
 
-        const pendingBtnText = this.scene.add.text(x, y, '⏳ Completed', {
+        const pendingBtnText = this.scene.add.text(x, y, '✓ Completed', {
             fontSize: '7px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -1026,28 +1026,18 @@ export class MissionManager extends BaseManager {
             claimBtnBg.on('pointerover', () => claimBtnBg.setTint(0x86efac));
             claimBtnBg.on('pointerout', () => claimBtnBg.setTint(0x4ade80));
         } else if (mission.status === 'pending') {
-            const pendingLabel = this.scene.add.text(modalX, actionY, '⏳ Pending Review', {
-                fontSize: '10px',
+            // Show completed label for pending missions (no action needed)
+            const completedLabel = this.scene.add.text(modalX, actionY, '✓ Completed', {
+                fontSize: '11px',
                 fontFamily: 'PixelFont',
-                color: '#f59e0b',
+                color: '#22c55e',
                 resolution: 2
             });
-            pendingLabel.setOrigin(0.5);
-            pendingLabel.setDepth(5402);
-            pendingLabel.setStroke('#92400e', 2);
-            this.scene.cameras.main.ignore(pendingLabel);
-            this.missionDetailElements.push(pendingLabel);
-
-            const pendingHint = this.scene.add.text(modalX, actionY + 18, 'Waiting for admin approval', {
-                fontSize: '8px',
-                fontFamily: 'PixelFont',
-                color: '#d97706',
-                resolution: 2
-            });
-            pendingHint.setOrigin(0.5);
-            pendingHint.setDepth(5402);
-            this.scene.cameras.main.ignore(pendingHint);
-            this.missionDetailElements.push(pendingHint);
+            completedLabel.setOrigin(0.5);
+            completedLabel.setDepth(5402);
+            completedLabel.setStroke('#166534', 2);
+            this.scene.cameras.main.ignore(completedLabel);
+            this.missionDetailElements.push(completedLabel);
         } else if (mission.status === 'claimed') {
             const claimedLabel = this.scene.add.text(modalX, actionY, '✅ Reward Claimed', {
                 fontSize: '11px',

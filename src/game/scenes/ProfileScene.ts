@@ -43,6 +43,20 @@ export class ProfileScene extends Scene {
         super('ProfileScene');
     }
 
+    /**
+     * Get badge image key based on badge name
+     */
+    private getBadgeImageKey(badgeName: string): string | null {
+        const nameLower = badgeName.toLowerCase();
+        if (nameLower.includes('overguild') || nameLower.includes('og')) {
+            return 'og-badge';
+        }
+        if (nameLower.includes('cardano') || nameLower.includes('ada')) {
+            return 'ada-badge';
+        }
+        return null;
+    }
+
     init(data?: { isNewUser?: boolean }) {
         this.isNewUser = data?.isNewUser || false;
     }
@@ -455,25 +469,31 @@ export class ProfileScene extends Scene {
                 const x = badgesStartX + index * (badgeSize + badgeSpacing) + badgeSize / 2;
                 const y = startY + 5;
 
-                const badgeBg = this.add.rectangle(x, y, badgeSize, badgeSize, 0x2d5a3d, 0.8);
-                badgeBg.setStrokeStyle(1, 0x4ade80);
-                badgeBg.setInteractive({ useHandCursor: true });
-                this.badgeElements.push(badgeBg);
+                // Use badge image based on name, no background
+                const badgeImageKey = this.getBadgeImageKey(badge.name);
+                let badgeElement: Phaser.GameObjects.Image | Phaser.GameObjects.Text;
+                
+                if (badgeImageKey && this.textures.exists(badgeImageKey)) {
+                    const badgeImage = this.add.image(x, y, badgeImageKey);
+                    badgeImage.setDisplaySize(badgeSize, badgeSize);
+                    badgeImage.setInteractive({ useHandCursor: true });
+                    this.badgeElements.push(badgeImage);
+                    badgeElement = badgeImage;
+                } else {
+                    const badgeIcon = this.add.text(x, y, '🏆', {
+                        fontSize: '12px',
+                        resolution: 2
+                    });
+                    badgeIcon.setOrigin(0.5);
+                    badgeIcon.setInteractive({ useHandCursor: true });
+                    this.badgeElements.push(badgeIcon);
+                    badgeElement = badgeIcon;
+                }
 
-                // Use emoji icon based on status
-                const badgeIcon = this.add.text(x, y, '🏆', {
-                    fontSize: '12px',
-                    resolution: 2
-                });
-                badgeIcon.setOrigin(0.5);
-                this.badgeElements.push(badgeIcon);
-
-                badgeBg.on('pointerover', () => {
-                    badgeBg.setStrokeStyle(2, 0xFFD700);
+                badgeElement.on('pointerover', () => {
                     this.showBadgeTooltip(x, y - badgeSize / 2 - 20, badge);
                 });
-                badgeBg.on('pointerout', () => {
-                    badgeBg.setStrokeStyle(1, 0x4ade80);
+                badgeElement.on('pointerout', () => {
                     this.hideBadgeTooltip();
                 });
             });
@@ -566,26 +586,33 @@ export class ProfileScene extends Scene {
             const x = gridStartX + col * (cellSize + cellSpacing);
             const y = gridStartY + row * (cellSize + cellSpacing);
 
-            const badgeBg = this.add.rectangle(x, y, cellSize, cellSize, 0x2d5a3d, 0.8);
-            badgeBg.setStrokeStyle(2, 0x4ade80);
-            badgeBg.setDepth(102);
-            badgeBg.setInteractive({ useHandCursor: true });
-            this.badgeModalElements.push(badgeBg);
+            // Use badge image based on name, no background
+            const badgeImageKey = this.getBadgeImageKey(badge.name);
+            let badgeElement: Phaser.GameObjects.Image | Phaser.GameObjects.Text;
+            
+            if (badgeImageKey && this.textures.exists(badgeImageKey)) {
+                const badgeImage = this.add.image(x, y, badgeImageKey);
+                badgeImage.setDisplaySize(cellSize, cellSize);
+                badgeImage.setDepth(103);
+                badgeImage.setInteractive({ useHandCursor: true });
+                this.badgeModalElements.push(badgeImage);
+                badgeElement = badgeImage;
+            } else {
+                const badgeIcon = this.add.text(x, y, badge.icon || '🏆', {
+                    fontSize: '16px',
+                    resolution: 2
+                });
+                badgeIcon.setOrigin(0.5);
+                badgeIcon.setDepth(103);
+                badgeIcon.setInteractive({ useHandCursor: true });
+                this.badgeModalElements.push(badgeIcon);
+                badgeElement = badgeIcon;
+            }
 
-            const badgeIcon = this.add.text(x, y, badge.icon || '🏆', {
-                fontSize: '16px',
-                resolution: 2
-            });
-            badgeIcon.setOrigin(0.5);
-            badgeIcon.setDepth(103);
-            this.badgeModalElements.push(badgeIcon);
-
-            badgeBg.on('pointerover', () => {
-                badgeBg.setStrokeStyle(2, 0xFFD700);
+            badgeElement.on('pointerover', () => {
                 this.showBadgeTooltipModal(x, y - cellSize / 2 - 20, badge);
             });
-            badgeBg.on('pointerout', () => {
-                badgeBg.setStrokeStyle(2, 0x4ade80);
+            badgeElement.on('pointerout', () => {
                 this.hideBadgeTooltipModal();
             });
         });
@@ -761,19 +788,32 @@ export class ProfileScene extends Scene {
         this.unlockBadgesContainer.add(rowBg);
         this.badgeElements.push(rowBg);
 
-        // Badge icon - centered vertically
-        let iconEmoji = '🔒';
-        if (isClaimed || canClaim) iconEmoji = '🏆';
-        else if (isPending) iconEmoji = '⏳';
+        // Badge icon - use image if available
+        const badgeImageKey = this.getBadgeImageKey(badge.name);
+        let iconElement: Phaser.GameObjects.Image | Phaser.GameObjects.Text;
         
-        const icon = this.add.text(leftX + 18, rowCenterY, iconEmoji, {
-            fontSize: '14px',
-            resolution: 2
-        });
-        icon.setOrigin(0.5);
-        icon.setAlpha(isLocked ? 0.5 : 0.9);
-        this.unlockBadgesContainer.add(icon);
-        this.badgeElements.push(icon);
+        if (badgeImageKey && this.textures.exists(badgeImageKey)) {
+            const badgeImage = this.add.image(leftX + 18, rowCenterY, badgeImageKey);
+            badgeImage.setDisplaySize(22, 22);
+            badgeImage.setAlpha(isLocked ? 0.5 : 0.9);
+            this.unlockBadgesContainer.add(badgeImage);
+            this.badgeElements.push(badgeImage);
+            iconElement = badgeImage;
+        } else {
+            let iconEmoji = '🔒';
+            if (isClaimed || canClaim) iconEmoji = '🏆';
+            else if (isPending) iconEmoji = '⏳';
+            
+            const icon = this.add.text(leftX + 18, rowCenterY, iconEmoji, {
+                fontSize: '14px',
+                resolution: 2
+            });
+            icon.setOrigin(0.5);
+            icon.setAlpha(isLocked ? 0.5 : 0.9);
+            this.unlockBadgesContainer.add(icon);
+            this.badgeElements.push(icon);
+            iconElement = icon;
+        }
 
         // Badge name - centered vertically, color based on status
         let nameColor = '#FFFFFF'; // white for LOCKED
@@ -893,9 +933,11 @@ export class ProfileScene extends Scene {
                         rowBg.setFillStyle(0x3d5a3d, 0.9);
                         rowBg.setStrokeStyle(1, 0x4ade80);
                         
-                        // Update icon
-                        icon.setText('🏆');
-                        icon.setAlpha(0.9);
+                        // Update icon - only if it's a text element
+                        if (iconElement instanceof Phaser.GameObjects.Text) {
+                            iconElement.setText('🏆');
+                        }
+                        iconElement.setAlpha(0.9);
                         
                         // Update name color
                         name.setColor('#4ade80');

@@ -232,7 +232,7 @@ export class QuickActionsManager extends BaseManager {
         }
 
         const incompleteMissions = missions.filter(m => 
-            m.status === 'active' || m.status === 'pending' || m.status === 'completed'
+            m.status === 'active'
         );
         
         const count = incompleteMissions.length;
@@ -358,7 +358,9 @@ export class QuickActionsManager extends BaseManager {
             return;
         }
 
-        const count = events.length;
+        // Only count unclaimed events
+        const unclaimedEvents = events.filter(e => e.status !== 'CLAIMED' && !e.isClaimed);
+        const count = unclaimedEvents.length;
         
         if (count > 0) {
             const badgeText = this.eventNotificationBadge.getByName('badgeText') as Phaser.GameObjects.Text;
