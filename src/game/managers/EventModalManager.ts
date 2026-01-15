@@ -221,8 +221,17 @@ export class EventModalManager extends BaseManager {
             const cardWidth = 250;
             const cardX = modalX + 10;
 
+            // Determine colors based on claim status
+            const isClaimed = event.status === 'CLAIMED' || event.isClaimed === true;
+            const borderColor = isClaimed ? 0x3b82f6 : 0x166534;  // blue vs green
+            const bgColor = isClaimed ? 0xdbeafe : 0xD4F4DD;      // light blue vs light green
+            const iconBgColor = isClaimed ? 0x60a5fa : 0x22c55e;  // blue vs green
+            const nameColor = isClaimed ? '#3b82f6' : '#166534';
+            const hoverBgColor = isClaimed ? 0xbfdbfe : 0xBBF7D0;
+            const hoverNameColor = isClaimed ? '#2563eb' : '#15803d';
+
             // Card border
-            const cardBorder = this.scene.add.rectangle(cardX, baseY, cardWidth + 3, cardHeight + 3, 0x166534);
+            const cardBorder = this.scene.add.rectangle(cardX, baseY, cardWidth + 3, cardHeight + 3, borderColor);
             cardBorder.setDepth(5302);
             cardBorder.setMask(scrollMask);
             this.scene.cameras.main.ignore(cardBorder);
@@ -231,7 +240,7 @@ export class EventModalManager extends BaseManager {
             (cardBorder as any).originalY = baseY;
 
             // Card background
-            const cardBg = this.scene.add.rectangle(cardX, baseY, cardWidth, cardHeight, 0xD4F4DD);
+            const cardBg = this.scene.add.rectangle(cardX, baseY, cardWidth, cardHeight, bgColor);
             cardBg.setDepth(5303);
             cardBg.setInteractive({ useHandCursor: true });
             cardBg.setMask(scrollMask);
@@ -242,7 +251,7 @@ export class EventModalManager extends BaseManager {
 
             // Event icon
             const iconX = cardX - cardWidth / 2 + 20;
-            const iconBg = this.scene.add.circle(iconX, baseY, 12, 0x22c55e);
+            const iconBg = this.scene.add.circle(iconX, baseY, 12, iconBgColor);
             iconBg.setDepth(5304);
             iconBg.setMask(scrollMask);
             this.scene.cameras.main.ignore(iconBg);
@@ -250,7 +259,7 @@ export class EventModalManager extends BaseManager {
             contentElements.push(iconBg);
             (iconBg as any).originalY = baseY;
 
-            const eventIcon = this.scene.add.text(iconX, baseY, '🎁', {
+            const eventIcon = this.scene.add.text(iconX, baseY, isClaimed ? '✓' : '🎁', {
                 fontSize: '12px',
                 resolution: 2
             });
@@ -268,7 +277,7 @@ export class EventModalManager extends BaseManager {
             const eventName = this.scene.add.text(nameX, nameY, event.name, {
                 fontSize: '10px',
                 fontFamily: 'PixelFont',
-                color: '#166534',
+                color: nameColor,
                 resolution: 2
             });
             eventName.setOrigin(0, 0.5);
@@ -313,19 +322,23 @@ export class EventModalManager extends BaseManager {
             contentElements.push(timeText);
             (timeText as any).originalY = timeY;
 
-            // Check-in button
+            // Check-in button or Claimed badge
             const checkInBtnX = cardX + cardWidth / 2 - 40;
-            const checkInBtn = this.scene.add.rectangle(checkInBtnX, baseY, 55, 24, 0x22c55e);
+            const btnColor = isClaimed ? 0x60a5fa : 0x22c55e;      // blue vs green
+            const btnStrokeColor = isClaimed ? 0x3b82f6 : 0x166534;
+            const checkInBtn = this.scene.add.rectangle(checkInBtnX, baseY, 55, 24, btnColor);
             checkInBtn.setDepth(5304);
-            checkInBtn.setStrokeStyle(1, 0x166534);
-            checkInBtn.setInteractive({ useHandCursor: true });
+            checkInBtn.setStrokeStyle(1, btnStrokeColor);
+            if (!isClaimed) {
+                checkInBtn.setInteractive({ useHandCursor: true });
+            }
             checkInBtn.setMask(scrollMask);
             this.scene.cameras.main.ignore(checkInBtn);
             this.modalElements.push(checkInBtn);
             contentElements.push(checkInBtn);
             (checkInBtn as any).originalY = baseY;
 
-            const checkInText = this.scene.add.text(checkInBtnX, baseY, 'Check-in', {
+            const checkInText = this.scene.add.text(checkInBtnX, baseY, isClaimed ? 'Claimed' : 'Check-in', {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
@@ -333,7 +346,7 @@ export class EventModalManager extends BaseManager {
             });
             checkInText.setOrigin(0.5);
             checkInText.setDepth(5305);
-            checkInText.setStroke('#166534', 1);
+            checkInText.setStroke(btnStrokeColor, 1);
             checkInText.setMask(scrollMask);
             this.scene.cameras.main.ignore(checkInText);
             this.modalElements.push(checkInText);
@@ -342,18 +355,24 @@ export class EventModalManager extends BaseManager {
 
             // Hover effects
             cardBg.on('pointerover', () => {
-                cardBg.setFillStyle(0xBBF7D0);
-                eventName.setColor('#15803d');
+                cardBg.setFillStyle(hoverBgColor);
+                eventName.setColor(hoverNameColor);
             });
             cardBg.on('pointerout', () => {
-                cardBg.setFillStyle(0xD4F4DD);
-                eventName.setColor('#166534');
+                cardBg.setFillStyle(bgColor);
+                eventName.setColor(nameColor);
             });
 
-            checkInBtn.on('pointerover', () => checkInBtn.setFillStyle(0x4ade80));
-            checkInBtn.on('pointerout', () => checkInBtn.setFillStyle(0x22c55e));
+            checkInBtn.on('pointerover', () => {
+                if (!isClaimed) checkInBtn.setFillStyle(0x4ade80);
+            });
+            checkInBtn.on('pointerout', () => {
+                if (!isClaimed) checkInBtn.setFillStyle(0x22c55e);
+            });
             checkInBtn.on('pointerdown', () => {
-                this.showCheckInModal(event);
+                if (!isClaimed) {
+                    this.showCheckInModal(event);
+                }
             });
 
             // Click card to show details
@@ -532,16 +551,20 @@ export class EventModalManager extends BaseManager {
         this.scene.cameras.main.ignore(time);
         this.eventDetailElements.push(time);
 
-        // Check-in button
+        // Check-in button or Claimed status
+        const isClaimed = event.status === 'CLAIMED' || event.isClaimed === true;
+        const btnTint = isClaimed ? 0x60a5fa : 0x22c55e;  // blue vs green
         const checkInBtn = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 40, 'square-buttons', 6);
         checkInBtn.setDisplaySize(120, 30);
-        checkInBtn.setTint(0x22c55e);
+        checkInBtn.setTint(btnTint);
         checkInBtn.setDepth(5402);
-        checkInBtn.setInteractive({ useHandCursor: true });
+        if (!isClaimed) {
+            checkInBtn.setInteractive({ useHandCursor: true });
+        }
         this.scene.cameras.main.ignore(checkInBtn);
         this.eventDetailElements.push(checkInBtn);
 
-        const checkInBtnText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 40, '🎁 Check-in', {
+        const checkInBtnText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 40, isClaimed ? '✓ Claimed' : '🎁 Check-in', {
             fontSize: '10px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -549,16 +572,18 @@ export class EventModalManager extends BaseManager {
         });
         checkInBtnText.setOrigin(0.5);
         checkInBtnText.setDepth(5403);
-        checkInBtnText.setStroke('#166534', 2);
+        checkInBtnText.setStroke(isClaimed ? '#3b82f6' : '#166534', 2);
         this.scene.cameras.main.ignore(checkInBtnText);
         this.eventDetailElements.push(checkInBtnText);
 
-        checkInBtn.on('pointerdown', () => {
-            this.closeEventDetails();
-            this.showCheckInModal(event);
-        });
-        checkInBtn.on('pointerover', () => checkInBtn.setTint(0x4ade80));
-        checkInBtn.on('pointerout', () => checkInBtn.setTint(0x22c55e));
+        if (!isClaimed) {
+            checkInBtn.on('pointerdown', () => {
+                this.closeEventDetails();
+                this.showCheckInModal(event);
+            });
+            checkInBtn.on('pointerover', () => checkInBtn.setTint(0x4ade80));
+            checkInBtn.on('pointerout', () => checkInBtn.setTint(0x22c55e));
+        }
     }
 
     /**

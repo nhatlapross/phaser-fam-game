@@ -7,6 +7,8 @@ export interface GameEvent {
     location: string;
     startTime: string;
     endTime: string;
+    isClaimed?: boolean;
+    status?: 'NOT_CLAIMED' | 'CLAIMED';
 }
 
 export class EventService {

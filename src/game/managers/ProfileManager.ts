@@ -686,8 +686,8 @@ export class ProfileManager extends BaseManager {
         // Username
         this.createProfileField('Name', user.username || 'Not set', labelX, valueX, editX, fieldStartY, 'username', user);
 
-        // Wallet Address with copy button
-        this.createWalletField(user.address, labelX, modalX, fieldStartY + fieldSpacing, modalWidth);
+        // Wallet Address with copy button and More option
+        this.createWalletField(user, labelX, modalX, fieldStartY + fieldSpacing, modalWidth);
 
         // XP (read-only)
         this.createReadOnlyField('XP:', user.xp.toString(), labelX, valueX, fieldStartY + fieldSpacing * 2);
@@ -1606,8 +1606,14 @@ export class ProfileManager extends BaseManager {
         });
     }
 
-    private createWalletField(address: string, labelX: number, centerX: number, y: number, modalWidth: number): void {
-        const labelText = this.scene.add.text(labelX, y, 'Wallet:', {
+    // Wallet modal elements
+    private walletModalElements: Phaser.GameObjects.GameObject[] = [];
+    private walletModalOpen: boolean = false;
+
+    private createWalletField(user: any, labelX: number, centerX: number, y: number, modalWidth: number): void {
+        const address = user.walletAddress || user.address;
+        
+        const labelText = this.scene.add.text(labelX, y, 'EVM:', {
             fontSize: '11px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -1621,7 +1627,7 @@ export class ProfileManager extends BaseManager {
 
         // Show shortened address
         const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-        const addressText = this.scene.add.text(labelX + 50, y, shortAddress, {
+        const addressText = this.scene.add.text(labelX + 35, y, shortAddress, {
             fontSize: '10px',
             fontFamily: 'PixelFont',
             color: '#FFF8E1',
@@ -1633,10 +1639,10 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(addressText);
         this.profileContentElements.push(addressText);
 
-        // Copy button
-        const copyBtnX = centerX + modalWidth / 2 - 53;
-        const copyBtn = this.scene.add.text(copyBtnX, y, 'Copy', {
-            fontSize: '10px',
+        // Copy button - aligned under Edit button
+        const editX = centerX + modalWidth / 2 - 55;
+        const copyBtn = this.scene.add.text(editX , y, 'Copy', {
+            fontSize: '9px',
             fontFamily: 'PixelFont',
             color: '#4ade80',
             resolution: 2
@@ -1647,8 +1653,33 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(copyBtn);
         this.profileContentElements.push(copyBtn);
 
+        // Check if there are other wallets
+        const hasOtherWallets = user.walletAddressAptos || user.walletAddressSui || user.walletAddressCardano;
+        
+        const elementsToAnimate = [labelText, addressText, copyBtn];
+
+        if (hasOtherWallets) {
+            // More button - opens modal
+            const moreBtn = this.scene.add.text(labelX + 130, y, '▼ More', {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#4a90e2',
+                resolution: 2
+            });
+            moreBtn.setDepth(5102);
+            moreBtn.setAlpha(0);
+            moreBtn.setInteractive({ useHandCursor: true });
+            this.scene.cameras.main.ignore(moreBtn);
+            this.profileContentElements.push(moreBtn);
+            elementsToAnimate.push(moreBtn);
+
+            moreBtn.on('pointerdown', () => this.openWalletsModal(user));
+            moreBtn.on('pointerover', () => moreBtn.setColor('#6bb3ff'));
+            moreBtn.on('pointerout', () => moreBtn.setColor('#4a90e2'));
+        }
+
         this.scene.tweens.add({
-            targets: [labelText, addressText, copyBtn],
+            targets: elementsToAnimate,
             alpha: 1,
             duration: 150,
             delay: 50
@@ -1689,6 +1720,171 @@ export class ProfileManager extends BaseManager {
         copyBtn.on('pointerout', () => {
             if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
         });
+    }
+
+    /**
+     * Open modal showing all wallet addresses
+     */
+    private openWalletsModal(user: any): void {
+        if (this.walletModalOpen) return;
+        this.walletModalOpen = true;
+
+        const centerX = this.scene.scale.width / 2;
+        const centerY = this.scene.scale.height / 2;
+        const modalWidth = 280;
+        const modalHeight = 180;
+
+        // Overlay
+        const overlay = this.scene.add.rectangle(centerX, centerY, this.scene.scale.width, this.scene.scale.height, 0x000000, 0.8);
+        overlay.setDepth(5200);
+        overlay.setInteractive();
+        this.scene.cameras.main.ignore(overlay);
+        this.walletModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.scene.add.sprite(centerX, centerY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5201);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+            e.stopPropagation();
+        });
+        this.scene.cameras.main.ignore(modalBg);
+        this.walletModalElements.push(modalBg);
+
+        // Animate
+        modalBg.setScale(0);
+        this.scene.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        // Title
+        const title = this.scene.add.text(centerX, centerY - modalHeight / 2 + 25, '🔗 All Wallets', {
+            fontSize: '12px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(5202);
+        title.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(title);
+        this.walletModalElements.push(title);
+
+        // All wallets list
+        const wallets = [
+            { chain: 'EVM', address: user.walletAddress || user.address },
+            { chain: 'Aptos', address: user.walletAddressAptos },
+            { chain: 'Sui', address: user.walletAddressSui },
+            { chain: 'Cardano', address: user.walletAddressCardano }
+        ];
+
+        const listStartY = centerY - modalHeight / 2 + 50;
+        const leftX = centerX - modalWidth / 2 + 45;
+
+        wallets.forEach((wallet, index) => {
+            const rowY = listStartY + index * 24;
+
+            const label = this.scene.add.text(leftX, rowY, `${wallet.chain}:`, {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            label.setDepth(5202);
+            label.setStroke('#5D4037', 1);
+            this.scene.cameras.main.ignore(label);
+            this.walletModalElements.push(label);
+
+            if (wallet.address) {
+                const shortAddr = `${wallet.address.slice(0, 8)}...${wallet.address.slice(-6)}`;
+                const addrText = this.scene.add.text(leftX + 70, rowY, shortAddr, {
+                    fontSize: '10px',
+                    fontFamily: 'PixelFont',
+                    color: '#FFFFFF',
+                    fontStyle: 'bold',
+                    resolution: 2
+                });
+                addrText.setDepth(5202);
+                this.scene.cameras.main.ignore(addrText);
+                this.walletModalElements.push(addrText);
+
+                const copyBtn = this.scene.add.text(leftX + 185, rowY, 'Copy', {
+                    fontSize: '8px',
+                    fontFamily: 'PixelFont',
+                    color: '#4ade80',
+                    resolution: 2
+                });
+                copyBtn.setDepth(5202);
+                copyBtn.setInteractive({ useHandCursor: true });
+                this.scene.cameras.main.ignore(copyBtn);
+                this.walletModalElements.push(copyBtn);
+
+                copyBtn.on('pointerdown', async () => {
+                    try {
+                        await navigator.clipboard.writeText(wallet.address!);
+                        copyBtn.setText('Copied!');
+                        copyBtn.setColor('#86efac');
+                        this.scene.time.delayedCall(1500, () => {
+                            if (copyBtn.active) {
+                                copyBtn.setText('Copy');
+                                copyBtn.setColor('#4ade80');
+                            }
+                        });
+                    } catch {
+                        console.log('Copy failed');
+                    }
+                });
+                copyBtn.on('pointerover', () => copyBtn.setColor('#86efac'));
+                copyBtn.on('pointerout', () => {
+                    if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
+                });
+            } else {
+                const notLinked = this.scene.add.text(leftX + 70, rowY, 'Not linked', {
+                    fontSize: '10px',
+                    fontFamily: 'PixelFont',
+                    color: '#6b7280',
+                    resolution: 2
+                });
+                notLinked.setDepth(5202);
+                this.scene.cameras.main.ignore(notLinked);
+                this.walletModalElements.push(notLinked);
+            }
+        });
+
+        // Close button
+        const closeBtn = this.scene.add.text(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, '✕', {
+            fontSize: '14px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        closeBtn.setOrigin(0.5);
+        closeBtn.setDepth(5203);
+        closeBtn.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(closeBtn);
+        this.walletModalElements.push(closeBtn);
+
+        closeBtn.on('pointerdown', () => this.closeWalletsModal());
+        closeBtn.on('pointerover', () => closeBtn.setColor('#ef4444'));
+        closeBtn.on('pointerout', () => closeBtn.setColor('#FFFFFF'));
+
+        overlay.on('pointerdown', () => this.closeWalletsModal());
+    }
+
+    /**
+     * Close wallets modal
+     */
+    private closeWalletsModal(): void {
+        this.walletModalOpen = false;
+        this.walletModalElements.forEach(el => {
+            if (el && (el as any).destroy) (el as any).destroy();
+        });
+        this.walletModalElements = [];
     }
 
     private openEditField(fieldName: string, currentValue: string): void {

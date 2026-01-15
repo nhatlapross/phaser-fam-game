@@ -655,6 +655,9 @@ export class MissionManager extends BaseManager {
                     rewardParts.push(`${icon}${item.amount}`);
                 });
             }
+            if (mission.reward.gift) {
+                rewardParts.push(`🎁${mission.reward.gift}`);
+            }
         }
 
         const total = rewardParts.length;
@@ -892,6 +895,9 @@ export class MissionManager extends BaseManager {
                     const itemIcon = this.getItemIcon(item.type);
                     rewardItems.push({ icon: itemIcon, text: `${item.amount} ${item.type}`, color: '#4ade80' });
                 });
+            }
+            if (mission.reward.gift) {
+                rewardItems.push({ icon: '🎁', text: mission.reward.gift, color: '#ec4899' });
             }
         }
 
