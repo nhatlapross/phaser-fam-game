@@ -29,34 +29,6 @@ export const SAMPLE_VOUCHERS: NFTVoucher[] = [
         expiryDate: '2025-06-30T23:59:59Z',
         isMintedOnChain: true,
         claimedAt: '2025-01-15T10:30:00Z'
-    },
-    {
-        id: 'voucher-002',
-        title: '50% Off Drinks',
-        description: 'For orders over 50k',
-        icon: '🥤',
-        location: 'Highlands Coffee',
-        expiryDate: '2025-03-31T23:59:59Z',
-        isMintedOnChain: false,
-        claimedAt: '2025-01-20T14:15:00Z'
-    },
-    {
-        id: 'voucher-003',
-        title: 'NFT Collectible #42',
-        description: 'Limited Edition FAM NFT',
-        icon: '🎨',
-        isMintedOnChain: true,
-        claimedAt: '2025-01-10T09:00:00Z'
-    },
-    {
-        id: 'voucher-004',
-        title: 'Free Pastry',
-        description: 'With any drink purchase',
-        icon: '🍰',
-        location: 'Paris Baguette',
-        expiryDate: '2025-02-28T23:59:59Z',
-        isMintedOnChain: false,
-        claimedAt: '2025-01-25T16:45:00Z'
     }
 ];
 

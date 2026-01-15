@@ -8,6 +8,8 @@ import { SeedService, SeedInventoryItem } from './SeedService';
 import { FertilizerService, FertilizerInventoryResponse } from './FertilizerService';
 import { FruitService } from './FruitService';
 import { MissionService, Mission } from './MissionService';
+import { QuizService, Quiz } from './QuizService';
+import { EventService, GameEvent } from './EventService';
 import { StreakService, StreakStatusResponse, StreakHistoryResponse } from './StreakService';
 import { ShopService, GoldShopResponse, GemShopResponse, CashShopResponse } from './ShopService';
 import { InventoryService, StorageResponse, BackpackResponse } from './InventoryService';
@@ -72,6 +74,8 @@ export interface GameData {
     fruits: FruitInventoryItem[];
     currencies: CurrencyBalances;
     missions: Mission[] | null;
+    quizzes: Quiz[] | null;
+    events: GameEvent[] | null;
     streak: StreakData;
     shop: ShopData;
     inventory: InventoryData;
@@ -116,6 +120,8 @@ export class GameDataService {
                 fruits: [],
                 currencies: { gold: 0, gem: 0 },
                 missions: null,
+                quizzes: null,
+                events: null,
                 streak: { status: null, history: null },
                 shop: { goldShop: null, gemShop: null, cashShop: null },
                 inventory: { storage: null, backpack: null },
@@ -162,6 +168,8 @@ export class GameDataService {
             fruitsResult,
             currenciesResult,
             missionsResult,
+            quizzesResult,
+            eventsResult,
             streakStatusResult,
             streakHistoryResult,
             goldShopResult,
@@ -178,6 +186,8 @@ export class GameDataService {
             FruitService.getFruitInventory(),
             FruitService.getCurrencyBalances(),
             MissionService.getMissions(),
+            QuizService.getActiveQuizzes(),
+            EventService.getActiveEvents(),
             StreakService.getStatus(),
             StreakService.getHistory(7),
             ShopService.getGoldShop(),
@@ -229,6 +239,8 @@ export class GameDataService {
                 ? currenciesResult.value
                 : { gold: 0, gem: 0 },
             missions: missionsResult.status === 'fulfilled' ? missionsResult.value : null,
+            quizzes: quizzesResult.status === 'fulfilled' ? quizzesResult.value : null,
+            events: eventsResult.status === 'fulfilled' ? eventsResult.value : null,
             streak: {
                 status: streakStatusResult.status === 'fulfilled' ? streakStatusResult.value : null,
                 history: streakHistoryResult.status === 'fulfilled' ? streakHistoryResult.value : null
@@ -267,6 +279,12 @@ export class GameDataService {
         }
         if (missionsResult.status === 'rejected') {
             console.error('Failed to fetch missions:', missionsResult.reason);
+        }
+        if (quizzesResult.status === 'rejected') {
+            console.error('Failed to fetch quizzes:', quizzesResult.reason);
+        }
+        if (eventsResult.status === 'rejected') {
+            console.error('Failed to fetch events:', eventsResult.reason);
         }
         if (streakStatusResult.status === 'rejected') {
             console.error('Failed to fetch streak status:', streakStatusResult.reason);
@@ -307,6 +325,8 @@ export class GameDataService {
             gold: gameData.currencies.gold,
             gem: gameData.currencies.gem,
             missions: gameData.missions?.length ?? 0,
+            quizzes: gameData.quizzes?.length ?? 0,
+            events: gameData.events?.length ?? 0,
             streakStatus: gameData.streak.status ? 'loaded' : 'null',
             streakHistory: gameData.streak.history?.checkins?.length ?? 0,
             goldShopItems: gameData.shop.goldShop?.items?.length ?? 0,
@@ -361,6 +381,16 @@ export class GameDataService {
     }
 
     /**
+     * Public method to persist current cached data to localStorage
+     * Call this after updating cachedData directly (e.g., from WebSocket updates)
+     */
+    public static persistCache(): void {
+        if (cachedGameData) {
+            this.saveToLocalStorage(cachedGameData);
+        }
+    }
+
+    /**
      * Fetch and cache data in background (non-blocking)
      * Used for stale-while-revalidate pattern
      */
@@ -396,6 +426,8 @@ export class GameDataService {
             fruitsResult,
             currenciesResult,
             missionsResult,
+            quizzesResult,
+            eventsResult,
             streakStatusResult,
             streakHistoryResult,
             goldShopResult,
@@ -412,6 +444,8 @@ export class GameDataService {
             FruitService.getFruitInventory(),
             FruitService.getCurrencyBalances(),
             MissionService.getMissions(),
+            QuizService.getActiveQuizzes(),
+            EventService.getActiveEvents(),
             StreakService.getStatus(),
             StreakService.getHistory(7),
             ShopService.getGoldShop(),
@@ -450,6 +484,8 @@ export class GameDataService {
                 ? currenciesResult.value
                 : { gold: 0, gem: 0 },
             missions: missionsResult.status === 'fulfilled' ? missionsResult.value : null,
+            quizzes: quizzesResult.status === 'fulfilled' ? quizzesResult.value : null,
+            events: eventsResult.status === 'fulfilled' ? eventsResult.value : null,
             streak: {
                 status: streakStatusResult.status === 'fulfilled' ? streakStatusResult.value : null,
                 history: streakHistoryResult.status === 'fulfilled' ? streakHistoryResult.value : null
@@ -550,6 +586,22 @@ export class GameDataService {
             cachedGameData.missions = missions;
         }
         return missions;
+    }
+
+    static async refreshQuizzes(): Promise<Quiz[] | null> {
+        const quizzes = await QuizService.getActiveQuizzes();
+        if (cachedGameData) {
+            cachedGameData.quizzes = quizzes;
+        }
+        return quizzes;
+    }
+
+    static async refreshEvents(): Promise<GameEvent[] | null> {
+        const events = await EventService.getActiveEvents();
+        if (cachedGameData) {
+            cachedGameData.events = events;
+        }
+        return events;
     }
 
     static async refreshGoldShop(): Promise<GoldShopResponse | null> {

@@ -7,6 +7,7 @@ export interface MissionReward {
         type: string;
         amount: number;
     }>;
+    gift?: string;  // Physical gift like "merch", "t-shirt", etc.
 }
 
 export interface Mission {

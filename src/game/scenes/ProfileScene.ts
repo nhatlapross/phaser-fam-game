@@ -431,7 +431,8 @@ export class ProfileScene extends Scene {
         title.setStroke('#5D4037', 2);
         this.badgeElements.push(title);
 
-        const claimedBadges = this.allBadges.filter(b => b.status === 'CLAIMED');
+        // PENDING is considered as owned (user already submitted proof)
+        const claimedBadges = this.allBadges.filter(b => b.status === 'CLAIMED' || b.status === 'PENDING');
 
         // Show badges inline with title (max 5)
         const maxInlineBadges = 5;
@@ -665,8 +666,8 @@ export class ProfileScene extends Scene {
         const viewportHeight = 90; // Height for unlock badges list
         const leftX = centerX - viewportWidth / 2;
 
-        // Get all non-claimed badges for unlock section
-        const unclaimedBadges = this.allBadges.filter(b => b.status !== 'CLAIMED');
+        // Get all non-claimed badges for unlock section - exclude PENDING as they're already owned
+        const unclaimedBadges = this.allBadges.filter(b => b.status !== 'CLAIMED' && b.status !== 'PENDING');
 
         // Section title - ADD TO badgeElements so it gets cleaned up!
         const title = this.add.text(leftX + 10, startY, `🔓 Unlock Badges (${unclaimedBadges.length})`, {
