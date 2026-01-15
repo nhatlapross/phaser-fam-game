@@ -252,8 +252,8 @@ export class WelcomeManager extends BaseManager {
     }
 
     private createBadgesSection(centerX: number, startY: number, width: number, height: number): void {
-        // Section title
-        const claimedCount = this.allBadges.filter(b => b.status === 'CLAIMED').length;
+        // Section title - PENDING is considered as owned (user already submitted proof)
+        const claimedCount = this.allBadges.filter(b => b.status === 'CLAIMED' || b.status === 'PENDING').length;
         const totalCount = this.allBadges.length;
         
         const sectionTitle = this.scene.add.text(centerX, startY, `🏆 Badges (${claimedCount}/${totalCount})`, {
@@ -279,8 +279,7 @@ export class WelcomeManager extends BaseManager {
     }
 
     private createBadgeRow(centerX: number, y: number, width: number, badge: ApiBadge, index: number): void {
-        const isClaimed = badge.status === 'CLAIMED';
-        const isPending = badge.status === 'PENDING';
+        const isClaimed = badge.status === 'CLAIMED' || badge.status === 'PENDING'; // PENDING treated as claimed
         // const canClaim = badge.status === 'CAN_CLAIM' || badge.status === 'COMPLETED';
         const canClaim = badge.status === 'CAN_CLAIM';
         const isLocked = badge.status === 'LOCKED';
@@ -296,9 +295,6 @@ export class WelcomeManager extends BaseManager {
         } else if (canClaim) {
             bgColor = 0x2d5a3d;
             strokeColor = 0x4ade80;
-        } else if (isPending) {
-            bgColor = 0x5D4037;
-            strokeColor = 0xfbbf24;
         }
         
         const rowBg = this.scene.add.rectangle(
@@ -317,7 +313,6 @@ export class WelcomeManager extends BaseManager {
         let iconEmoji = '🔒';
         if (isClaimed) iconEmoji = '🏆';
         else if (canClaim) iconEmoji = '🏆';
-        else if (isPending) iconEmoji = '⏳';
         
         const icon = this.scene.add.text(leftX + 20, y + 15, iconEmoji, {
             fontSize: '20px', resolution: 2
@@ -332,7 +327,6 @@ export class WelcomeManager extends BaseManager {
         let nameColor = '#9CA3AF'; // gray for LOCKED
         if (isClaimed) nameColor = '#68d391';
         else if (canClaim) nameColor = '#4ade80';
-        else if (isPending) nameColor = '#fbbf24';
         
         const name = this.scene.add.text(leftX + 45, y + 8, badge.name, {
             fontSize: '10px', fontFamily: 'PixelFont',
@@ -368,22 +362,6 @@ export class WelcomeManager extends BaseManager {
 
             this.scene.tweens.add({
                 targets: claimedText,
-                alpha: 1,
-                duration: 200,
-                delay: 200 + index * 50
-            });
-        } else if (isPending) {
-            const pendingText = this.scene.add.text(centerX + width / 2 - 45, y + 15, '⏳ Pending', {
-                fontSize: '9px', fontFamily: 'PixelFont', color: '#fbbf24', resolution: 2
-            });
-            pendingText.setOrigin(0.5);
-            pendingText.setDepth(6003);
-            pendingText.setAlpha(0);
-            this.scene.cameras.main.ignore(pendingText);
-            this.badgeElements.push(pendingText);
-
-            this.scene.tweens.add({
-                targets: pendingText,
                 alpha: 1,
                 duration: 200,
                 delay: 200 + index * 50

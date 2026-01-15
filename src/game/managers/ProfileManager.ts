@@ -805,9 +805,9 @@ export class ProfileManager extends BaseManager {
         // Remove loading text
         if (loadingText.active) loadingText.destroy();
 
-        // Filter badges by status
-        const claimedBadges = this.allBadges.filter(b => b.status === 'CLAIMED');
-        const unclaimedBadges = this.allBadges.filter(b => b.status !== 'CLAIMED');
+        // Filter badges by status - PENDING is considered as owned (user already submitted proof)
+        const claimedBadges = this.allBadges.filter(b => b.status === 'CLAIMED' || b.status === 'PENDING');
+        const unclaimedBadges = this.allBadges.filter(b => b.status !== 'CLAIMED' && b.status !== 'PENDING');
 
         // Create container for scrollable content
         this.badgesContainer = this.scene.add.container(0, 0);
@@ -1327,7 +1327,13 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(cancelText);
         this.claimFormElements.push(cancelText);
 
-        submitBtnBg.on('pointerdown', () => this.submitBadgeProof(badge));
+        submitBtnBg.on('pointerdown', () => {
+            // Disable button and show loading state
+            submitBtnBg.disableInteractive();
+            submitBtnBg.setTint(0x6b7280);
+            submitText.setText('Submitting...');
+            this.submitBadgeProof(badge, submitBtnBg, submitText);
+        });
         submitBtnBg.on('pointerover', () => submitBtnBg.setTint(0x86efac));
         submitBtnBg.on('pointerout', () => submitBtnBg.setTint(0x4ade80));
 
@@ -1339,14 +1345,22 @@ export class ProfileManager extends BaseManager {
     /**
      * Submit proof for badge
      */
-    private async submitBadgeProof(badge: ApiBadge): Promise<void> {
+    private async submitBadgeProof(
+        badge: ApiBadge, 
+        submitBtn?: Phaser.GameObjects.Sprite, 
+        submitText?: Phaser.GameObjects.Text
+    ): Promise<void> {
         const proof = this.proofInput?.value.trim();
         if (!proof) {
             this.callbacks.showToastMessage?.('Please enter proof', 0xfbbf24);
+            // Re-enable button
+            if (submitBtn && submitText) {
+                submitBtn.setInteractive({ useHandCursor: true });
+                submitBtn.setTint(0x4ade80);
+                submitText.setText('Submit');
+            }
             return;
         }
-
-        this.callbacks.showToastMessage?.('⏳ Submitting proof...', 0x4a90e2);
 
         const result = await BadgeService.claimBadge(badge.id, proof);
 
@@ -1363,6 +1377,12 @@ export class ProfileManager extends BaseManager {
             this.refreshBadgesTab();
         } else {
             this.callbacks.showToastMessage?.(`❌ ${result.message}`, 0xef4444);
+            // Re-enable button on error
+            if (submitBtn && submitText) {
+                submitBtn.setInteractive({ useHandCursor: true });
+                submitBtn.setTint(0x4ade80);
+                submitText.setText('Submit');
+            }
         }
     }
 
@@ -1385,10 +1405,7 @@ export class ProfileManager extends BaseManager {
      * Refresh badges tab content
      */
     private async refreshBadgesTab(): Promise<void> {
-        // Clear current content
-        this.profileContentElements.forEach(el => (el as any)?.destroy?.());
-        this.profileContentElements = [];
-        
+        // Only clear badges-specific content, not tabs
         if (this.badgesContainer) {
             this.badgesContainer.destroy();
             this.badgesContainer = null;
@@ -1399,14 +1416,14 @@ export class ProfileManager extends BaseManager {
         }
         this.badgesScrollY = 0;
 
-        // Get modal dimensions
+        // Get modal dimensions - must match createModalContent
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
-        const modalWidth = Math.min(340, screenWidth - 40);
-        const modalHeight = Math.min(400, screenHeight - 80);
+        const modalWidth = 300;
+        const modalHeight = 380;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
-        const contentStartY = modalY - modalHeight / 2 + 60;
+        const contentStartY = modalY - modalHeight / 2 + 100;
         const contentHeight = modalHeight - 80;
 
         // Recreate badges content
