@@ -801,15 +801,21 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(loadingText);
         this.profileContentElements.push(loadingText);
 
-        // Fetch all badges from API
-        this.badgesLoading = true;
-        try {
-            this.allBadges = await BadgeService.getAllBadges();
-        } catch (error) {
-            console.error('[ProfileManager] Error fetching badges:', error);
-            this.allBadges = [];
+        // Use cached badges from GameDataService (pre-loaded during game init)
+        const cachedData = GameDataService.getCachedData();
+        this.allBadges = cachedData?.allBadges ?? [];
+
+        // If no cached data, fetch from API as fallback
+        if (this.allBadges.length === 0) {
+            this.badgesLoading = true;
+            try {
+                this.allBadges = await BadgeService.getAllBadges();
+            } catch (error) {
+                console.error('[ProfileManager] Error fetching badges:', error);
+                this.allBadges = [];
+            }
+            this.badgesLoading = false;
         }
-        this.badgesLoading = false;
 
         // Guard: Check if modal was closed while loading
         if (!this.isOpen || this.activeTab !== 'badges') {
@@ -1408,8 +1414,8 @@ export class ProfileManager extends BaseManager {
             
             this.closeBadgeClaimForm();
             
-            // Reload badges from API and refresh tab
-            this.allBadges = await BadgeService.getAllBadges();
+            // Reload badges from API, update cache, and refresh tab
+            this.allBadges = await GameDataService.refreshAllBadges();
             this.refreshBadgesTab();
         } else {
             this.callbacks.showToastMessage?.(`❌ ${result.message}`, 0xef4444);

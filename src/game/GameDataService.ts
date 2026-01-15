@@ -13,7 +13,7 @@ import { EventService, GameEvent } from './EventService';
 import { StreakService, StreakStatusResponse, StreakHistoryResponse } from './StreakService';
 import { ShopService, GoldShopResponse, GemShopResponse, CashShopResponse } from './ShopService';
 import { InventoryService, StorageResponse, BackpackResponse } from './InventoryService';
-import { BadgeService, SoulboundToken } from './BadgeService';
+import { BadgeService, SoulboundToken, ApiBadge } from './BadgeService';
 import { PlantType } from './types/GameTypes';
 import { GameCache, CACHE_KEYS, CACHE_TTL } from './utils/GameCache';
 import { EventBus } from './EventBus';
@@ -80,6 +80,7 @@ export interface GameData {
     shop: ShopData;
     inventory: InventoryData;
     badges: SoulboundToken[];
+    allBadges: ApiBadge[];
     loadedAt: number;
 }
 
@@ -126,6 +127,7 @@ export class GameDataService {
                 shop: { goldShop: null, gemShop: null, cashShop: null },
                 inventory: { storage: null, backpack: null },
                 badges: [],
+                allBadges: [],
                 loadedAt: Date.now()
             };
             cachedGameData = emptyData;
@@ -177,7 +179,8 @@ export class GameDataService {
             cashShopResult,
             storageResult,
             backpackResult,
-            badgesResult
+            badgesResult,
+            allBadgesResult
         ] = await Promise.allSettled([
             UserService.getUserProfile(),
             GardenService.getGarden(),
@@ -195,7 +198,8 @@ export class GameDataService {
             ShopService.getCashShop(),
             InventoryService.getStorage(),
             InventoryService.getBackpack(),
-            BadgeService.fetchSoulboundTokens()
+            BadgeService.fetchSoulboundTokens(),
+            BadgeService.getAllBadges()
         ]);
 
         onProgress?.(80);
@@ -255,6 +259,7 @@ export class GameDataService {
                 backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null
             },
             badges: badgesResult.status === 'fulfilled' ? badgesResult.value : [],
+            allBadges: allBadgesResult.status === 'fulfilled' ? allBadgesResult.value : [],
             loadedAt: Date.now()
         };
 
@@ -435,7 +440,8 @@ export class GameDataService {
             cashShopResult,
             storageResult,
             backpackResult,
-            badgesResult
+            badgesResult,
+            allBadgesResult
         ] = await Promise.allSettled([
             UserService.getUserProfile(),
             GardenService.getGarden(),
@@ -453,7 +459,8 @@ export class GameDataService {
             ShopService.getCashShop(),
             InventoryService.getStorage(),
             InventoryService.getBackpack(),
-            BadgeService.fetchSoulboundTokens()
+            BadgeService.fetchSoulboundTokens(),
+            BadgeService.getAllBadges()
         ]);
 
         // Extract results with fallbacks
@@ -500,6 +507,7 @@ export class GameDataService {
                 backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null
             },
             badges: badgesResult.status === 'fulfilled' ? badgesResult.value : [],
+            allBadges: allBadgesResult.status === 'fulfilled' ? allBadgesResult.value : [],
             loadedAt: Date.now()
         };
     }
@@ -679,6 +687,26 @@ export class GameDataService {
             cachedGameData.inventory = inventoryData;
         }
         return inventoryData;
+    }
+
+    static async refreshBadges(): Promise<{ badges: SoulboundToken[]; allBadges: ApiBadge[] }> {
+        const [badges, allBadges] = await Promise.all([
+            BadgeService.fetchSoulboundTokens(),
+            BadgeService.getAllBadges()
+        ]);
+        if (cachedGameData) {
+            cachedGameData.badges = badges;
+            cachedGameData.allBadges = allBadges;
+        }
+        return { badges, allBadges };
+    }
+
+    static async refreshAllBadges(): Promise<ApiBadge[]> {
+        const allBadges = await BadgeService.getAllBadges();
+        if (cachedGameData) {
+            cachedGameData.allBadges = allBadges;
+        }
+        return allBadges;
     }
 
     // ============================================

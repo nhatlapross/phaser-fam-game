@@ -804,16 +804,16 @@ export class MissionManager extends BaseManager {
 
         // Description
         const description = this.scene.add.text(modalX + 15, modalY - modalHeight / 2 + 95, mission.description, {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#FFF8E1',
+            fontSize: '11px',
+            fontFamily: 'Roboto, Arial, sans-serif',
+            color: '#FFFFFF',
             resolution: 2,
             wordWrap: { width: modalWidth - 80 },
             align: 'center'
         });
         description.setOrigin(0.5, 0);
         description.setDepth(5402);
-        description.setStroke('#5D4037', 1);
+        description.setStroke('#000000', 3);
         this.scene.cameras.main.ignore(description);
         this.missionDetailElements.push(description);
 

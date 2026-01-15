@@ -143,6 +143,9 @@ export class TownSquare extends Scene {
     private currentCharacterKey: string = DEFAULT_CHARACTER;
     private pKey!: Phaser.Input.Keyboard.Key;
 
+    // House colliders for collision with player
+    private houseColliders: Phaser.GameObjects.Rectangle[] = [];
+
     constructor() {
         super('TownSquare');
     }
@@ -183,6 +186,9 @@ export class TownSquare extends Scene {
 
         // Create player
         this.createPlayer();
+
+        // Setup house collisions (must be after player is created)
+        this.setupHouseCollisions();
 
         // Setup main camera
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
@@ -425,6 +431,9 @@ export class TownSquare extends Scene {
         this.createTrees();
         this.createLamps();
         this.createChairs();
+
+        // Add interactive houses around the square
+        this.createHouses();
     }
 
     private createDecoration(key: string, tileX: number, tileY: number, scale: number = 0.5): Phaser.GameObjects.Image {
@@ -495,6 +504,109 @@ export class TownSquare extends Scene {
 
         chairPositions.forEach(pos => {
             this.createDecoration('square-chair', pos.x, pos.y, 0.35);
+        });
+    }
+
+    /**
+     * Create interactive houses around the town square
+     * Layout based on reference image:
+     * Top row: 6, 7, 8, 9
+     * Left side: 5, 4
+     * Right side: 10, 11
+     * Bottom row: 3, 2, 1, 12
+     */
+    private createHouses() {
+        // House positions based on the layout diagram
+        // Map is 60x60 tiles, stone area from tile 8-52
+        const housePositions: { id: number; x: number; y: number }[] = [
+            // Top row (y around 10-11)
+            { id: 6, x: 14, y: 10 },
+            { id: 7, x: 24, y: 10 },
+            { id: 8, x: 36, y: 10 },
+            { id: 9, x: 46, y: 10 },
+
+            // Left side (x moved right to stay inside map)
+            { id: 5, x: 12, y: 24 },
+            { id: 4, x: 12, y: 40 },
+
+            // Right side (x moved left to stay inside map)
+            { id: 10, x: 48, y: 24 },
+            { id: 11, x: 48, y: 40 },
+
+            // Bottom row (y around 50)
+            { id: 3, x: 14, y: 50 },
+            { id: 2, x: 26, y: 50 },
+            { id: 1, x: 38, y: 50 },
+            { id: 12, x: 48, y: 50 },
+        ];
+
+        housePositions.forEach(({ id, x, y }) => {
+            this.createInteractiveHouse(id, x, y);
+        });
+    }
+
+    /**
+     * Create a single interactive house with collision
+     */
+    private createInteractiveHouse(houseId: number, tileX: number, tileY: number) {
+        const x = tileX * this.TILE_SIZE;
+        const y = tileY * this.TILE_SIZE;
+        const scale = 0.3; // x2 size (was 0.15)
+
+        const house = this.add.image(x, y, `house-${houseId}`);
+        house.setOrigin(0.5, 0.85); // Bottom-center origin for depth sorting
+        house.setScale(scale);
+        house.setDepth(y);
+
+        // Create collision body for the base of the house (invisible)
+        const collisionWidth = house.displayWidth * 0.6;
+        const collisionHeight = house.displayHeight * 0.25;
+        const collisionY = y - collisionHeight / 2 - 20;
+
+        const collider = this.add.rectangle(x, collisionY, collisionWidth, collisionHeight);
+        collider.setVisible(false); // Hide the collision rectangle
+        this.physics.add.existing(collider, true); // true = static body
+        this.houseColliders.push(collider);
+
+        // Make interactive
+        house.setInteractive({ useHandCursor: true });
+
+        // Hover effects
+        house.on('pointerover', () => {
+            house.setTint(0xffffaa);
+            this.tweens.add({
+                targets: house,
+                scaleX: scale * 1.05,
+                scaleY: scale * 1.05,
+                duration: 100,
+                ease: 'Quad.easeOut'
+            });
+        });
+
+        house.on('pointerout', () => {
+            house.clearTint();
+            this.tweens.add({
+                targets: house,
+                scaleX: scale,
+                scaleY: scale,
+                duration: 100,
+                ease: 'Quad.easeIn'
+            });
+        });
+
+        // Click handler - show "Coming soon" message
+        house.on('pointerdown', () => {
+            this.showToastMessage(`Coming soon...`, 0xf59e0b);
+        });
+    }
+
+    /**
+     * Setup collision between player and house colliders
+     * Must be called after player is created
+     */
+    private setupHouseCollisions() {
+        this.houseColliders.forEach(collider => {
+            this.physics.add.collider(this.player, collider);
         });
     }
 
@@ -1645,6 +1757,24 @@ export class TownSquare extends Scene {
         const factoryPos = tileToMiniMap(42, 28);
         const factory = this.add.text(factoryPos.x, factoryPos.y, '🏭', emojiStyle).setOrigin(0.5);
         this.miniMapContainer.add(factory);
+
+        // Houses - house emoji (smaller size for houses)
+        const houseStyle = { fontSize: '6px', resolution: 2 };
+        const housePositions = [
+            // Top row
+            { x: 16, y: 10 }, { x: 26, y: 10 }, { x: 36, y: 10 }, { x: 44, y: 10 },
+            // Left side
+            { x: 14, y: 24 }, { x: 14, y: 40 },
+            // Right side
+            { x: 46, y: 24 }, { x: 46, y: 40 },
+            // Bottom row
+            { x: 16, y: 50 }, { x: 26, y: 50 }, { x: 36, y: 50 }, { x: 44, y: 50 },
+        ];
+        housePositions.forEach(pos => {
+            const housePos = tileToMiniMap(pos.x, pos.y);
+            const house = this.add.text(housePos.x, housePos.y, '🏠', houseStyle).setOrigin(0.5);
+            this.miniMapContainer.add(house);
+        });
 
         // Player avatar (use character avatar image)
         const avatarKey = `${this.currentCharacterKey}-avatar`;

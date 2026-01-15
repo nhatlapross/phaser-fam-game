@@ -115,6 +115,11 @@ export class Preloader extends Scene
         this.load.image('square-lamp', 'objects/square/lamp.png');
         this.load.image('square-tree', 'objects/square/tree.png');
 
+        // Town Square houses (1-12)
+        for (let i = 1; i <= 12; i++) {
+            this.load.image(`house-${i}`, `objects/house/house-${i}.png`);
+        }
+
         // Objects
         this.load.spritesheet('plants-sheet', 'objects/plants.png', {
             frameWidth: 16,
