@@ -83,6 +83,11 @@ export class QuizManager extends BaseManager {
      * Handle quiz result event from WebSocket
      */
     private async onQuizResult(payload: QuizResultPayload): Promise<void> {
+        // Clear loading elements first
+        this.quizGameElements.forEach(el => {
+            if (el && el.destroy) el.destroy();
+        });
+        this.quizGameElements = [];
         
         if (payload.success && payload.result) {
             if (this.pendingQuizId) {
@@ -1072,7 +1077,7 @@ export class QuizManager extends BaseManager {
         this.scene.cameras.main.ignore(loadingOverlay);
         this.quizGameElements.push(loadingOverlay);
 
-        const loadingText = this.scene.add.text(screenWidth / 2, screenHeight / 2, 'Submitting...', {
+        const loadingText = this.scene.add.text(screenWidth / 2, screenHeight / 2, '⏳ Submitting...', {
             fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
@@ -1101,12 +1106,8 @@ export class QuizManager extends BaseManager {
             const emitted = quizSocketService.submitQuiz(submittedQuizId, wsAnswers);
             if (emitted) {
                 useWebSocket = true;
-                this.scene.time.delayedCall(500, () => {
-                    this.quizGameElements.forEach(el => {
-                        if (el && el.destroy) el.destroy();
-                    });
-                    this.quizGameElements = [];
-                });
+                // Loading will be cleared when onQuizResult is called via WebSocket
+                // Keep loading elements visible until result arrives
             }
         }
         
