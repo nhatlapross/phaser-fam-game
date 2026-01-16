@@ -19,6 +19,7 @@ export interface Quiz {
     rewardXp: number;
     rewardGold: number;
     rewardBadgeSlug: string | null;
+    isCompleted: boolean;
     userStatus: QuizUserStatus | null;
 }
 

@@ -483,11 +483,11 @@ export class QuickActionsManager extends BaseManager {
             return;
         }
 
-        // Filter out already attempted quizzes (userStatus !== null means user already attempted)
+        // Filter out already attempted quizzes (isCompleted or userStatus !== null means user already attempted)
         const submittedIds = this.quizManager.getSubmittedQuizIds();
         const attemptedCache = this.quizManager.getQuizAttemptedCache();
         const availableQuizzes = quizzes.filter(q =>
-            q.userStatus === null && !submittedIds.has(q.id) && !attemptedCache.get(q.id)
+            !q.isCompleted && q.userStatus === null && !submittedIds.has(q.id) && !attemptedCache.get(q.id)
         );
         const count = availableQuizzes.length;
 
