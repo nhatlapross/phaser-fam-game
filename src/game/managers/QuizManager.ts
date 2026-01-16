@@ -655,7 +655,7 @@ export class QuizManager extends BaseManager {
 
         // Quiz info
         const infoY = modalY + 10;
-        const info = this.scene.add.text(modalX, infoY, `📝 ${quiz.questionCount} Questions  ⏱️ ${quiz.timePerQuestion}s each`, {
+        const info = this.scene.add.text(modalX, infoY, `📝 ${quiz.questionCount} Questions`, {
             fontSize: '8px',
             fontFamily: 'PixelFont',
             color: '#8B7355',
@@ -825,6 +825,7 @@ export class QuizManager extends BaseManager {
         this.currentQuestions = quiz.questions.sort((a, b) => a.orderIndex - b.orderIndex);
         this.currentQuestionIndex = 0;
         this.userAnswers = [];
+        this.questionTimeLimit = quiz.timePerQuestion;
         this.timeRemaining = quiz.timePerQuestion;
         
         this.showQuestion();
@@ -886,8 +887,6 @@ export class QuizManager extends BaseManager {
         this.quizGameElements.push(progressText);
 
         // Timer
-        const currentQuiz = this.cachedQuizzes?.find(q => q.id === this.currentQuizId);
-        this.questionTimeLimit = currentQuiz?.timePerQuestion || 30;
         this.questionStartTime = Date.now();
         this.timeRemaining = this.questionTimeLimit;
         
