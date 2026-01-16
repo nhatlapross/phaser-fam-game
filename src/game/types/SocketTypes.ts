@@ -272,6 +272,7 @@ export interface QuizResultData {
     totalQuestions: number;
     xpEarned: number;
     goldEarned: number;
+    badgeEarned: string | null;
     isPerfect: boolean;
 }
 

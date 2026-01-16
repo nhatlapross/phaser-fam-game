@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
-import { QuizService, Quiz, QuizQuestion, QuizAnswer } from '../QuizService';
+import { QuizService, Quiz, QuizQuestion, QuizAnswer, QuizAttempt } from '../QuizService';
 import { GameDataService } from '../GameDataService';
 import { EventBus } from '../EventBus';
 import { QuizStartedPayload, QuizResultPayload } from '../types/SocketTypes';
@@ -20,6 +20,7 @@ export class QuizManager extends BaseManager {
     
     private quizModalOpen: boolean = false;
     private cachedQuizzes: Quiz[] | null = null;
+    private cachedQuizHistory: QuizAttempt[] | null = null;
     
     // Quiz gameplay state
     private currentQuizId: string | null = null;
@@ -168,6 +169,21 @@ export class QuizManager extends BaseManager {
     }
 
     /**
+     * Get badge image key based on badge slug
+     * Returns 'og-badge' for OverGuild related badges, 'ada-badge' for Cardano related
+     */
+    private getBadgeImageKey(badgeSlug: string): string | null {
+        const slugLower = badgeSlug.toLowerCase();
+        if (slugLower.includes('overguild') || slugLower.includes('og')) {
+            return 'og-badge';
+        }
+        if (slugLower.includes('cardano') || slugLower.includes('ada')) {
+            return 'ada-badge';
+        }
+        return null;
+    }
+
+    /**
      * Get cached quizzes
      */
     public getCachedQuizzes(): Quiz[] | null {
@@ -313,7 +329,8 @@ export class QuizManager extends BaseManager {
             const baseY = scrollAreaTop + 30 + index * cardSpacing;
             const cardWidth = 230;
             const cardX = modalX + 10;
-            const isSubmitted = this.submittedQuizIds.has(quiz.id);
+            // Check both local tracking and API userStatus for completed quizzes
+            const isSubmitted = this.submittedQuizIds.has(quiz.id) || quiz.userStatus !== null;
 
             // Card border
             const cardBorder = this.scene.add.rectangle(cardX, baseY, cardWidth + 3, cardHeight + 3, isSubmitted ? 0x666666 : 0x7c3aed);
@@ -376,25 +393,33 @@ export class QuizManager extends BaseManager {
             contentElements.push(quizName);
             (quizName as any).originalY = nameY;
 
-            // Event name
+            // Category and difficulty
             const eventNameY = baseY + 2;
-            const eventName = this.scene.add.text(nameX, eventNameY, `📍 ${quiz.event.name}`, {
+            const categoryText = this.scene.add.text(nameX, eventNameY, `📍 ${quiz.category} • ${quiz.difficulty}`, {
                 fontSize: '7px',
                 fontFamily: 'PixelFont',
                 color: '#8B7355',
                 resolution: 2
             });
-            eventName.setOrigin(0, 0.5);
-            eventName.setDepth(5304);
-            eventName.setMask(scrollMask);
-            this.scene.cameras.main.ignore(eventName);
-            this.quizModalElements.push(eventName);
-            contentElements.push(eventName);
-            (eventName as any).originalY = eventNameY;
+            categoryText.setOrigin(0, 0.5);
+            categoryText.setDepth(5304);
+            categoryText.setMask(scrollMask);
+            this.scene.cameras.main.ignore(categoryText);
+            this.quizModalElements.push(categoryText);
+            contentElements.push(categoryText);
+            (categoryText as any).originalY = eventNameY;
 
             // Rewards info
             const rewardY = baseY + 16;
-            const rewardText = this.scene.add.text(nameX, rewardY, `🏆 ${quiz.rewardXp} XP  💰 ${quiz.rewardGold} Gold`, {
+            let rewardTextContent = `🏆 ${quiz.rewardXp} XP  💰 ${quiz.rewardGold} Gold`;
+            
+            // Add badge text if no image available
+            const badgeImageKey = quiz.rewardBadgeSlug ? this.getBadgeImageKey(quiz.rewardBadgeSlug) : null;
+            if (quiz.rewardBadgeSlug && !badgeImageKey) {
+                rewardTextContent += `  🎖️`;
+            }
+            
+            const rewardText = this.scene.add.text(nameX, rewardY, rewardTextContent, {
                 fontSize: '7px',
                 fontFamily: 'PixelFont',
                 color: '#166534',
@@ -407,6 +432,36 @@ export class QuizManager extends BaseManager {
             this.quizModalElements.push(rewardText);
             contentElements.push(rewardText);
             (rewardText as any).originalY = rewardY;
+
+            // Badge image if available
+            if (badgeImageKey) {
+                const badgeX = nameX + rewardText.width + 8;
+                const badgeImage = this.scene.add.image(badgeX, rewardY, badgeImageKey);
+                badgeImage.setDisplaySize(14, 14);
+                badgeImage.setOrigin(0, 0.5);
+                badgeImage.setDepth(5304);
+                badgeImage.setMask(scrollMask);
+                this.scene.cameras.main.ignore(badgeImage);
+                this.quizModalElements.push(badgeImage);
+                contentElements.push(badgeImage);
+                (badgeImage as any).originalY = rewardY;
+                
+                // Add "Badge" text next to image
+                const badgeLabelX = badgeX + 16;
+                const badgeLabel = this.scene.add.text(badgeLabelX, rewardY, 'Badge', {
+                    fontSize: '7px',
+                    fontFamily: 'PixelFont',
+                    color: '#a855f7',
+                    resolution: 2
+                });
+                badgeLabel.setOrigin(0, 0.5);
+                badgeLabel.setDepth(5304);
+                badgeLabel.setMask(scrollMask);
+                this.scene.cameras.main.ignore(badgeLabel);
+                this.quizModalElements.push(badgeLabel);
+                contentElements.push(badgeLabel);
+                (badgeLabel as any).originalY = rewardY;
+            }
 
             // Questions count
             const questionsX = cardX + cardWidth / 2 - 25;
@@ -455,29 +510,34 @@ export class QuizManager extends BaseManager {
                 this.quizModalElements.push(completedBadge);
                 contentElements.push(completedBadge);
                 (completedBadge as any).originalY = baseY - 18;
+                
+                // Make completed quiz clickable to view history
+                cardBg.setInteractive({ useHandCursor: true });
             }
 
             // Hover effects
-            if (!isSubmitted) {
-                cardBg.on('pointerover', () => {
-                    cardBg.setFillStyle(0xE8D9C0);
-                    quizName.setColor('#a855f7');
-                });
-                cardBg.on('pointerout', () => {
-                    cardBg.setFillStyle(0xD4C4A8);
-                    quizName.setColor('#5D4037');
-                });
+            cardBg.on('pointerover', () => {
+                cardBg.setFillStyle(isSubmitted ? 0xB8B8B8 : 0xE8D9C0);
+                quizName.setColor(isSubmitted ? '#666666' : '#a855f7');
+            });
+            cardBg.on('pointerout', () => {
+                cardBg.setFillStyle(isSubmitted ? 0xA0A0A0 : 0xD4C4A8);
+                quizName.setColor('#5D4037');
+            });
 
-                let clickStartY = 0;
-                cardBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-                    clickStartY = pointer.y;
-                });
-                cardBg.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-                    if (Math.abs(pointer.y - clickStartY) < 10) {
+            let clickStartY = 0;
+            cardBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+                clickStartY = pointer.y;
+            });
+            cardBg.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+                if (Math.abs(pointer.y - clickStartY) < 10) {
+                    if (isSubmitted) {
+                        this.showQuizHistoryDetail(quiz);
+                    } else {
                         this.showQuizDetails(quiz);
                     }
-                });
-            }
+                }
+            });
         });
 
         // Scroll handling
@@ -619,10 +679,47 @@ export class QuizManager extends BaseManager {
         this.scene.cameras.main.ignore(rewards);
         this.quizModalElements.push(rewards);
 
-        // Check if already attempted
+        // Badge reward image if available
+        if (quiz.rewardBadgeSlug) {
+            const badgeImageKey = this.getBadgeImageKey(quiz.rewardBadgeSlug);
+            const badgeRewardY = modalY + 50;
+            
+            if (badgeImageKey) {
+                const badgeImage = this.scene.add.image(modalX - 30, badgeRewardY, badgeImageKey);
+                badgeImage.setDisplaySize(18, 18);
+                badgeImage.setDepth(5402);
+                this.scene.cameras.main.ignore(badgeImage);
+                this.quizModalElements.push(badgeImage);
+                
+                const badgeLabel = this.scene.add.text(modalX - 10, badgeRewardY, 'Badge Reward', {
+                    fontSize: '8px',
+                    fontFamily: 'PixelFont',
+                    color: '#a855f7',
+                    resolution: 2
+                });
+                badgeLabel.setOrigin(0, 0.5);
+                badgeLabel.setDepth(5402);
+                this.scene.cameras.main.ignore(badgeLabel);
+                this.quizModalElements.push(badgeLabel);
+            } else {
+                const badgeText = this.scene.add.text(modalX, badgeRewardY, `🎖️ Badge: ${quiz.rewardBadgeSlug}`, {
+                    fontSize: '8px',
+                    fontFamily: 'PixelFont',
+                    color: '#a855f7',
+                    resolution: 2
+                });
+                badgeText.setOrigin(0.5);
+                badgeText.setDepth(5402);
+                this.scene.cameras.main.ignore(badgeText);
+                this.quizModalElements.push(badgeText);
+            }
+        }
+
+        // Check if already attempted (userStatus !== null from API or local tracking)
         const isLocallySubmitted = this.submittedQuizIds.has(quiz.id);
         const isCachedAsAttempted = this.quizAttemptedCache.get(quiz.id) === true;
-        const isAttempted = isLocallySubmitted || isCachedAsAttempted;
+        const isAttemptedFromApi = quiz.userStatus !== null;
+        const isAttempted = isLocallySubmitted || isCachedAsAttempted || isAttemptedFromApi;
 
         // Start Quiz button
         const startBtn = this.scene.add.sprite(modalX + 10, modalY + modalHeight / 2 - 40, 'square-buttons', 6);
@@ -653,7 +750,7 @@ export class QuizManager extends BaseManager {
                 startBtnText.setText('🎮 Starting...');
                 startBtn.disableInteractive();
 
-                const quizDetail = await QuizService.getQuizByEvent(quiz.event.id);
+                const quizDetail = await QuizService.getQuizBySlug(quiz.slug);
 
                 if (!quizDetail || !quizDetail.quiz) {
                     this.callbacks.showToastMessage?.('Failed to load quiz', 0xef4444);
@@ -1040,15 +1137,425 @@ export class QuizManager extends BaseManager {
     }
 
     /**
-     * Show quiz result
+     * Show quiz history detail for a completed quiz
      */
-    private showQuizResult(result: { result: { score: number; correctAnswers: number; totalQuestions: number; xpEarned: number; goldEarned: number; isPerfect: boolean }; message: string }): void {
+    private async showQuizHistoryDetail(quiz: Quiz): Promise<void> {
+        // Fetch history if not cached
+        if (!this.cachedQuizHistory) {
+            const historyResponse = await QuizService.getQuizHistory();
+            if (historyResponse) {
+                this.cachedQuizHistory = historyResponse.attempts;
+            }
+        }
+
+        // Find the attempt for this quiz
+        const attempt = this.cachedQuizHistory?.find(a => a.quizId === quiz.id);
+        
+        if (!attempt) {
+            // Fallback to userStatus from quiz list if no history found
+            if (quiz.userStatus) {
+                this.showQuizHistoryFromUserStatus(quiz);
+            } else {
+                this.callbacks.showToastMessage?.('Could not load quiz history', 0xef4444);
+            }
+            return;
+        }
+
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+        const modalWidth = 280;
+        const modalHeight = 320;
+
+        // Overlay
+        const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.7);
+        overlay.setDepth(5400);
+        overlay.setInteractive();
+        this.scene.cameras.main.ignore(overlay);
+        this.quizModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.scene.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5401);
+        modalBg.setInteractive();
+        modalBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, e: Phaser.Types.Input.EventData) => {
+            e.stopPropagation();
+        });
+        this.scene.cameras.main.ignore(modalBg);
+        this.quizModalElements.push(modalBg);
+
+        modalBg.setScale(0);
+        this.scene.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        this.scene.time.delayedCall(100, () => {
+            this.createQuizHistoryContent(attempt, quiz, modalX, modalY, modalWidth, modalHeight);
+        });
+
+        overlay.on('pointerdown', () => this.closeQuizDetails());
+    }
+
+    /**
+     * Show quiz history from userStatus (fallback when history API fails)
+     */
+    private showQuizHistoryFromUserStatus(quiz: Quiz): void {
+        if (!quiz.userStatus) return;
+
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
         const modalWidth = 280;
         const modalHeight = 280;
+
+        // Overlay
+        const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.7);
+        overlay.setDepth(5400);
+        overlay.setInteractive();
+        this.scene.cameras.main.ignore(overlay);
+        this.quizModalElements.push(overlay);
+
+        // Modal background
+        const modalBg = this.scene.add.sprite(modalX, modalY, 'settings-panel', 1);
+        modalBg.setDisplaySize(modalWidth, modalHeight);
+        modalBg.setDepth(5401);
+        modalBg.setInteractive();
+        this.scene.cameras.main.ignore(modalBg);
+        this.quizModalElements.push(modalBg);
+
+        modalBg.setScale(0);
+        this.scene.tweens.add({
+            targets: modalBg,
+            scaleX: modalWidth / 125,
+            scaleY: modalHeight / 140,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+
+        this.scene.time.delayedCall(100, () => {
+            // Close button
+            const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
+            closeBtnBg.setDisplaySize(24, 24);
+            closeBtnBg.setDepth(5402);
+            closeBtnBg.setInteractive({ useHandCursor: true });
+            this.scene.cameras.main.ignore(closeBtnBg);
+            this.quizModalElements.push(closeBtnBg);
+
+            const closeText = this.scene.add.text(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'X', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2
+            });
+            closeText.setOrigin(0.5);
+            closeText.setDepth(5403);
+            closeText.setStroke('#5D4037', 1);
+            this.scene.cameras.main.ignore(closeText);
+            this.quizModalElements.push(closeText);
+
+            closeBtnBg.on('pointerdown', () => this.closeQuizDetails());
+            closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+            closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+
+            // Title
+            const isPerfect = quiz.userStatus!.score === 100;
+            const titleEmoji = isPerfect ? '🏆' : '✨';
+            const title = this.scene.add.text(modalX, modalY - modalHeight / 2 + 50, `${titleEmoji} ${quiz.title}`, {
+                fontSize: '11px',
+                fontFamily: 'PixelFont',
+                color: '#FFFFFF',
+                resolution: 2,
+                wordWrap: { width: modalWidth - 60 }
+            });
+            title.setOrigin(0.5);
+            title.setDepth(5402);
+            title.setStroke('#22c55e', 2);
+            this.scene.cameras.main.ignore(title);
+            this.quizModalElements.push(title);
+
+            // Score
+            const scoreText = this.scene.add.text(modalX, modalY - 30, `${quiz.userStatus!.score}%`, {
+                fontSize: '32px',
+                fontFamily: 'PixelFont',
+                color: isPerfect ? '#22c55e' : '#a855f7',
+                resolution: 2
+            });
+            scoreText.setOrigin(0.5);
+            scoreText.setDepth(5402);
+            this.scene.cameras.main.ignore(scoreText);
+            this.quizModalElements.push(scoreText);
+
+            const scoreLabel = this.scene.add.text(modalX, modalY + 5, 'Score', {
+                fontSize: '9px',
+                fontFamily: 'PixelFont',
+                color: '#8B7355',
+                resolution: 2
+            });
+            scoreLabel.setOrigin(0.5);
+            scoreLabel.setDepth(5402);
+            this.scene.cameras.main.ignore(scoreLabel);
+            this.quizModalElements.push(scoreLabel);
+
+            // Badge earned
+            if (quiz.userStatus!.badgeEarned) {
+                const badgeImageKey = this.getBadgeImageKey(quiz.userStatus!.badgeEarned);
+                
+                if (badgeImageKey) {
+                    const badgeImage = this.scene.add.image(modalX - 35, modalY + 40, badgeImageKey);
+                    badgeImage.setDisplaySize(20, 20);
+                    badgeImage.setDepth(5402);
+                    this.scene.cameras.main.ignore(badgeImage);
+                    this.quizModalElements.push(badgeImage);
+                    
+                    const badgeLabel = this.scene.add.text(modalX - 15, modalY + 40, 'Badge Earned', {
+                        fontSize: '9px',
+                        fontFamily: 'PixelFont',
+                        color: '#a855f7',
+                        resolution: 2
+                    });
+                    badgeLabel.setOrigin(0, 0.5);
+                    badgeLabel.setDepth(5402);
+                    this.scene.cameras.main.ignore(badgeLabel);
+                    this.quizModalElements.push(badgeLabel);
+                } else {
+                    const badgeText = this.scene.add.text(modalX, modalY + 40, `🎖️ Badge: ${quiz.userStatus!.badgeEarned}`, {
+                        fontSize: '9px',
+                        fontFamily: 'PixelFont',
+                        color: '#a855f7',
+                        resolution: 2
+                    });
+                    badgeText.setOrigin(0.5);
+                    badgeText.setDepth(5402);
+                    this.scene.cameras.main.ignore(badgeText);
+                    this.quizModalElements.push(badgeText);
+                }
+            }
+
+            // Completed label
+            const completedLabel = this.scene.add.text(modalX, modalY + 70, '✓ Completed', {
+                fontSize: '10px',
+                fontFamily: 'PixelFont',
+                color: '#22c55e',
+                resolution: 2
+            });
+            completedLabel.setOrigin(0.5);
+            completedLabel.setDepth(5402);
+            this.scene.cameras.main.ignore(completedLabel);
+            this.quizModalElements.push(completedLabel);
+        });
+
+        overlay.on('pointerdown', () => this.closeQuizDetails());
+    }
+
+    /**
+     * Create quiz history content
+     */
+    private createQuizHistoryContent(attempt: QuizAttempt, quiz: Quiz, modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
+        // Close button
+        const closeBtnBg = this.scene.add.sprite(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'square-buttons', 7);
+        closeBtnBg.setDisplaySize(24, 24);
+        closeBtnBg.setDepth(5402);
+        closeBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(closeBtnBg);
+        this.quizModalElements.push(closeBtnBg);
+
+        const closeText = this.scene.add.text(modalX + modalWidth / 2 - 25, modalY - modalHeight / 2 + 35, 'X', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        closeText.setOrigin(0.5);
+        closeText.setDepth(5403);
+        closeText.setStroke('#5D4037', 1);
+        this.scene.cameras.main.ignore(closeText);
+        this.quizModalElements.push(closeText);
+
+        closeBtnBg.on('pointerdown', () => this.closeQuizDetails());
+        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+
+        // Title
+        const isPerfect = attempt.score === 100;
+        const titleEmoji = isPerfect ? '🏆' : '✨';
+        const title = this.scene.add.text(modalX, modalY - modalHeight / 2 + 50, `${titleEmoji} ${attempt.quizTitle}`, {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2,
+            wordWrap: { width: modalWidth - 60 }
+        });
+        title.setOrigin(0.5);
+        title.setDepth(5402);
+        title.setStroke('#22c55e', 2);
+        this.scene.cameras.main.ignore(title);
+        this.quizModalElements.push(title);
+
+        // Score display
+        const scoreText = this.scene.add.text(modalX, modalY - 60, 
+            `${attempt.correctAnswers}/${attempt.totalQuestions}`, {
+            fontSize: '32px',
+            fontFamily: 'PixelFont',
+            color: isPerfect ? '#22c55e' : '#a855f7',
+            resolution: 2
+        });
+        scoreText.setOrigin(0.5);
+        scoreText.setDepth(5402);
+        this.scene.cameras.main.ignore(scoreText);
+        this.quizModalElements.push(scoreText);
+
+        const correctLabel = this.scene.add.text(modalX, modalY - 30, 'Correct Answers', {
+            fontSize: '9px',
+            fontFamily: 'PixelFont',
+            color: '#8B7355',
+            resolution: 2
+        });
+        correctLabel.setOrigin(0.5);
+        correctLabel.setDepth(5402);
+        this.scene.cameras.main.ignore(correctLabel);
+        this.quizModalElements.push(correctLabel);
+
+        // Score percentage
+        const percentText = this.scene.add.text(modalX, modalY - 5, `Score: ${attempt.score}%`, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: isPerfect ? '#22c55e' : '#5D4037',
+            resolution: 2
+        });
+        percentText.setOrigin(0.5);
+        percentText.setDepth(5402);
+        this.scene.cameras.main.ignore(percentText);
+        this.quizModalElements.push(percentText);
+
+        // Rewards earned section
+        const rewardsTitleY = modalY + 20;
+        const rewardsTitle = this.scene.add.text(modalX, rewardsTitleY, '🎁 Rewards Earned', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        rewardsTitle.setOrigin(0.5);
+        rewardsTitle.setDepth(5402);
+        rewardsTitle.setStroke('#5D4037', 1);
+        this.scene.cameras.main.ignore(rewardsTitle);
+        this.quizModalElements.push(rewardsTitle);
+
+        // XP and Gold earned
+        const rewardsY = modalY + 45;
+        const rewards = this.scene.add.text(modalX, rewardsY, 
+            `🏆 +${attempt.xpEarned} XP   💰 +${attempt.goldEarned} Gold`, {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#166534',
+            resolution: 2
+        });
+        rewards.setOrigin(0.5);
+        rewards.setDepth(5402);
+        this.scene.cameras.main.ignore(rewards);
+        this.quizModalElements.push(rewards);
+
+        // Badge earned (if any)
+        if (attempt.badgeEarned) {
+            const badgeY = modalY + 70;
+            const badgeImageKey = this.getBadgeImageKey(attempt.badgeEarned);
+            
+            if (badgeImageKey) {
+                // Show badge image
+                const badgeImage = this.scene.add.image(modalX - 35, badgeY, badgeImageKey);
+                badgeImage.setDisplaySize(20, 20);
+                badgeImage.setDepth(5402);
+                this.scene.cameras.main.ignore(badgeImage);
+                this.quizModalElements.push(badgeImage);
+                
+                const badgeLabel = this.scene.add.text(modalX - 15, badgeY, 'Badge Earned', {
+                    fontSize: '9px',
+                    fontFamily: 'PixelFont',
+                    color: '#a855f7',
+                    resolution: 2
+                });
+                badgeLabel.setOrigin(0, 0.5);
+                badgeLabel.setDepth(5402);
+                this.scene.cameras.main.ignore(badgeLabel);
+                this.quizModalElements.push(badgeLabel);
+            } else {
+                // Fallback to text
+                const badgeText = this.scene.add.text(modalX, badgeY, `🎖️ Badge: ${attempt.badgeEarned}`, {
+                    fontSize: '9px',
+                    fontFamily: 'PixelFont',
+                    color: '#a855f7',
+                    resolution: 2
+                });
+                badgeText.setOrigin(0.5);
+                badgeText.setDepth(5402);
+                this.scene.cameras.main.ignore(badgeText);
+                this.quizModalElements.push(badgeText);
+            }
+        }
+
+        // Completed date
+        const completedDate = new Date(attempt.completedAt);
+        const dateStr = completedDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        const dateY = modalY + (attempt.badgeEarned ? 95 : 75);
+        const dateText = this.scene.add.text(modalX, dateY, `📅 ${dateStr}`, {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#8B7355',
+            resolution: 2
+        });
+        dateText.setOrigin(0.5);
+        dateText.setDepth(5402);
+        this.scene.cameras.main.ignore(dateText);
+        this.quizModalElements.push(dateText);
+
+        // Close button at bottom
+        const closeBtn = this.scene.add.sprite(modalX, modalY + modalHeight / 2 - 40, 'square-buttons', 6);
+        closeBtn.setDisplaySize(100, 30);
+        closeBtn.setDepth(5402);
+        closeBtn.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(closeBtn);
+        this.quizModalElements.push(closeBtn);
+
+        const closeBtnText = this.scene.add.text(modalX, modalY + modalHeight / 2 - 40, 'Close', {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        closeBtnText.setOrigin(0.5);
+        closeBtnText.setDepth(5403);
+        closeBtnText.setStroke('#5D4037', 1);
+        this.scene.cameras.main.ignore(closeBtnText);
+        this.quizModalElements.push(closeBtnText);
+
+        closeBtn.on('pointerdown', () => this.closeQuizDetails());
+        closeBtn.on('pointerover', () => closeBtn.setTint(0xcccccc));
+        closeBtn.on('pointerout', () => closeBtn.clearTint());
+    }
+
+    /**
+     * Show quiz result
+     */
+    private showQuizResult(result: { result: { score: number; correctAnswers: number; totalQuestions: number; xpEarned: number; goldEarned: number; badgeEarned?: string | null; isPerfect: boolean }; message: string }): void {
+        const screenWidth = this.scene.scale.width;
+        const screenHeight = this.scene.scale.height;
+        const modalX = screenWidth / 2;
+        const modalY = screenHeight / 2;
+        const modalWidth = 280;
+        const hasBadge = result.result.badgeEarned;
+        const modalHeight = hasBadge ? 320 : 280;
 
         const overlay = this.scene.add.rectangle(screenWidth / 2, screenHeight / 2, screenWidth, screenHeight, 0x000000, 0.8);
         overlay.setDepth(5600);
@@ -1100,7 +1607,7 @@ export class QuizManager extends BaseManager {
         this.scene.cameras.main.ignore(correctLabel);
         this.quizGameElements.push(correctLabel);
 
-        const rewardsY = modalY + 20;
+        const rewardsY = modalY + 10;
         const rewards = this.scene.add.text(modalX + 10, rewardsY, 
             `🏆 +${result.result.xpEarned} XP   💰 +${result.result.goldEarned} Gold`, {
             fontSize: '11px',
@@ -1113,7 +1620,45 @@ export class QuizManager extends BaseManager {
         this.scene.cameras.main.ignore(rewards);
         this.quizGameElements.push(rewards);
 
-        const message = this.scene.add.text(modalX + 10, modalY + 55, result.message, {
+        // Badge earned (if any)
+        let badgeOffsetY = 0;
+        if (hasBadge) {
+            badgeOffsetY = 25;
+            const badgeY = modalY + 35;
+            const badgeImageKey = this.getBadgeImageKey(hasBadge);
+            
+            if (badgeImageKey) {
+                const badgeImage = this.scene.add.image(modalX - 25, badgeY, badgeImageKey);
+                badgeImage.setDisplaySize(20, 20);
+                badgeImage.setDepth(5602);
+                this.scene.cameras.main.ignore(badgeImage);
+                this.quizGameElements.push(badgeImage);
+                
+                const badgeLabel = this.scene.add.text(modalX - 5, badgeY, 'Badge Earned!', {
+                    fontSize: '9px',
+                    fontFamily: 'PixelFont',
+                    color: '#a855f7',
+                    resolution: 2
+                });
+                badgeLabel.setOrigin(0, 0.5);
+                badgeLabel.setDepth(5602);
+                this.scene.cameras.main.ignore(badgeLabel);
+                this.quizGameElements.push(badgeLabel);
+            } else {
+                const badgeText = this.scene.add.text(modalX + 10, badgeY, `🎖️ Badge: ${hasBadge}`, {
+                    fontSize: '9px',
+                    fontFamily: 'PixelFont',
+                    color: '#a855f7',
+                    resolution: 2
+                });
+                badgeText.setOrigin(0.5);
+                badgeText.setDepth(5602);
+                this.scene.cameras.main.ignore(badgeText);
+                this.quizGameElements.push(badgeText);
+            }
+        }
+
+        const message = this.scene.add.text(modalX + 10, modalY + 55 + badgeOffsetY, result.message, {
             fontSize: '8px',
             fontFamily: 'PixelFont',
             color: '#8B7355',
