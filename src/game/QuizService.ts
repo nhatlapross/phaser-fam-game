@@ -19,6 +19,7 @@ export interface Quiz {
     rewardXp: number;
     rewardGold: number;
     rewardBadgeSlug: string | null;
+    isCompleted: boolean;
     userStatus: QuizUserStatus | null;
 }
 
@@ -47,10 +48,20 @@ export interface QuizDetail {
     questions: QuizQuestion[];
 }
 
+export interface QuizAttemptDetail {
+    status: string;
+    score: number;
+    correctAnswers: number;
+    totalQuestions: number;
+    xpEarned: number;
+    goldEarned: number;
+    badgeEarned: string | null;
+}
+
 export interface QuizDetailResponse {
     quiz: QuizDetail;
     hasAttempted: boolean;
-    attempt: unknown | null;
+    attempt: QuizAttemptDetail | null;
 }
 
 export interface StartQuizResponse {

@@ -329,8 +329,8 @@ export class QuizManager extends BaseManager {
             const baseY = scrollAreaTop + 30 + index * cardSpacing;
             const cardWidth = 230;
             const cardX = modalX + 10;
-            // Check both local tracking and API userStatus for completed quizzes
-            const isSubmitted = this.submittedQuizIds.has(quiz.id) || quiz.userStatus !== null;
+            // Check both local tracking and API isCompleted/userStatus for completed quizzes
+            const isSubmitted = this.submittedQuizIds.has(quiz.id) || quiz.isCompleted || quiz.userStatus !== null;
 
             // Card border
             const cardBorder = this.scene.add.rectangle(cardX, baseY, cardWidth + 3, cardHeight + 3, isSubmitted ? 0x666666 : 0x7c3aed);
@@ -655,7 +655,7 @@ export class QuizManager extends BaseManager {
 
         // Quiz info
         const infoY = modalY + 10;
-        const info = this.scene.add.text(modalX, infoY, `📝 ${quiz.questionCount} Questions  ⏱️ ${quiz.timePerQuestion}s each`, {
+        const info = this.scene.add.text(modalX, infoY, `📝 ${quiz.questionCount} Questions`, {
             fontSize: '8px',
             fontFamily: 'PixelFont',
             color: '#8B7355',
@@ -715,10 +715,10 @@ export class QuizManager extends BaseManager {
             }
         }
 
-        // Check if already attempted (userStatus !== null from API or local tracking)
+        // Check if already attempted (isCompleted or userStatus !== null from API or local tracking)
         const isLocallySubmitted = this.submittedQuizIds.has(quiz.id);
         const isCachedAsAttempted = this.quizAttemptedCache.get(quiz.id) === true;
-        const isAttemptedFromApi = quiz.userStatus !== null;
+        const isAttemptedFromApi = quiz.isCompleted || quiz.userStatus !== null;
         const isAttempted = isLocallySubmitted || isCachedAsAttempted || isAttemptedFromApi;
 
         // Start Quiz button
@@ -825,6 +825,7 @@ export class QuizManager extends BaseManager {
         this.currentQuestions = quiz.questions.sort((a, b) => a.orderIndex - b.orderIndex);
         this.currentQuestionIndex = 0;
         this.userAnswers = [];
+        this.questionTimeLimit = quiz.timePerQuestion;
         this.timeRemaining = quiz.timePerQuestion;
         
         this.showQuestion();
@@ -886,8 +887,6 @@ export class QuizManager extends BaseManager {
         this.quizGameElements.push(progressText);
 
         // Timer
-        const currentQuiz = this.cachedQuizzes?.find(q => q.id === this.currentQuizId);
-        this.questionTimeLimit = currentQuiz?.timePerQuestion || 30;
         this.questionStartTime = Date.now();
         this.timeRemaining = this.questionTimeLimit;
         
