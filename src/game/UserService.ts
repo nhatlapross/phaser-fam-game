@@ -145,15 +145,9 @@ export class UserService {
                 // User not found
                 return null;
             } else {
-                console.error(
-                    "Error checking user:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error checking user:", error);
             return null;
         }
     }
@@ -213,15 +207,9 @@ export class UserService {
 
                 return userData;
             } else {
-                console.error(
-                    "Error registering user:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error registering user:", error);
             return null;
         }
     }
@@ -233,7 +221,6 @@ export class UserService {
     static async getUserProfile(): Promise<UserData | null> {
         const token = UserService.getAccessToken();
         if (!token) {
-            console.log("No access token available for fetching profile");
             return null;
         }
 
@@ -250,7 +237,6 @@ export class UserService {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('[UserService] getUserProfile API response - XP:', data.xp, 'Rep:', data.reputationScore);
 
                 // Get existing stored user to preserve wallet addresses and characterType
                 const existingUser = UserService.getStoredUser();
@@ -287,15 +273,9 @@ export class UserService {
 
                 return userData;
             } else {
-                console.error(
-                    "Error fetching user profile:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error fetching user profile:", error);
             return null;
         }
     }
@@ -308,7 +288,6 @@ export class UserService {
     static async updateUser(updates: { username?: string; avatar?: string; characterType?: number }): Promise<UserData | null> {
         const token = UserService.getAccessToken();
         if (!token) {
-            console.error("No access token available");
             return null;
         }
 
@@ -346,15 +325,9 @@ export class UserService {
                 }
                 return null;
             } else {
-                console.error(
-                    "Error updating user:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error updating user:", error);
             return null;
         }
     }

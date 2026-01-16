@@ -36,7 +36,6 @@ export class MissionService {
     static async getMissions(): Promise<Mission[] | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.error("No access token available");
             return null;
         }
 
@@ -55,15 +54,9 @@ export class MissionService {
                 const missions: Mission[] = await response.json();
                 return missions;
             } else {
-                console.error(
-                    "Error fetching missions:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error fetching missions:", error);
             return null;
         }
     }
@@ -77,7 +70,6 @@ export class MissionService {
     static async updateMissionProgress(missionId: string, progress: number): Promise<Mission | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.error("No access token available");
             return null;
         }
 
@@ -98,15 +90,9 @@ export class MissionService {
                 const mission: Mission = await response.json();
                 return mission;
             } else {
-                console.error(
-                    "Error updating mission progress:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error updating mission progress:", error);
             return null;
         }
     }
@@ -119,7 +105,6 @@ export class MissionService {
     static async claimMissionReward(missionId: string): Promise<Mission | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.error("No access token available");
             return null;
         }
 
@@ -138,15 +123,9 @@ export class MissionService {
                 const mission: Mission = await response.json();
                 return mission;
             } else {
-                console.error(
-                    "Error claiming mission reward:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error claiming mission reward:", error);
             return null;
         }
     }
@@ -160,7 +139,6 @@ export class MissionService {
     static async submitProof(missionId: string, proof: string): Promise<Mission | null> {
         const token = this.getAccessToken();
         if (!token) {
-            console.error("No access token available");
             return null;
         }
 
@@ -181,15 +159,9 @@ export class MissionService {
                 const mission: Mission = await response.json();
                 return mission;
             } else {
-                console.error(
-                    "Error submitting mission proof:",
-                    response.statusText,
-                    await response.text()
-                );
                 return null;
             }
         } catch (error) {
-            console.error("Network error submitting mission proof:", error);
             return null;
         }
     }

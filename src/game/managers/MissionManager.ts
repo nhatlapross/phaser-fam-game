@@ -42,7 +42,6 @@ export class MissionManager extends BaseManager {
         const missionSocketService = getMissionSocketService();
         
         if (!missionSocketService.isConnected()) {
-            console.log('[MissionManager] Auto-connecting MissionSocket...');
             missionSocketService.connect();
         }
     }
@@ -59,7 +58,6 @@ export class MissionManager extends BaseManager {
      * Handle mission updated event from WebSocket
      */
     private onMissionUpdated(payload: any): void {
-        console.log('[MissionManager] Mission updated via WebSocket:', payload);
         
         // Update cached missions with new data
         if (this.cachedMissions) {
@@ -71,7 +69,6 @@ export class MissionManager extends BaseManager {
                     progress: payload.progress ?? this.cachedMissions[index].progress,
                     proof: payload.proof ?? this.cachedMissions[index].proof,
                 };
-                console.log('[MissionManager] Updated cached mission:', this.cachedMissions[index]);
             }
         }
         
@@ -107,11 +104,9 @@ export class MissionManager extends BaseManager {
      * Handle mission claimed event from WebSocket
      */
     private async onMissionClaimed(payload: any): Promise<void> {
-        console.log('[MissionManager] Mission claimed via WebSocket:', payload);
         
         if (payload.success) {
             const missionUUID = this.pendingClaimMissionId;
-            console.log('[MissionManager] Pending claim mission UUID:', missionUUID);
             
             this.pendingClaimMissionId = null;
             
@@ -804,16 +799,16 @@ export class MissionManager extends BaseManager {
 
         // Description
         const description = this.scene.add.text(modalX + 15, modalY - modalHeight / 2 + 95, mission.description, {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#FFF8E1',
+            fontSize: '11px',
+            fontFamily: 'Roboto, Arial, sans-serif',
+            color: '#FFFFFF',
             resolution: 2,
             wordWrap: { width: modalWidth - 80 },
             align: 'center'
         });
         description.setOrigin(0.5, 0);
         description.setDepth(5402);
-        description.setStroke('#5D4037', 1);
+        description.setStroke('#000000', 3);
         this.scene.cameras.main.ignore(description);
         this.missionDetailElements.push(description);
 
@@ -1093,22 +1088,11 @@ export class MissionManager extends BaseManager {
         const { getMissionSocketService } = require('../MissionSocketService');
         const missionSocketService = getMissionSocketService();
         
-        this.pendingClaimMissionId = missionId;
-        
-        if (!missionSocketService.isConnected()) {
-            console.log('[MissionManager] MissionSocket not connected, attempting to connect...');
-            const connected = await this.waitForMissionSocketConnection(missionSocketService, 3000);
-            
-            if (connected) {
-                console.log('[MissionManager] MissionSocket connected successfully');
-            }
-        }
+        this.pendingClaimMissionId = missionId;   
         
         if (missionSocketService.isConnected()) {
-            console.log('[MissionManager] Claiming reward via WebSocket:', missionId);
             missionSocketService.claimReward(missionId);
         } else {
-            console.log('[MissionManager] WebSocket not connected, using REST API');
             this.pendingClaimMissionId = null;
             this.claimMissionRewardREST(missionId);
         }

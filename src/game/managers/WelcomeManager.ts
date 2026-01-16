@@ -283,6 +283,7 @@ export class WelcomeManager extends BaseManager {
         // const canClaim = badge.status === 'CAN_CLAIM' || badge.status === 'COMPLETED';
         const canClaim = badge.status === 'CAN_CLAIM';
         const isLocked = badge.status === 'LOCKED';
+        const isPending = badge.status === 'PENDING';
         const leftX = centerX - width / 2;
 
         // Badge row background - different colors based on status

@@ -33,10 +33,6 @@ export class CheckinManager extends BaseManager {
     public setStreakFromCache(status: StreakStatusResponse | null, history: StreakHistoryResponse | null): void {
         this.cachedStreakStatus = status;
         this.cachedStreakHistory = history;
-        console.log('CheckinManager: Streak data set from external cache', {
-            status: status ? 'loaded' : 'null',
-            historyCount: history?.checkins?.length ?? 0
-        });
         // Update notification icon visibility
         this.updateNotificationIcon();
     }
@@ -146,13 +142,11 @@ export class CheckinManager extends BaseManager {
 
         // Use cached data - show immediately if available
         if (this.cachedStreakStatus || this.cachedStreakHistory) {
-            console.log('CheckinManager: Using cached streak data');
             this.scene.time.delayedCall(100, () => {
                 this.createModalContent(modalX, modalY, modalWidth, modalHeight, this.cachedStreakStatus, this.cachedStreakHistory);
             });
         } else {
             // Show loading state immediately, then fetch data
-            console.log('CheckinManager: No cache, showing loading then fetching');
             const loadingText = this.scene.add.text(modalX, modalY, 'Loading...', {
                 fontSize: '12px',
                 fontFamily: 'PixelFont',
@@ -283,9 +277,7 @@ export class CheckinManager extends BaseManager {
                     checkedStreakDays.push(checkin.streakDay);
                 }
             });
-            console.log('Checked streak days from current cycle:', checkedStreakDays, '(currentStreak:', currentStreak, ')');
         } else {
-            console.log('No checked days - currentStreak is', currentStreak);
         }
 
         // Rewards configuration based on the image
@@ -415,7 +407,6 @@ export class CheckinManager extends BaseManager {
             });
 
             // Make next day's box clickable if can check in
-            console.log(`Day ${streakDay}: canCheckin=${canCheckin}, isNextDay=${isNextDay}, isChecked=${isChecked}, nextStreakDay=${nextStreakDay}`);
             if (isNextDay && !isChecked) {
                 dayBox.setInteractive({ useHandCursor: true });
                 dayBox.on('pointerover', () => dayBox.setTint(0xffff88));
@@ -612,6 +603,9 @@ export class CheckinManager extends BaseManager {
                 // Clear local cache
                 this.cachedStreakStatus = null;
                 this.cachedStreakHistory = null;
+
+                // Update notification icon immediately (like WellManager does)
+                this.updateNotificationIcon();
             } else {
                 const errorResult = result as { success: false; message?: string; error?: string };
                 this.showCheckinReward(errorResult.message || errorResult.error || 'Check-in failed!', 0xef4444);
@@ -854,6 +848,9 @@ export class CheckinManager extends BaseManager {
         // Clear cached data so fresh data is fetched when modal reopens
         this.cachedStreakStatus = null;
         this.cachedStreakHistory = null;
+
+        // Update notification icon immediately (like WellManager does)
+        this.updateNotificationIcon();
     }
 
     /**

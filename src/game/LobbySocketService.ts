@@ -87,14 +87,12 @@ export class LobbySocketService {
      */
     public connect(token?: string): void {
         if (this.socket?.connected) {
-            console.log('[LobbySocketService] Already connected');
             return;
         }
 
         // Get token from parameter or localStorage
         const authToken = token || this.getAccessToken();
         if (!authToken) {
-            console.warn('[LobbySocketService] No auth token available, skipping connection');
             return;
         }
 
@@ -102,7 +100,6 @@ export class LobbySocketService {
         
         // Connect to the /lobby namespace
         const socketUrl = `${LobbySocketService.API_BASE_URL}${LobbySocketService.SOCKET_NAMESPACE}`;
-        console.log('[LobbySocketService] Connecting to:', socketUrl);
 
         this.socket = io(socketUrl, {
             auth: {
@@ -117,7 +114,7 @@ export class LobbySocketService {
         });
 
         this.setupEventListeners();
-        this.setupDebugListeners();
+        //this.setupDebugListeners();
     }
 
     /**
@@ -125,7 +122,6 @@ export class LobbySocketService {
      */
     public disconnect(): void {
         if (this.socket) {
-            console.log('[LobbySocketService] Disconnecting...');
             this.socket.disconnect();
             this.socket = null;
             this.status = 'disconnected';
@@ -141,58 +137,47 @@ export class LobbySocketService {
 
         // Connection events
         this.socket.on(LOBBY_EVENTS.CONNECT, () => {
-            console.log('[LobbySocketService] ✅ Connected to /lobby namespace');
-            console.log('[LobbySocketService] Socket ID:', this.socket?.id);
             this.status = 'connected';
             this.reconnectAttempts = 0;
             EventBus.emit('lobby:connected');
         });
 
         this.socket.on(LOBBY_EVENTS.DISCONNECT, (reason) => {
-            console.log('[LobbySocketService] ❌ Disconnected:', reason);
             this.status = 'disconnected';
             EventBus.emit('lobby:disconnected', reason);
         });
 
         this.socket.on(LOBBY_EVENTS.CONNECT_ERROR, (error) => {
-            console.error('[LobbySocketService] ⚠️ Connection error:', error.message);
             this.status = 'error';
             this.reconnectAttempts++;
         });
 
         // Lobby events - Server -> Client
         this.socket.on(LOBBY_EVENTS.LOBBY_STATE, (payload: LobbyStatePayload) => {
-            console.log('👥 [LobbySocketService] RECEIVED lobby_state:', payload.length, 'users');
             EventBus.emit('lobby:state', payload);
         });
 
         this.socket.on(LOBBY_EVENTS.USER_JOINED, (payload: UserJoinedPayload) => {
-            console.log('➕ [LobbySocketService] RECEIVED user_joined:', payload.username);
             EventBus.emit('lobby:user_joined', payload);
         });
 
         this.socket.on(LOBBY_EVENTS.USER_LEFT, (payload: UserLeftPayload) => {
-            console.log('➖ [LobbySocketService] RECEIVED user_left:', payload.userId);
             EventBus.emit('lobby:user_left', payload);
         });
 
         this.socket.on(LOBBY_EVENTS.USER_MOVED, (payload: UserMovedPayload) => {
-            console.log('🚶 [LobbySocketService] RECEIVED user_moved:', payload.username, `(${payload.x}, ${payload.y})`);
             EventBus.emit('lobby:user_moved', payload);
         });
 
         this.socket.on(LOBBY_EVENTS.LOBBY_CHAT, (payload: LobbyChatPayload) => {
-            console.log('💬 [LobbySocketService] RECEIVED lobby_chat:', `[${payload.scope}] ${payload.username}: ${payload.message}`);
             EventBus.emit('lobby:chat', payload);
         });
 
         this.socket.on(LOBBY_EVENTS.EMOTE, (payload: EmoteReceivedPayload) => {
-            console.log('😀 [LobbySocketService] RECEIVED emote:', payload.userId, payload.emoteId);
             EventBus.emit('lobby:emote', payload);
         });
 
         this.socket.on(LOBBY_EVENTS.INTERACTION_EFFECT, (payload: InteractionEffectPayload) => {
-            console.log('⚡ [LobbySocketService] RECEIVED interaction_effect:', payload.sourceId, '->', payload.targetId, payload.action);
             EventBus.emit('lobby:interaction', payload);
         });
     }
@@ -204,19 +189,15 @@ export class LobbySocketService {
         if (!this.socket) return;
 
         this.socket.onAny((eventName: string, ...args: unknown[]) => {
-            console.log(`📡 [LobbySocketService] Incoming: "${eventName}"`, args);
         });
 
         this.socket.onAnyOutgoing((eventName: string, ...args: unknown[]) => {
-            console.log(`📤 [LobbySocketService] Outgoing: "${eventName}"`, args);
         });
 
         this.socket.io.on('reconnect', (attempt) => {
-            console.log('[LobbySocketService] 🔄 Reconnected after', attempt, 'attempts');
         });
 
         this.socket.io.on('reconnect_failed', () => {
-            console.error('[LobbySocketService] 🔄 Reconnection failed');
         });
     }
 
@@ -245,14 +226,12 @@ export class LobbySocketService {
      */
     public move(x: number, y: number, zone?: string): void {
         if (!this.socket?.connected) {
-            console.warn('[LobbySocketService] Cannot move, not connected');
             return;
         }
 
         const payload: MovePayload = { x, y };
         if (zone) payload.zone = zone;
         
-        console.log('🚶 [LobbySocketService] Emitting move:', payload);
         this.socket.emit(LOBBY_EVENTS.MOVE, payload);
     }
 
@@ -262,12 +241,10 @@ export class LobbySocketService {
      */
     public chatGlobal(message: string): void {
         if (!this.socket?.connected) {
-            console.warn('[LobbySocketService] Cannot chat, not connected');
             return;
         }
 
         const payload: ChatPayload = { message };
-        console.log('💬 [LobbySocketService] Emitting chat_global:', message);
         this.socket.emit(LOBBY_EVENTS.CHAT_GLOBAL, payload);
     }
 
@@ -277,12 +254,10 @@ export class LobbySocketService {
      */
     public chatProximity(message: string): void {
         if (!this.socket?.connected) {
-            console.warn('[LobbySocketService] Cannot chat, not connected');
             return;
         }
 
         const payload: ChatPayload = { message };
-        console.log('💬 [LobbySocketService] Emitting chat_proximity:', message);
         this.socket.emit(LOBBY_EVENTS.CHAT_PROXIMITY, payload);
     }
 
@@ -292,12 +267,10 @@ export class LobbySocketService {
      */
     public emote(emoteId: string): void {
         if (!this.socket?.connected) {
-            console.warn('[LobbySocketService] Cannot emote, not connected');
             return;
         }
 
         const payload: EmotePayload = { emoteId };
-        console.log('😀 [LobbySocketService] Emitting emote:', emoteId);
         this.socket.emit(LOBBY_EVENTS.EMOTE_SEND, payload);
     }
 
@@ -307,26 +280,11 @@ export class LobbySocketService {
      */
     public interact(targetId: string, action: string): void {
         if (!this.socket?.connected) {
-            console.warn('[LobbySocketService] Cannot interact, not connected');
             return;
         }
 
         const payload: InteractPayload = { targetId, action };
-        console.log('⚡ [LobbySocketService] Emitting interact:', targetId, action);
         this.socket.emit(LOBBY_EVENTS.INTERACT, payload);
-    }
-
-    /**
-     * Debug method: Log current connection state
-     */
-    public debugConnectionState(): void {
-        console.log('=== LobbySocketService Debug Info ===');
-        console.log('Status:', this.status);
-        console.log('Socket ID:', this.socket?.id);
-        console.log('Connected:', this.socket?.connected);
-        console.log('Namespace:', LobbySocketService.SOCKET_NAMESPACE);
-        console.log('URL:', `${LobbySocketService.API_BASE_URL}${LobbySocketService.SOCKET_NAMESPACE}`);
-        console.log('=====================================');
     }
 }
 

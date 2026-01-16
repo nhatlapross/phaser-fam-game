@@ -83,7 +83,6 @@ export class SoundManager extends BaseManager {
 
         // Check if sound exists
         if (!this.scene.cache.audio.exists(key)) {
-            console.warn(`Theme song '${key}' not found in cache`);
             return;
         }
 
@@ -101,9 +100,7 @@ export class SoundManager extends BaseManager {
             });
 
             this.currentTheme.play();
-            console.log(`Playing theme: ${key}`);
         } catch (error) {
-            console.error('Error playing theme:', error);
         }
     }
 
@@ -127,14 +124,12 @@ export class SoundManager extends BaseManager {
         const soundKey = this.getSoundKey(key);
 
         if (!this.scene.cache.audio.exists(soundKey)) {
-            console.warn(`Sound effect '${soundKey}' not found in cache`);
             return;
         }
 
         try {
             this.scene.sound.play(soundKey, { volume: this.sfxVolume });
         } catch (error) {
-            console.error('Error playing sound effect:', error);
         }
     }
 
@@ -168,7 +163,6 @@ export class SoundManager extends BaseManager {
             this.walkSound.play();
             this.isWalking = true;
         } catch (error) {
-            console.error('Error starting walk sound:', error);
         }
     }
 
@@ -199,7 +193,6 @@ export class SoundManager extends BaseManager {
 
         const soundKey = 'sfx-water';
         if (!this.scene.cache.audio.exists(soundKey)) {
-            console.warn(`Sound effect '${soundKey}' not found in cache`);
             return;
         }
 
@@ -215,7 +208,6 @@ export class SoundManager extends BaseManager {
                 }
             });
         } catch (error) {
-            console.error('Error playing water sound:', error);
         }
     }
 

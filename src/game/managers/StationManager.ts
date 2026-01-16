@@ -443,8 +443,6 @@ export class StationManager extends BaseManager {
      * Handle destination selection
      */
     private onDestinationSelect(destination: LocationDestination): void {
-        console.log(`Traveling to: ${destination.name}`);
-
         if (this.callbacks.showToastMessage) {
             this.callbacks.showToastMessage(`Traveling to ${destination.nameVi}...`, 0x4CAF50);
         }

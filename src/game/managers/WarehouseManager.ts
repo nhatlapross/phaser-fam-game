@@ -405,7 +405,6 @@ export class WarehouseManager extends BaseManager {
                 }
             })
             .catch(async (error) => {
-                console.error('Error moving to storage:', error);
                 // Rollback on error
                 await GameDataService.refreshBackpack();
                 this.callbacks.showToastMessage('Sync error!', 0xFF5252);
@@ -443,7 +442,6 @@ export class WarehouseManager extends BaseManager {
                 }
             })
             .catch(async (error) => {
-                console.error('Error moving to backpack:', error);
                 // Rollback on error
                 await GameDataService.refreshStorage();
                 this.callbacks.showToastMessage('Sync error!', 0xFF5252);

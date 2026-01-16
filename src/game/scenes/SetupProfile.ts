@@ -446,7 +446,6 @@ export class SetupProfile extends Scene {
                 this.continueButton.setAlpha(1);
             }
         } catch (error) {
-            console.error('Registration error:', error);
             this.showError('An error occurred. Please try again.');
             this.continueButton.setAlpha(1);
         }

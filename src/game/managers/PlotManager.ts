@@ -39,7 +39,6 @@ export class PlotManager extends BaseManager {
 
         // Can only buy the next plot in sequence
         if (plotIndex !== ownedPlotsCount) {
-            console.log('Must buy plots in order! Next plot to buy:', ownedPlotsCount);
             this.callbacks.showFloatingMessage(`Buy plot ${ownedPlotsCount + 1} first!`, tileX, tileY);
             return;
         }
@@ -320,14 +319,11 @@ export class PlotManager extends BaseManager {
         // Show success message
         this.callbacks.showFloatingMessage('Plot purchased!', tileX, tileY);
 
-        console.log('Purchased plot', plotIndex + 1);
-
         // 2. TRY WEBSOCKET FIRST - Buy land via WebSocket (fire-and-forget)
         const usedWebSocket = ShopService.buyLandWS();
         
         if (usedWebSocket) {
             // WebSocket sent - UI updates will come via land_update and action_success events
-            console.log('[PlotManager] Buy land sent via WebSocket');
             return;
         }
 
@@ -347,7 +343,6 @@ export class PlotManager extends BaseManager {
                 
                 this.callbacks.refreshProfileUI();
                 this.callbacks.showFloatingMessage(result?.message || 'Purchase failed!', tileX, tileY);
-                console.error('Failed to purchase plot:', result?.message);
             } else {
                 // SYNC with server data
                 await GameDataService.refreshAndUpdateUI();
@@ -363,7 +358,6 @@ export class PlotManager extends BaseManager {
             
             this.callbacks.refreshProfileUI();
             this.callbacks.showFloatingMessage('Network error!', tileX, tileY);
-            console.error('Network error purchasing plot:', error);
         }
     }
 

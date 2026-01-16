@@ -42,7 +42,6 @@ export class RedeemService {
     static async redeemCode(verificationCode: string, eventId: string = 'c91fef29-f5a4-4e74-b6ee-48bab97d95be'): Promise<RedeemResponse> {
         const token = RedeemService.getAccessToken();
         if (!token) {
-            console.log('No access token available for redeem code');
             return {
                 success: false,
                 message: 'Not authenticated'
@@ -67,7 +66,6 @@ export class RedeemService {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('Redeem code successful:', data);
                 return {
                     success: data.success !== false,
                     event: data.event,
@@ -76,14 +74,12 @@ export class RedeemService {
                 };
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                console.error('Error redeeming code:', response.statusText, errorData);
                 return {
                     success: false,
                     message: errorData.message || 'Invalid or expired code'
                 };
             }
         } catch (error) {
-            console.error('Network error redeeming code:', error);
             return {
                 success: false,
                 message: 'Network error. Please try again.'
@@ -99,7 +95,6 @@ export class RedeemService {
     static async offlineCheckIn(code: string): Promise<RedeemResponse> {
         const token = RedeemService.getAccessToken();
         if (!token) {
-            console.log('No access token available for offline check-in');
             return {
                 success: false,
                 message: 'Not authenticated'
@@ -121,7 +116,6 @@ export class RedeemService {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('Offline check-in successful:', data);
                 return {
                     success: data.success !== false,
                     event: data.event,
@@ -130,14 +124,12 @@ export class RedeemService {
                 };
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                console.error('Error offline check-in:', response.statusText, errorData);
                 return {
                     success: false,
                     message: errorData.message || 'Invalid or expired code'
                 };
             }
         } catch (error) {
-            console.error('Network error offline check-in:', error);
             return {
                 success: false,
                 message: 'Network error. Please try again.'

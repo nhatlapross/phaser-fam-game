@@ -6,7 +6,6 @@ import { mainnet, polygon, optimism, arbitrum } from '@reown/appkit/networks';
 export const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '';
 
 if (!projectId) {
-    console.warn('NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID is not set');
 }
 
 // Define networks

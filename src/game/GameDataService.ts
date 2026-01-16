@@ -13,7 +13,7 @@ import { EventService, GameEvent } from './EventService';
 import { StreakService, StreakStatusResponse, StreakHistoryResponse } from './StreakService';
 import { ShopService, GoldShopResponse, GemShopResponse, CashShopResponse } from './ShopService';
 import { InventoryService, StorageResponse, BackpackResponse } from './InventoryService';
-import { BadgeService, SoulboundToken } from './BadgeService';
+import { BadgeService, SoulboundToken, ApiBadge } from './BadgeService';
 import { PlantType } from './types/GameTypes';
 import { GameCache, CACHE_KEYS, CACHE_TTL } from './utils/GameCache';
 import { EventBus } from './EventBus';
@@ -80,6 +80,7 @@ export interface GameData {
     shop: ShopData;
     inventory: InventoryData;
     badges: SoulboundToken[];
+    allBadges: ApiBadge[];
     loadedAt: number;
 }
 
@@ -111,7 +112,6 @@ export class GameDataService {
         const token = UserService.getAccessToken();
 
         if (!token) {
-            console.log('No access token, returning empty game data');
             const emptyData: GameData = {
                 user: null,
                 garden: [],
@@ -126,6 +126,7 @@ export class GameDataService {
                 shop: { goldShop: null, gemShop: null, cashShop: null },
                 inventory: { storage: null, backpack: null },
                 badges: [],
+                allBadges: [],
                 loadedAt: Date.now()
             };
             cachedGameData = emptyData;
@@ -137,7 +138,6 @@ export class GameDataService {
             const localCache = GameCache.get<GameData>(CACHE_KEYS.GAME_DATA);
             if (localCache) {
                 const cacheAge = GameCache.getAge(CACHE_KEYS.GAME_DATA);
-                console.log(`[GameDataService] Found localStorage cache (age: ${GameCache.formatAge(cacheAge)})`);
 
                 // Update in-memory cache
                 cachedGameData = localCache;
@@ -145,15 +145,12 @@ export class GameDataService {
 
                 // If cache is stale, trigger background refresh
                 if (GameCache.isStale(CACHE_KEYS.GAME_DATA, CACHE_TTL.GAME_DATA)) {
-                    console.log('[GameDataService] Cache is stale, refreshing in background...');
                     this.fetchAndCacheInBackground();
                 }
 
                 return localCache;
             }
-            console.log('[GameDataService] No valid cache found, fetching from API...');
         } else {
-            console.log('[GameDataService] Force refresh requested, fetching from API...');
         }
 
         onProgress?.(10);
@@ -177,7 +174,8 @@ export class GameDataService {
             cashShopResult,
             storageResult,
             backpackResult,
-            badgesResult
+            badgesResult,
+            allBadgesResult
         ] = await Promise.allSettled([
             UserService.getUserProfile(),
             GardenService.getGarden(),
@@ -195,7 +193,8 @@ export class GameDataService {
             ShopService.getCashShop(),
             InventoryService.getStorage(),
             InventoryService.getBackpack(),
-            BadgeService.fetchSoulboundTokens()
+            BadgeService.fetchSoulboundTokens(),
+            BadgeService.getAllBadges()
         ]);
 
         onProgress?.(80);
@@ -222,9 +221,6 @@ export class GameDataService {
                 // Use the determined characterType
                 characterType,
             };
-            
-            console.log('[GameDataService] Merged user characterType:', characterType, 
-                '(stored:', storedUser?.characterType, ', profile:', profileUser.characterType, ')');
         } else if (storedUser) {
             mergedUser = storedUser;
         }
@@ -255,57 +251,42 @@ export class GameDataService {
                 backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null
             },
             badges: badgesResult.status === 'fulfilled' ? badgesResult.value : [],
+            allBadges: allBadgesResult.status === 'fulfilled' ? allBadgesResult.value : [],
             loadedAt: Date.now()
         };
 
         // Log any failures for debugging
         if (userResult.status === 'rejected') {
-            console.error('Failed to fetch user profile:', userResult.reason);
         }
         if (gardenResult.status === 'rejected') {
-            console.error('Failed to fetch garden:', gardenResult.reason);
         }
         if (seedsResult.status === 'rejected') {
-            console.error('Failed to fetch seeds:', seedsResult.reason);
         }
         if (fertilizersResult.status === 'rejected') {
-            console.error('Failed to fetch fertilizers:', fertilizersResult.reason);
         }
         if (fruitsResult.status === 'rejected') {
-            console.error('Failed to fetch fruits:', fruitsResult.reason);
         }
         if (currenciesResult.status === 'rejected') {
-            console.error('Failed to fetch currencies:', currenciesResult.reason);
         }
         if (missionsResult.status === 'rejected') {
-            console.error('Failed to fetch missions:', missionsResult.reason);
         }
         if (quizzesResult.status === 'rejected') {
-            console.error('Failed to fetch quizzes:', quizzesResult.reason);
         }
         if (eventsResult.status === 'rejected') {
-            console.error('Failed to fetch events:', eventsResult.reason);
         }
         if (streakStatusResult.status === 'rejected') {
-            console.error('Failed to fetch streak status:', streakStatusResult.reason);
         }
         if (streakHistoryResult.status === 'rejected') {
-            console.error('Failed to fetch streak history:', streakHistoryResult.reason);
         }
         if (goldShopResult.status === 'rejected') {
-            console.error('Failed to fetch gold shop:', goldShopResult.reason);
         }
         if (gemShopResult.status === 'rejected') {
-            console.error('Failed to fetch gem shop:', gemShopResult.reason);
         }
         if (cashShopResult.status === 'rejected') {
-            console.error('Failed to fetch cash shop:', cashShopResult.reason);
         }
         if (storageResult.status === 'rejected') {
-            console.error('Failed to fetch storage:', storageResult.reason);
         }
         if (backpackResult.status === 'rejected') {
-            console.error('Failed to fetch backpack:', backpackResult.reason);
         }
 
         onProgress?.(100);
@@ -315,26 +296,6 @@ export class GameDataService {
 
         // Save to localStorage for next visit
         this.saveToLocalStorage(gameData);
-
-        console.log('All game data loaded:', {
-            user: gameData.user?.username,
-            gardenPlots: gameData.garden.length,
-            seedTypes: gameData.seeds.length,
-            fertilizerTypes: gameData.fertilizers?.fertilizers?.length ?? 0,
-            fruitSlots: gameData.fruits.length,
-            gold: gameData.currencies.gold,
-            gem: gameData.currencies.gem,
-            missions: gameData.missions?.length ?? 0,
-            quizzes: gameData.quizzes?.length ?? 0,
-            events: gameData.events?.length ?? 0,
-            streakStatus: gameData.streak.status ? 'loaded' : 'null',
-            streakHistory: gameData.streak.history?.checkins?.length ?? 0,
-            goldShopItems: gameData.shop.goldShop?.items?.length ?? 0,
-            gemShopItems: gameData.shop.gemShop?.items?.length ?? 0,
-            cashShopItems: gameData.shop.cashShop?.items?.length ?? 0,
-            storageItems: gameData.inventory.storage?.storage?.length ?? 0,
-            backpackItems: gameData.inventory.backpack?.backpack?.length ?? 0
-        });
 
         return gameData;
     }
@@ -363,7 +324,6 @@ export class GameDataService {
     static clearCache(): void {
         cachedGameData = null;
         GameCache.remove(CACHE_KEYS.GAME_DATA);
-        console.log('[GameDataService] Cleared all caches');
     }
 
     // ============================================
@@ -376,7 +336,6 @@ export class GameDataService {
     private static saveToLocalStorage(data: GameData): void {
         const saved = GameCache.set(CACHE_KEYS.GAME_DATA, data, CACHE_TTL.GAME_DATA);
         if (saved) {
-            console.log('[GameDataService] Saved to localStorage');
         }
     }
 
@@ -403,12 +362,9 @@ export class GameDataService {
             cachedGameData = freshData;
             this.saveToLocalStorage(freshData);
 
-            console.log('[GameDataService] Background refresh completed');
-
             // Trigger UI update if callback is registered
             this.triggerUIUpdate();
         } catch (error) {
-            console.error('[GameDataService] Background refresh failed:', error);
             // Keep using stale cache - don't clear it
         }
     }
@@ -435,7 +391,8 @@ export class GameDataService {
             cashShopResult,
             storageResult,
             backpackResult,
-            badgesResult
+            badgesResult,
+            allBadgesResult
         ] = await Promise.allSettled([
             UserService.getUserProfile(),
             GardenService.getGarden(),
@@ -453,7 +410,8 @@ export class GameDataService {
             ShopService.getCashShop(),
             InventoryService.getStorage(),
             InventoryService.getBackpack(),
-            BadgeService.fetchSoulboundTokens()
+            BadgeService.fetchSoulboundTokens(),
+            BadgeService.getAllBadges()
         ]);
 
         // Extract results with fallbacks
@@ -500,6 +458,7 @@ export class GameDataService {
                 backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null
             },
             badges: badgesResult.status === 'fulfilled' ? badgesResult.value : [],
+            allBadges: allBadgesResult.status === 'fulfilled' ? allBadgesResult.value : [],
             loadedAt: Date.now()
         };
     }
@@ -531,9 +490,7 @@ export class GameDataService {
      * Useful when you know only certain data has changed
      */
     static async refreshUserProfile(): Promise<UserData | null> {
-        console.log('[GameDataService] refreshUserProfile called');
         const user = await UserService.getUserProfile();
-        console.log('[GameDataService] refreshUserProfile result - XP:', user?.xp, 'Rep:', user?.reputationScore);
         if (cachedGameData) {
             cachedGameData.user = user;
         }
@@ -679,6 +636,26 @@ export class GameDataService {
             cachedGameData.inventory = inventoryData;
         }
         return inventoryData;
+    }
+
+    static async refreshBadges(): Promise<{ badges: SoulboundToken[]; allBadges: ApiBadge[] }> {
+        const [badges, allBadges] = await Promise.all([
+            BadgeService.fetchSoulboundTokens(),
+            BadgeService.getAllBadges()
+        ]);
+        if (cachedGameData) {
+            cachedGameData.badges = badges;
+            cachedGameData.allBadges = allBadges;
+        }
+        return { badges, allBadges };
+    }
+
+    static async refreshAllBadges(): Promise<ApiBadge[]> {
+        const allBadges = await BadgeService.getAllBadges();
+        if (cachedGameData) {
+            cachedGameData.allBadges = allBadges;
+        }
+        return allBadges;
     }
 
     // ============================================
@@ -911,14 +888,10 @@ export class GameDataService {
      * Trigger UI update callback if registered
      */
     private static triggerUIUpdate(): void {
-        console.log('[GameDataService] triggerUIUpdate called, callback registered:', !!this.uiUpdateCallback);
         if (this.uiUpdateCallback) {
-            console.log('[GameDataService] Calling UI update callback...');
             this.uiUpdateCallback();
-            console.log('[GameDataService] UI update callback completed');
         }
         // Always emit EventBus event for any listeners (backup mechanism)
-        console.log('[GameDataService] Emitting gamedata:updated event');
         EventBus.emit('gamedata:updated');
     }
 
@@ -1008,8 +981,6 @@ export class GameDataService {
             cachedGameData.inventory.storage.summary.totalItems = storage.reduce((sum, item) => sum + item.amount, 0);
             cachedGameData.inventory.storage.summary.totalTypes = storage.length;
         }
-
-        console.log('[GameDataService] Storage cache updated from WebSocket:', storage.length, 'items');
     }
 
     /**
@@ -1071,7 +1042,5 @@ export class GameDataService {
             cachedGameData.inventory.backpack.capacity.used = totalUsed;
             cachedGameData.inventory.backpack.capacity.available = maxCapacity - totalUsed;
         }
-
-        console.log('[GameDataService] Backpack cache updated from WebSocket:', backpack.length, 'items');
     }
 }

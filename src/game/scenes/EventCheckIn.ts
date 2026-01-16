@@ -362,7 +362,6 @@ export class EventCheckIn extends Scene {
             if (event.status === 'live') {
                 this.startCheckIn(event);
             } else {
-                console.log('Reminder set for', event.name);
             }
         });
 
@@ -389,13 +388,10 @@ export class EventCheckIn extends Scene {
     }
 
     private showEventPreview(event: EventData) {
-        console.log('Show preview for', event.name);
         // Future: Show modal with event details
     }
 
     private startCheckIn(event: EventData) {
-        console.log('Starting check-in for', event.name);
-
         // Show check-in modal
         const modal = this.createCheckInModal(event);
 

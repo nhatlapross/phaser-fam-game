@@ -56,8 +56,6 @@ export function PassportProvider({ children }: PassportProviderProps) {
                 const idToken = await instance.getIdToken();
 
                 if (idToken) {
-                    console.log('Found existing session, restoring...');
-
                     // Get user info
                     try {
                         const userInfo = await instance.getUserInfo();
@@ -76,25 +74,20 @@ export function PassportProvider({ children }: PassportProviderProps) {
                         if (accounts && accounts.length > 0) {
                             setWalletAddress(accounts[0]);
                             setIsLoggedIn(true);
-                            console.log('Session restored, wallet:', accounts[0]);
                         } else {
                             // Try requesting accounts
                             const requestedAccounts = await provider.request({ method: 'eth_requestAccounts' });
                             if (requestedAccounts && requestedAccounts.length > 0) {
                                 setWalletAddress(requestedAccounts[0]);
                                 setIsLoggedIn(true);
-                                console.log('Session restored via request, wallet:', requestedAccounts[0]);
                             }
                         }
                     } catch (evmError) {
-                        console.log('EVM connection failed:', evmError);
                     }
                 } else {
-                    console.log('No existing session found');
                 }
             } catch (error) {
                 // User not logged in - this is expected
-                console.log('No existing session:', error);
             } finally {
                 setIsLoading(false);
             }
@@ -106,7 +99,6 @@ export function PassportProvider({ children }: PassportProviderProps) {
     // Standard login (shows all options)
     const login = useCallback(async (): Promise<string | null> => {
         if (!passportInst) {
-            console.error('Passport not initialized');
             return null;
         }
 
@@ -135,7 +127,6 @@ export function PassportProvider({ children }: PassportProviderProps) {
 
             return null;
         } catch (error) {
-            console.error('Login failed:', error);
             return null;
         } finally {
             setIsLoading(false);
@@ -145,7 +136,6 @@ export function PassportProvider({ children }: PassportProviderProps) {
     // Direct Google login
     const loginWithGoogle = useCallback(async (): Promise<string | null> => {
         if (!passportInst) {
-            console.error('Passport not initialized');
             return null;
         }
 
@@ -179,7 +169,6 @@ export function PassportProvider({ children }: PassportProviderProps) {
 
             return null;
         } catch (error) {
-            console.error('Google login failed:', error);
             return null;
         } finally {
             setIsLoading(false);
@@ -195,7 +184,6 @@ export function PassportProvider({ children }: PassportProviderProps) {
         try {
             await passportInst.logout();
         } catch (error) {
-            console.error('Logout error:', error);
         } finally {
             setIsLoggedIn(false);
             setWalletAddress(null);

@@ -31,7 +31,7 @@ export class ProfileManager extends BaseManager {
     private fileInput: HTMLInputElement | null = null;
     
     // Tab system
-    private activeTab: 'profile' | 'vouchers' | 'badges' = 'profile';
+    private activeTab: 'profile' | 'vouchers' | 'badges' | 'equipment' = 'profile';
     private tabElements: Phaser.GameObjects.GameObject[] = [];
     private profileContentElements: Phaser.GameObjects.GameObject[] = [];
     private voucherManager: NFTVoucherManager | null = null;
@@ -88,7 +88,6 @@ export class ProfileManager extends BaseManager {
         // Use GameDataService (pre-fetched data) as primary source, fallback to localStorage
         const cachedData = GameDataService.getCachedData();
         const user = cachedData?.user || UserService.getStoredUser();
-        console.log('[ProfileManager] createProfileUI - XP:', user?.xp, 'Rep:', user?.reputationScore);
         if (!user) return;
 
         const screenWidth = this.scene.scale.width;
@@ -313,7 +312,7 @@ export class ProfileManager extends BaseManager {
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
-        const modalWidth = 300;
+        const modalWidth = 320;
         const modalHeight = 380;
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
@@ -395,153 +394,80 @@ export class ProfileManager extends BaseManager {
     }
 
     /**
-     * Create tab buttons for Profile, Vouchers, and Badges
+     * Create tab buttons for Profile, Vouchers, Badges, and Equipment
      */
     private createTabs(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
         const tabY = modalY - modalHeight / 2 + 75;
-        const tabWidth = 75;
+        const tabWidth = 58;
         const tabHeight = 26;
-        const tabSpacing = 8;
-        const totalWidth = tabWidth * 3 + tabSpacing * 2;
+        const tabSpacing = 6;
+        const totalWidth = tabWidth * 4 + tabSpacing * 3;
         const startX = modalX - totalWidth / 2 + tabWidth / 2 + 10;
 
-        // Profile tab
-        const profileTabBg = this.scene.add.rectangle(
-            startX,
-            tabY,
-            tabWidth,
-            tabHeight,
-            this.activeTab === 'profile' ? 0x5D4037 : 0x3E2723,
-            1
-        );
-        profileTabBg.setStrokeStyle(2, this.activeTab === 'profile' ? 0xFFD700 : 0x5D4037);
-        profileTabBg.setDepth(5102);
-        profileTabBg.setInteractive({ useHandCursor: true });
-        this.scene.cameras.main.ignore(profileTabBg);
-        this.tabElements.push(profileTabBg);
+        const tabs = [
+            { key: 'profile', label: '👤 Profile' },
+            { key: 'vouchers', label: '🎁 Vouchers' },
+            { key: 'badges', label: '🏅 Badges' },
+            { key: 'equipment', label: '⚔️ Equip' }
+        ];
 
-        const profileTabText = this.scene.add.text(
-            startX,
-            tabY,
-            '👤 Profile',
-            {
-                fontSize: '9px',
-                fontFamily: 'PixelFont',
-                color: this.activeTab === 'profile' ? '#FFD700' : '#BCAAA4',
-                resolution: 2
-            }
-        );
-        profileTabText.setOrigin(0.5);
-        profileTabText.setDepth(5103);
-        this.scene.cameras.main.ignore(profileTabText);
-        this.tabElements.push(profileTabText);
+        const tabBgs: Phaser.GameObjects.Rectangle[] = [];
 
-        // Vouchers tab
-        const vouchersTabBg = this.scene.add.rectangle(
-            startX + tabWidth + tabSpacing,
-            tabY,
-            tabWidth,
-            tabHeight,
-            this.activeTab === 'vouchers' ? 0x5D4037 : 0x3E2723,
-            1
-        );
-        vouchersTabBg.setStrokeStyle(2, this.activeTab === 'vouchers' ? 0xFFD700 : 0x5D4037);
-        vouchersTabBg.setDepth(5102);
-        vouchersTabBg.setInteractive({ useHandCursor: true });
-        this.scene.cameras.main.ignore(vouchersTabBg);
-        this.tabElements.push(vouchersTabBg);
+        tabs.forEach((tab, index) => {
+            const tabX = startX + index * (tabWidth + tabSpacing);
+            const isActive = this.activeTab === tab.key;
 
-        const vouchersTabText = this.scene.add.text(
-            startX + tabWidth + tabSpacing,
-            tabY,
-            '🎁 Vouchers',
-            {
-                fontSize: '9px',
-                fontFamily: 'PixelFont',
-                color: this.activeTab === 'vouchers' ? '#FFD700' : '#BCAAA4',
-                resolution: 2
-            }
-        );
-        vouchersTabText.setOrigin(0.5);
-        vouchersTabText.setDepth(5103);
-        this.scene.cameras.main.ignore(vouchersTabText);
-        this.tabElements.push(vouchersTabText);
+            // Tab background
+            const tabBg = this.scene.add.rectangle(
+                tabX,
+                tabY,
+                tabWidth,
+                tabHeight,
+                isActive ? 0x5D4037 : 0x3E2723,
+                1
+            );
+            tabBg.setStrokeStyle(2, isActive ? 0xFFD700 : 0x5D4037);
+            tabBg.setDepth(5102);
+            tabBg.setInteractive({ useHandCursor: true });
+            this.scene.cameras.main.ignore(tabBg);
+            this.tabElements.push(tabBg);
+            tabBgs.push(tabBg);
 
-        // Badges tab
-        const badgesTabBg = this.scene.add.rectangle(
-            startX + (tabWidth + tabSpacing) * 2,
-            tabY,
-            tabWidth,
-            tabHeight,
-            this.activeTab === 'badges' ? 0x5D4037 : 0x3E2723,
-            1
-        );
-        badgesTabBg.setStrokeStyle(2, this.activeTab === 'badges' ? 0xFFD700 : 0x5D4037);
-        badgesTabBg.setDepth(5102);
-        badgesTabBg.setInteractive({ useHandCursor: true });
-        this.scene.cameras.main.ignore(badgesTabBg);
-        this.tabElements.push(badgesTabBg);
+            // Tab text
+            const tabText = this.scene.add.text(
+                tabX,
+                tabY,
+                tab.label,
+                {
+                    fontSize: '8px',
+                    fontFamily: 'PixelFont',
+                    color: isActive ? '#FFD700' : '#BCAAA4',
+                    resolution: 2
+                }
+            );
+            tabText.setOrigin(0.5);
+            tabText.setDepth(5103);
+            this.scene.cameras.main.ignore(tabText);
+            this.tabElements.push(tabText);
 
-        const badgesTabText = this.scene.add.text(
-            startX + (tabWidth + tabSpacing) * 2,
-            tabY,
-            '🏅 Badges',
-            {
-                fontSize: '9px',
-                fontFamily: 'PixelFont',
-                color: this.activeTab === 'badges' ? '#FFD700' : '#BCAAA4',
-                resolution: 2
-            }
-        );
-        badgesTabText.setOrigin(0.5);
-        badgesTabText.setDepth(5103);
-        this.scene.cameras.main.ignore(badgesTabText);
-        this.tabElements.push(badgesTabText);
+            // Tab click handler
+            tabBg.on('pointerdown', () => {
+                if (this.activeTab !== tab.key) {
+                    this.activeTab = tab.key as any;
+                    this.refreshModalContent(modalX, modalY, modalWidth, modalHeight);
+                }
+            });
+            tabBg.on('pointerover', () => {
+                if (this.activeTab !== tab.key) tabBg.setFillStyle(0x4E342E, 1);
+            });
+            tabBg.on('pointerout', () => {
+                if (this.activeTab !== tab.key) tabBg.setFillStyle(0x3E2723, 1);
+            });
 
-        // Tab click handlers
-        profileTabBg.on('pointerdown', () => {
-            if (this.activeTab !== 'profile') {
-                this.activeTab = 'profile';
-                this.refreshModalContent(modalX, modalY, modalWidth, modalHeight);
-            }
-        });
-        profileTabBg.on('pointerover', () => {
-            if (this.activeTab !== 'profile') profileTabBg.setFillStyle(0x4E342E, 1);
-        });
-        profileTabBg.on('pointerout', () => {
-            if (this.activeTab !== 'profile') profileTabBg.setFillStyle(0x3E2723, 1);
-        });
-
-        vouchersTabBg.on('pointerdown', () => {
-            if (this.activeTab !== 'vouchers') {
-                this.activeTab = 'vouchers';
-                this.refreshModalContent(modalX, modalY, modalWidth, modalHeight);
-            }
-        });
-        vouchersTabBg.on('pointerover', () => {
-            if (this.activeTab !== 'vouchers') vouchersTabBg.setFillStyle(0x4E342E, 1);
-        });
-        vouchersTabBg.on('pointerout', () => {
-            if (this.activeTab !== 'vouchers') vouchersTabBg.setFillStyle(0x3E2723, 1);
-        });
-
-        badgesTabBg.on('pointerdown', () => {
-            if (this.activeTab !== 'badges') {
-                this.activeTab = 'badges';
-                this.refreshModalContent(modalX, modalY, modalWidth, modalHeight);
-            }
-        });
-        badgesTabBg.on('pointerover', () => {
-            if (this.activeTab !== 'badges') badgesTabBg.setFillStyle(0x4E342E, 1);
-        });
-        badgesTabBg.on('pointerout', () => {
-            if (this.activeTab !== 'badges') badgesTabBg.setFillStyle(0x3E2723, 1);
-        });
-
-        // Animate tabs
-        [profileTabBg, profileTabText, vouchersTabBg, vouchersTabText, badgesTabBg, badgesTabText].forEach(el => {
-            (el as any).setAlpha(0);
-            this.scene.tweens.add({ targets: el, alpha: 1, duration: 150 });
+            // Animate
+            tabBg.setAlpha(0);
+            tabText.setAlpha(0);
+            this.scene.tweens.add({ targets: [tabBg, tabText], alpha: 1, duration: 150 });
         });
     }
 
@@ -616,6 +542,8 @@ export class ProfileManager extends BaseManager {
             this.createVouchersContent(modalX, contentStartY, modalWidth, contentHeight);
         } else if (this.activeTab === 'badges') {
             this.createBadgesTabContent(modalX, contentStartY, modalWidth, contentHeight);
+        } else if (this.activeTab === 'equipment') {
+            this.createEquipmentContent(modalX, contentStartY, modalWidth, contentHeight, user);
         }
     }
 
@@ -756,7 +684,6 @@ export class ProfileManager extends BaseManager {
         this.voucherManager = new NFTVoucherManager(this.scene, {
             showToastMessage: (text, color) => {
                 // Simple toast - can be enhanced
-                console.log(`[Voucher] ${text}`);
             }
         });
 
@@ -765,9 +692,9 @@ export class ProfileManager extends BaseManager {
 
         // Calculate center of content area
         // contentStartY is the TOP of the content area
-        const centerY = contentStartY + contentHeight / 2;
-        const listWidth = modalWidth - 60;
-        const listHeight = contentHeight - 20;
+        const centerY = contentStartY + contentHeight / 2 - 25;
+        const listWidth = modalWidth - 70;
+        const listHeight = contentHeight - 48;
 
         // Create voucher list
         const voucherElements = this.voucherManager.createVoucherList(
@@ -801,15 +728,20 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(loadingText);
         this.profileContentElements.push(loadingText);
 
-        // Fetch all badges from API
-        this.badgesLoading = true;
-        try {
-            this.allBadges = await BadgeService.getAllBadges();
-        } catch (error) {
-            console.error('[ProfileManager] Error fetching badges:', error);
-            this.allBadges = [];
+        // Use cached badges from GameDataService (pre-loaded during game init)
+        const cachedData = GameDataService.getCachedData();
+        this.allBadges = cachedData?.allBadges ?? [];
+
+        // If no cached data, fetch from API as fallback
+        if (this.allBadges.length === 0) {
+            this.badgesLoading = true;
+            try {
+                this.allBadges = await BadgeService.getAllBadges();
+            } catch (error) {
+                this.allBadges = [];
+            }
+            this.badgesLoading = false;
         }
-        this.badgesLoading = false;
 
         // Guard: Check if modal was closed while loading
         if (!this.isOpen || this.activeTab !== 'badges') {
@@ -1139,6 +1071,164 @@ export class ProfileManager extends BaseManager {
     }
 
     /**
+     * Create equipment tab content
+     * Shows character in center with 6 equipment slots around it and 2 red slots at bottom
+     */
+    private createEquipmentContent(modalX: number, contentStartY: number, modalWidth: number, contentHeight: number, user: any): void {
+        const centerX = modalX;
+        const centerY = contentStartY + contentHeight / 2 - 35; // Move up
+
+        // Character display in center (larger)
+        const characterType = user?.characterType || 1;
+        const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
+        const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
+
+        const characterSprite = this.scene.add.sprite(centerX, centerY, characterKey, 0);
+        characterSprite.setDisplaySize(88, 88); // 10% larger
+        characterSprite.setDepth(5102);
+        characterSprite.setAlpha(0);
+        this.scene.cameras.main.ignore(characterSprite);
+        this.profileContentElements.push(characterSprite);
+        this.scene.tweens.add({ targets: characterSprite, alpha: 1, duration: 150 });
+
+        // Equipment slot configuration
+        const slotSize = 36;
+        const sideOffset = modalWidth / 2 - 45; // Move left slots more to the right
+        const verticalSpacing = 44;
+
+        // Equipment slot positions: 3 on left, 3 on right (near modal edges)
+        const slotPositions = [
+            // Left side (top to bottom): Head, Body, Feet
+            { x: centerX - sideOffset + 20, y: centerY - verticalSpacing, type: 'head', name: 'Head' },
+            { x: centerX - sideOffset + 20, y: centerY, type: 'body', name: 'Body' },
+            { x: centerX - sideOffset + 20, y: centerY + verticalSpacing, type: 'feet', name: 'Feet' },
+            // Right side (top to bottom): Weapon, Shield, Accessory
+            { x: centerX + sideOffset, y: centerY - verticalSpacing, type: 'weapon', name: 'Weapon' },
+            { x: centerX + sideOffset, y: centerY, type: 'shield', name: 'Shield' },
+            { x: centerX + sideOffset, y: centerY + verticalSpacing, type: 'accessory', name: 'Accessory' },
+        ];
+
+        // Create regular equipment slots (empty with silhouette)
+        slotPositions.forEach((slot, index) => {
+            this.createEquipmentSlot(slot.x, slot.y, slotSize, slot.type, slot.name, 0x3E2723, index, false);
+        });
+
+        // Red slots at bottom (special/locked slots)
+        const redSlotY = centerY + verticalSpacing * 2 + 5;
+        const redSlotSpacing = 55;
+
+        const redSlots = [
+            { x: centerX - redSlotSpacing / 2, y: redSlotY, type: 'special', name: 'Special 1' },
+            { x: centerX + redSlotSpacing / 2, y: redSlotY, type: 'special', name: 'Special 2' },
+        ];
+
+        redSlots.forEach((slot, index) => {
+            this.createEquipmentSlot(slot.x, slot.y, slotSize, slot.type, slot.name, 0x5C1010, index + 6, true);
+        });
+
+        // Title text
+        const titleText = this.scene.add.text(centerX, contentStartY + 5, '⚔️ Equipment', {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFD700',
+            resolution: 2
+        });
+        titleText.setOrigin(0.5);
+        titleText.setDepth(5102);
+        titleText.setStroke('#5D4037', 2);
+        titleText.setAlpha(0);
+        this.scene.cameras.main.ignore(titleText);
+        this.profileContentElements.push(titleText);
+        this.scene.tweens.add({ targets: titleText, alpha: 1, duration: 150 });
+
+        // Coming soon hint
+        const hintText = this.scene.add.text(centerX, redSlotY + slotSize / 2 + 12, 'Tap slots to equip items', {
+            fontSize: '8px',
+            fontFamily: 'PixelFont',
+            color: '#9CA3AF',
+            resolution: 2
+        });
+        hintText.setOrigin(0.5);
+        hintText.setDepth(5102);
+        hintText.setAlpha(0);
+        this.scene.cameras.main.ignore(hintText);
+        this.profileContentElements.push(hintText);
+        this.scene.tweens.add({ targets: hintText, alpha: 1, duration: 150, delay: 100 });
+    }
+
+    /**
+     * Create a single equipment slot with silhouette icon
+     */
+    private createEquipmentSlot(x: number, y: number, size: number, slotType: string, name: string, bgColor: number, index: number, isLocked: boolean): void {
+        // Slot background (darker, inner shadow effect)
+        const slotBg = this.scene.add.rectangle(x, y, size, size, bgColor, 1);
+        slotBg.setStrokeStyle(2, isLocked ? 0x8B0000 : 0x2D1F1A);
+        slotBg.setDepth(5102);
+        slotBg.setAlpha(0);
+        slotBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(slotBg);
+        this.profileContentElements.push(slotBg);
+
+        // Silhouette icon (dark shadow showing item type)
+        const silhouetteIcon = this.getSilhouetteIcon(slotType);
+        const slotIcon = this.scene.add.text(x, y, silhouetteIcon, {
+            fontSize: '16px',
+            resolution: 2
+        });
+        slotIcon.setOrigin(0.5);
+        slotIcon.setDepth(5103);
+        slotIcon.setAlpha(0);
+        slotIcon.setTint(0x1A1A1A); // Dark silhouette tint
+        this.scene.cameras.main.ignore(slotIcon);
+        this.profileContentElements.push(slotIcon);
+
+        // Animate in
+        this.scene.tweens.add({
+            targets: slotBg,
+            alpha: 1,
+            duration: 150,
+            delay: index * 30
+        });
+        this.scene.tweens.add({
+            targets: slotIcon,
+            alpha: 0.3, // Semi-transparent silhouette
+            duration: 150,
+            delay: index * 30
+        });
+
+        // Click handler - show coming soon toast
+        slotBg.on('pointerdown', () => {
+            this.callbacks.showToastMessage?.(`🚧 ${name} - Coming soon...`, 0xf59e0b);
+        });
+
+        // Hover effects
+        slotBg.on('pointerover', () => {
+            slotBg.setStrokeStyle(2, 0xFFD700);
+            slotIcon.setAlpha(0.5);
+        });
+        slotBg.on('pointerout', () => {
+            slotBg.setStrokeStyle(2, isLocked ? 0x8B0000 : 0x2D1F1A);
+            slotIcon.setAlpha(0.3);
+        });
+    }
+
+    /**
+     * Get silhouette icon based on slot type
+     */
+    private getSilhouetteIcon(slotType: string): string {
+        switch (slotType) {
+            case 'head': return '🎩';
+            case 'body': return '👕';
+            case 'feet': return '👟';
+            case 'weapon': return '⚔️';
+            case 'shield': return '🛡️';
+            case 'accessory': return '💍';
+            case 'special': return '🔒';
+            default: return '❓';
+        }
+    }
+
+    /**
      * Show tooltip for API badge
      */
     private showApiBadgeTooltip(x: number, y: number, badge: ApiBadge): void {
@@ -1408,8 +1498,8 @@ export class ProfileManager extends BaseManager {
             
             this.closeBadgeClaimForm();
             
-            // Reload badges from API and refresh tab
-            this.allBadges = await BadgeService.getAllBadges();
+            // Reload badges from API, update cache, and refresh tab
+            this.allBadges = await GameDataService.refreshAllBadges();
             this.refreshBadgesTab();
         } else {
             this.callbacks.showToastMessage?.(`❌ ${result.message}`, 0xef4444);
@@ -1889,7 +1979,6 @@ export class ProfileManager extends BaseManager {
                             }
                         });
                     } catch {
-                        console.log('Copy failed');
                     }
                 });
                 copyBtn.on('pointerover', () => copyBtn.setColor('#86efac'));

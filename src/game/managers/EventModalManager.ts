@@ -326,6 +326,7 @@ export class EventModalManager extends BaseManager {
             const checkInBtnX = cardX + cardWidth / 2 - 40;
             const btnColor = isClaimed ? 0x60a5fa : 0x22c55e;      // blue vs green
             const btnStrokeColor = isClaimed ? 0x3b82f6 : 0x166534;
+            const btnStrokeColorStr = isClaimed ? '#3b82f6' : '#166534';
             const checkInBtn = this.scene.add.rectangle(checkInBtnX, baseY, 55, 24, btnColor);
             checkInBtn.setDepth(5304);
             checkInBtn.setStrokeStyle(1, btnStrokeColor);
@@ -346,7 +347,7 @@ export class EventModalManager extends BaseManager {
             });
             checkInText.setOrigin(0.5);
             checkInText.setDepth(5305);
-            checkInText.setStroke(btnStrokeColor, 1);
+            checkInText.setStroke(btnStrokeColorStr, 1);
             checkInText.setMask(scrollMask);
             this.scene.cameras.main.ignore(checkInText);
             this.modalElements.push(checkInText);

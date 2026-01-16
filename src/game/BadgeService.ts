@@ -107,7 +107,6 @@ export class BadgeService {
     static async getAllBadges(): Promise<ApiBadge[]> {
         const token = UserService.getAccessToken();
         if (!token) {
-            console.log('No access token available for badges');
             return [];
         }
 
@@ -121,14 +120,11 @@ export class BadgeService {
 
             if (response.ok) {
                 const data: ApiBadge[] = await response.json();
-                console.log('Badges loaded:', data.length);
                 return data;
             } else {
-                console.error('Error fetching badges:', response.statusText);
                 return [];
             }
         } catch (error) {
-            console.error('Network error fetching badges:', error);
             return [];
         }
     }
@@ -167,7 +163,6 @@ export class BadgeService {
                 };
             }
         } catch (error) {
-            console.error('Error claiming badge:', error);
             return { success: false, message: 'Network error. Please try again.' };
         }
     }
@@ -243,7 +238,6 @@ export class BadgeService {
     static async fetchSoulboundTokens(): Promise<SoulboundToken[]> {
         const accessToken = UserService.getAccessToken();
         if (!accessToken) {
-            console.log('No access token available for soulbound tokens');
             return this.getCachedTokens();
         }
 
@@ -259,14 +253,11 @@ export class BadgeService {
                 const data: SoulboundTokensResponse = await response.json();
                 const tokens = data.tokens || [];
                 this.saveTokens(tokens);
-                console.log('Soulbound tokens fetched:', tokens.length);
                 return tokens;
             } else {
-                console.error('Error fetching soulbound tokens:', response.statusText);
                 return this.getCachedTokens();
             }
         } catch (error) {
-            console.error('Network error fetching soulbound tokens:', error);
             return this.getCachedTokens();
         }
     }

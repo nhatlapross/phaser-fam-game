@@ -63,21 +63,18 @@ export class GameCache {
 
             // Check version
             if (entry.version !== CACHE_VERSION) {
-                console.log(`[GameCache] Version mismatch for ${key}, clearing cache`);
                 localStorage.removeItem(key);
                 return null;
             }
 
             // Check expiration
             if (Date.now() > entry.expiresAt) {
-                console.log(`[GameCache] Cache expired for ${key}`);
                 localStorage.removeItem(key);
                 return null;
             }
 
             return entry.data;
         } catch (error) {
-            console.error(`[GameCache] Error reading ${key}:`, error);
             localStorage.removeItem(key);
             return null;
         }
@@ -98,10 +95,8 @@ export class GameCache {
             };
 
             localStorage.setItem(key, JSON.stringify(entry));
-            console.log(`[GameCache] Saved ${key} (TTL: ${ttl / 1000}s)`);
             return true;
         } catch (error) {
-            console.error(`[GameCache] Error saving ${key}:`, error);
             // If quota exceeded, try to clear old caches
             if (error instanceof DOMException && error.name === 'QuotaExceededError') {
                 this.clearAll();
@@ -158,7 +153,6 @@ export class GameCache {
     static remove(key: string): void {
         if (!this.isAvailable()) return;
         localStorage.removeItem(key);
-        console.log(`[GameCache] Removed ${key}`);
     }
 
     /**
@@ -170,7 +164,6 @@ export class GameCache {
         Object.values(CACHE_KEYS).forEach(key => {
             localStorage.removeItem(key);
         });
-        console.log('[GameCache] Cleared all caches');
     }
 
     /**

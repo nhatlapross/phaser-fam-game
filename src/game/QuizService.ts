@@ -138,7 +138,6 @@ export class QuizService {
     static async getActiveQuizzes(): Promise<Quiz[]> {
         const token = QuizService.getAccessToken();
         if (!token) {
-            console.log('No access token available for quizzes');
             return [];
         }
 
@@ -155,14 +154,11 @@ export class QuizService {
 
             if (response.ok) {
                 const data: QuizListResponse = await response.json();
-                console.log('Active quizzes loaded:', data.quizzes?.length || 0);
                 return data.quizzes || [];
             } else {
-                console.error('Error fetching quizzes:', response.statusText);
                 return [];
             }
         } catch (error) {
-            console.error('Network error fetching quizzes:', error);
             return [];
         }
     }
@@ -173,7 +169,6 @@ export class QuizService {
     static async getQuizBySlug(slug: string): Promise<QuizDetailResponse | null> {
         const token = QuizService.getAccessToken();
         if (!token) {
-            console.log('No access token available');
             return null;
         }
 
@@ -190,14 +185,11 @@ export class QuizService {
 
             if (response.ok) {
                 const data: QuizDetailResponse = await response.json();
-                console.log('Quiz detail loaded:', data.quiz?.title);
                 return data;
             } else {
-                console.error('Error fetching quiz detail:', response.statusText);
                 return null;
             }
         } catch (error) {
-            console.error('Network error fetching quiz detail:', error);
             return null;
         }
     }
@@ -208,7 +200,6 @@ export class QuizService {
     static async startQuiz(quizId: string): Promise<StartQuizResponse> {
         const token = QuizService.getAccessToken();
         if (!token) {
-            console.log('No access token available');
             return { success: false, error: 'Not authenticated' };
         }
 
@@ -226,17 +217,14 @@ export class QuizService {
             const data = await response.json().catch(() => ({}));
             
             if (response.ok) {
-                console.log('Quiz started:', data.attemptId);
                 return data;
             } else {
-                console.error('Error starting quiz:', response.statusText, data);
                 return { 
                     success: false, 
                     error: data.message || data.error || 'Failed to start quiz' 
                 };
             }
         } catch (error) {
-            console.error('Network error starting quiz:', error);
             return { success: false, error: 'Network error. Please try again.' };
         }
     }
@@ -247,7 +235,6 @@ export class QuizService {
     static async submitQuiz(quizId: string, answers: QuizAnswer[]): Promise<SubmitQuizResponse | null> {
         const token = QuizService.getAccessToken();
         if (!token) {
-            console.log('No access token available');
             return null;
         }
 
@@ -266,15 +253,12 @@ export class QuizService {
 
             if (response.ok) {
                 const data: SubmitQuizResponse = await response.json();
-                console.log('Quiz submitted:', data.result);
                 return data;
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                console.error('Error submitting quiz:', response.statusText, errorData);
                 return null;
             }
         } catch (error) {
-            console.error('Network error submitting quiz:', error);
             return null;
         }
     }

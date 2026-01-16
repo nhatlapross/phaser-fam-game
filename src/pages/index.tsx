@@ -7,7 +7,7 @@ export default function Home() {
     return (
         <>
             <Head>
-                <title>Farming Game</title>
+                <title>The Valley</title>
                 <meta name="description" content="A farming game built with Phaser 3 and Next.js" />
                 {/* Mobile viewport - prevent zoom, enable fullscreen */}
                 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />

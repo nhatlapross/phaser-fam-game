@@ -51,8 +51,6 @@ export class PlantUpdateHandler {
 
         EventBus.on('socket:plant_update', plantUpdateHandler as (...args: unknown[]) => void);
         this.eventListeners.push({ event: 'socket:plant_update', callback: plantUpdateHandler as (...args: unknown[]) => void });
-
-        console.log('[PlantUpdateHandler] Started listening for plant updates');
     }
 
     /**
@@ -63,7 +61,6 @@ export class PlantUpdateHandler {
             EventBus.off(event, callback);
         });
         this.eventListeners = [];
-        console.log('[PlantUpdateHandler] Stopped listening for plant updates');
     }
 
     /**
@@ -71,8 +68,6 @@ export class PlantUpdateHandler {
      */
     private handlePlantUpdate(payload: PlantUpdatePayload): void {
         const { landId, plant } = payload;
-        
-        console.log(`[PlantUpdateHandler] Processing update for land ${landId}:`, plant);
 
         // Find the tile by landId
         const farmLandStates = this.callbacks.getFarmLandStates();
@@ -88,7 +83,6 @@ export class PlantUpdateHandler {
         }
 
         if (!targetTileKey || !oldState) {
-            console.warn(`[PlantUpdateHandler] Land ${landId} not found in farm states`);
             return;
         }
 
@@ -119,8 +113,6 @@ export class PlantUpdateHandler {
             isNowWithered,
             plant,
         });
-
-        console.log(`[PlantUpdateHandler] Updated tile ${targetTileKey} successfully`);
     }
 
     /**
@@ -197,14 +189,12 @@ export class PlantUpdateHandler {
 
         // 1. Hydration Update - Water splash effect
         if (newWaterBalance > oldWaterBalance) {
-            console.log(`[PlantUpdateHandler] Water increased: ${oldWaterBalance} -> ${newWaterBalance}`);
             this.callbacks.showWaterSplashEffect?.(x, y);
             this.callbacks.showToastMessage?.('💧 Plant watered!', 0x2196F3);
         }
 
         // 2. Growth Stage Change - Level up effect
         if (oldStage && oldStage !== newStage) {
-            console.log(`[PlantUpdateHandler] Stage changed: ${oldStage} -> ${newStage}`);
             this.callbacks.showGrowthEffect?.(x, y);
             
             if (plant.isHarvestable) {
@@ -216,17 +206,14 @@ export class PlantUpdateHandler {
 
         // 3. Withering state change
         if (!wasWithered && isNowWithered) {
-            console.log(`[PlantUpdateHandler] Plant started withering`);
             this.callbacks.showWitherEffect?.(x, y);
             this.callbacks.showToastMessage?.('⚠️ Plant is withering!', 0xFFC107);
         } else if (wasWithered && !isNowWithered) {
-            console.log(`[PlantUpdateHandler] Plant recovered from withering`);
             this.callbacks.showToastMessage?.('💚 Plant recovered!', 0x4CAF50);
         }
 
         // 4. Death
         if (newStage === 'DEAD' && oldStage !== 'DEAD') {
-            console.log(`[PlantUpdateHandler] Plant died`);
             this.callbacks.showToastMessage?.('💀 Plant died!', 0xE74C3C);
         }
 

@@ -53,7 +53,6 @@ export class FruitService {
     static async getFruitInventory(): Promise<{ type: PlantType; count: number }[]> {
         const token = UserService.getAccessToken();
         if (!token) {
-            console.log("No access token available for fetching fruit inventory");
             return [];
         }
 
@@ -86,19 +85,11 @@ export class FruitService {
                         }
                     }
                 }
-
-                console.log('Fruit inventory fetched:', result);
                 return result;
             } else {
-                console.error(
-                    "Error fetching fruit inventory:",
-                    response.statusText,
-                    await response.text()
-                );
                 return [];
             }
         } catch (error) {
-            console.error("Network error fetching fruit inventory:", error);
             return [];
         }
     }
@@ -128,7 +119,6 @@ export class FruitService {
             }
             return 0;
         } catch (error) {
-            console.error("Error fetching gold balance:", error);
             return 0;
         }
     }
@@ -158,7 +148,6 @@ export class FruitService {
             }
             return 0;
         } catch (error) {
-            console.error("Error fetching ruby balance:", error);
             return 0;
         }
     }
@@ -192,7 +181,6 @@ export class FruitService {
             }
             return { gold: 0, gem: 0 };
         } catch (error) {
-            console.error("Error fetching currency balances:", error);
             return { gold: 0, gem: 0 };
         }
     }

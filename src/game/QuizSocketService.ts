@@ -89,14 +89,12 @@ export class QuizSocketService {
      */
     public connect(token?: string): void {
         if (this.socket?.connected) {
-            console.log('[QuizSocketService] Already connected');
             return;
         }
 
         // Get token from parameter or localStorage
         const authToken = token || this.getAccessToken();
         if (!authToken) {
-            console.warn('[QuizSocketService] No token available, skipping connection');
             return;
         }
 
@@ -104,8 +102,6 @@ export class QuizSocketService {
         
         // Connect to the /quiz namespace with token as query param
         const socketUrl = `${QuizSocketService.API_BASE_URL}${QuizSocketService.SOCKET_NAMESPACE}`;
-        console.log('[QuizSocketService] Connecting to:', socketUrl);
-        console.log('[QuizSocketService] Token (first 20 chars):', authToken.substring(0, 20) + '...');
 
         this.socket = io(socketUrl, {
             query: {
@@ -120,7 +116,7 @@ export class QuizSocketService {
         });
 
         this.setupEventListeners();
-        this.setupDebugListeners();
+        //this.setupDebugListeners();
     }
 
     /**
@@ -128,7 +124,6 @@ export class QuizSocketService {
      */
     public disconnect(): void {
         if (this.socket) {
-            console.log('[QuizSocketService] Disconnecting...');
             this.socket.disconnect();
             this.socket = null;
             this.status = 'disconnected';
@@ -144,43 +139,30 @@ export class QuizSocketService {
 
         // Connection events
         this.socket.on(QUIZ_SOCKET_EVENTS.CONNECT, () => {
-            console.log('[QuizSocketService] ✅ Connected successfully to /quiz namespace');
-            console.log('[QuizSocketService] Socket ID:', this.socket?.id);
             this.status = 'connected';
             this.reconnectAttempts = 0;
             EventBus.emit('quiz_socket:connected');
         });
 
         this.socket.on(QUIZ_SOCKET_EVENTS.DISCONNECT, (reason) => {
-            console.log('[QuizSocketService] ❌ Disconnected:', reason);
             this.status = 'disconnected';
             EventBus.emit('quiz_socket:disconnected', reason);
         });
 
         this.socket.on(QUIZ_SOCKET_EVENTS.CONNECT_ERROR, (error) => {
-            console.error('[QuizSocketService] ⚠️ Connection error:', error.message);
             this.status = 'error';
             this.reconnectAttempts++;
 
             if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-                console.error('[QuizSocketService] Max reconnection attempts reached');
             }
         });
 
         // Quiz events - Server -> Client
         this.socket.on(QUIZ_SOCKET_EVENTS.STARTED, (payload: QuizStartedPayload) => {
-            console.log('🎯 [QuizSocketService] RECEIVED quiz:started:', payload);
-            if (payload.quiz) {
-                console.log(`🎯 [QuizSocketService] Quiz: ${payload.quiz.title}, Questions: ${payload.quiz.totalQuestions}, Time/Q: ${payload.quiz.timePerQuestion}s`);
-            }
             EventBus.emit('quiz_socket:started', payload);
         });
 
         this.socket.on(QUIZ_SOCKET_EVENTS.RESULT, (payload: QuizResultPayload) => {
-            console.log('🏆 [QuizSocketService] RECEIVED quiz:result:', payload);
-            if (payload.result) {
-                console.log(`🏆 [QuizSocketService] Score: ${payload.result.score}, Correct: ${payload.result.correctAnswers}/${payload.result.totalQuestions}, XP: ${payload.result.xpEarned}, Gold: ${payload.result.goldEarned}`);
-            }
             EventBus.emit('quiz_socket:result', payload);
         });
     }
@@ -192,19 +174,15 @@ export class QuizSocketService {
         if (!this.socket) return;
 
         this.socket.onAny((eventName: string, ...args: unknown[]) => {
-            console.log(`📡 [QuizSocketService] Incoming event: "${eventName}"`, args);
         });
 
         this.socket.onAnyOutgoing((eventName: string, ...args: unknown[]) => {
-            console.log(`📤 [QuizSocketService] Outgoing event: "${eventName}"`, args);
         });
 
         this.socket.io.on('reconnect', (attempt) => {
-            console.log('[QuizSocketService] 🔄 Reconnected after', attempt, 'attempts');
         });
 
         this.socket.io.on('reconnect_failed', () => {
-            console.error('[QuizSocketService] 🔄 Reconnection failed permanently');
         });
     }
 
@@ -236,12 +214,10 @@ export class QuizSocketService {
      */
     public startQuiz(quizId: string): boolean {
         if (!this.socket?.connected) {
-            console.warn('[QuizSocketService] Cannot start quiz, socket not connected');
             return false;
         }
 
         const payload: QuizStartPayload = { quizId };
-        console.log('🎯 [QuizSocketService] Emitting quiz:start:', payload);
         this.socket.emit(QUIZ_SOCKET_EVENTS.START, payload);
         return true;
     }
@@ -256,27 +232,12 @@ export class QuizSocketService {
      */
     public submitQuiz(quizId: string, answers: QuizAnswerSubmit[]): boolean {
         if (!this.socket?.connected) {
-            console.warn('[QuizSocketService] Cannot submit quiz, socket not connected');
             return false;
         }
 
         const payload: QuizSubmitPayload = { quizId, answers };
-        console.log('📝 [QuizSocketService] Emitting quiz:submit:', payload);
         this.socket.emit(QUIZ_SOCKET_EVENTS.SUBMIT, payload);
         return true;
-    }
-
-    /**
-     * Debug method: Log current connection state
-     */
-    public debugConnectionState(): void {
-        console.log('=== QuizSocketService Debug Info ===');
-        console.log('Status:', this.status);
-        console.log('Socket ID:', this.socket?.id);
-        console.log('Connected:', this.socket?.connected);
-        console.log('Namespace:', QuizSocketService.SOCKET_NAMESPACE);
-        console.log('URL:', `${QuizSocketService.API_BASE_URL}${QuizSocketService.SOCKET_NAMESPACE}`);
-        console.log('====================================');
     }
 }
 

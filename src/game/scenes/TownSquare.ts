@@ -16,7 +16,6 @@ import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacte
 export class TownSquare extends Scene {
     private player!: Phaser.Physics.Arcade.Sprite;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-    private wasdKeys!: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
 
     // World configuration
     private readonly TILE_SIZE = 16;
@@ -143,6 +142,9 @@ export class TownSquare extends Scene {
     private currentCharacterKey: string = DEFAULT_CHARACTER;
     private pKey!: Phaser.Input.Keyboard.Key;
 
+    // House colliders for collision with player
+    private houseColliders: Phaser.GameObjects.Rectangle[] = [];
+
     constructor() {
         super('TownSquare');
     }
@@ -165,7 +167,6 @@ export class TownSquare extends Scene {
         // Create station using StationManager (with Square as current location)
         this.stationManager = new StationManager(this, {
             onNavigate: (sceneKey, navData) => {
-                console.log(`Navigate to: ${sceneKey}`);
                 // Stop all sounds before scene transition
                 this.soundManager?.destroy();
                 this.time.delayedCall(500, () => {
@@ -183,6 +184,9 @@ export class TownSquare extends Scene {
 
         // Create player
         this.createPlayer();
+
+        // Setup house collisions (must be after player is created)
+        this.setupHouseCollisions();
 
         // Setup main camera
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
@@ -316,7 +320,6 @@ export class TownSquare extends Scene {
         const squareTiles = this.map.addTilesetImage('square', 'square-tileset');
 
         if (!squareTiles) {
-            console.error('Failed to load square tileset');
             return;
         }
 
@@ -324,7 +327,6 @@ export class TownSquare extends Scene {
         this.groundLayer = this.map.createBlankLayer('Ground', squareTiles) as Phaser.Tilemaps.TilemapLayer;
 
         if (!this.groundLayer) {
-            console.error('Failed to create ground layer');
             return;
         }
 
@@ -425,6 +427,9 @@ export class TownSquare extends Scene {
         this.createTrees();
         this.createLamps();
         this.createChairs();
+
+        // Add interactive houses around the square
+        this.createHouses();
     }
 
     private createDecoration(key: string, tileX: number, tileY: number, scale: number = 0.5): Phaser.GameObjects.Image {
@@ -498,6 +503,109 @@ export class TownSquare extends Scene {
         });
     }
 
+    /**
+     * Create interactive houses around the town square
+     * Layout based on reference image:
+     * Top row: 6, 7, 8, 9
+     * Left side: 5, 4
+     * Right side: 10, 11
+     * Bottom row: 3, 2, 1, 12
+     */
+    private createHouses() {
+        // House positions based on the layout diagram
+        // Map is 60x60 tiles, stone area from tile 8-52
+        const housePositions: { id: number; x: number; y: number }[] = [
+            // Top row (y around 10-11)
+            { id: 6, x: 14, y: 10 },
+            { id: 7, x: 24, y: 10 },
+            { id: 8, x: 36, y: 10 },
+            { id: 9, x: 46, y: 10 },
+
+            // Left side (x moved right to stay inside map)
+            { id: 5, x: 12, y: 24 },
+            { id: 4, x: 12, y: 40 },
+
+            // Right side (x moved left to stay inside map)
+            { id: 10, x: 48, y: 24 },
+            { id: 11, x: 48, y: 40 },
+
+            // Bottom row (y around 50)
+            { id: 3, x: 14, y: 50 },
+            { id: 2, x: 26, y: 50 },
+            { id: 1, x: 38, y: 50 },
+            { id: 12, x: 48, y: 50 },
+        ];
+
+        housePositions.forEach(({ id, x, y }) => {
+            this.createInteractiveHouse(id, x, y);
+        });
+    }
+
+    /**
+     * Create a single interactive house with collision
+     */
+    private createInteractiveHouse(houseId: number, tileX: number, tileY: number) {
+        const x = tileX * this.TILE_SIZE;
+        const y = tileY * this.TILE_SIZE;
+        const scale = 0.3; // x2 size (was 0.15)
+
+        const house = this.add.image(x, y, `house-${houseId}`);
+        house.setOrigin(0.5, 0.85); // Bottom-center origin for depth sorting
+        house.setScale(scale);
+        house.setDepth(y);
+
+        // Create collision body for the base of the house (invisible)
+        const collisionWidth = house.displayWidth * 0.6;
+        const collisionHeight = house.displayHeight * 0.25;
+        const collisionY = y - collisionHeight / 2 - 20;
+
+        const collider = this.add.rectangle(x, collisionY, collisionWidth, collisionHeight);
+        collider.setVisible(false); // Hide the collision rectangle
+        this.physics.add.existing(collider, true); // true = static body
+        this.houseColliders.push(collider);
+
+        // Make interactive
+        house.setInteractive({ useHandCursor: true });
+
+        // Hover effects
+        house.on('pointerover', () => {
+            house.setTint(0xffffaa);
+            this.tweens.add({
+                targets: house,
+                scaleX: scale * 1.05,
+                scaleY: scale * 1.05,
+                duration: 100,
+                ease: 'Quad.easeOut'
+            });
+        });
+
+        house.on('pointerout', () => {
+            house.clearTint();
+            this.tweens.add({
+                targets: house,
+                scaleX: scale,
+                scaleY: scale,
+                duration: 100,
+                ease: 'Quad.easeIn'
+            });
+        });
+
+        // Click handler - show "Coming soon" message
+        house.on('pointerdown', () => {
+            this.showToastMessage(`Coming soon...`, 0xf59e0b);
+        });
+    }
+
+    /**
+     * Setup collision between player and house colliders
+     * Must be called after player is created
+     */
+    private setupHouseCollisions() {
+        this.houseColliders.forEach(collider => {
+            this.physics.add.collider(this.player, collider);
+        });
+    }
+
     private createFountain() {
         const centerX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
         const centerY = this.MAP_HEIGHT / 2 * this.TILE_SIZE;
@@ -541,7 +649,6 @@ export class TownSquare extends Scene {
         const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
         this.currentCharacterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || DEFAULT_CHARACTER;
 
-        console.log(`[TownSquare] Loading character: ${this.currentCharacterKey} (type: ${characterType})`);
 
         // Create player with character from user data
         this.player = this.physics.add.sprite(startX, startY, this.currentCharacterKey, 0);
@@ -685,12 +792,6 @@ export class TownSquare extends Scene {
     private setupControls() {
         if (this.input.keyboard) {
             this.cursors = this.input.keyboard.createCursorKeys();
-            this.wasdKeys = {
-                W: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-                A: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-                S: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-                D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D)
-            };
 
             // P key to switch character
             this.pKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
@@ -824,7 +925,6 @@ export class TownSquare extends Scene {
 
     private handlePlayerMovement() {
         // Don't allow movement when any modal is open or input is focused
-        // This prevents WASD keys from moving player while typing or interacting with UI
         const isAnyModalOpen = this.chatModalOpen ||
             this.profileManager?.getIsOpen() ||
             this.stationManager?.getIsOpen() ||
@@ -842,20 +942,20 @@ export class TownSquare extends Scene {
         let velocityY = 0;
         let direction = '';
 
-        // Keyboard input
+        // Keyboard input (arrow keys only)
         if (this.cursors) {
-            if (this.cursors.left.isDown || this.wasdKeys?.A.isDown) {
+            if (this.cursors.left.isDown) {
                 velocityX = -speed;
                 direction = 'left';
-            } else if (this.cursors.right.isDown || this.wasdKeys?.D.isDown) {
+            } else if (this.cursors.right.isDown) {
                 velocityX = speed;
                 direction = 'right';
             }
 
-            if (this.cursors.up.isDown || this.wasdKeys?.W.isDown) {
+            if (this.cursors.up.isDown) {
                 velocityY = -speed;
                 direction = 'up';
-            } else if (this.cursors.down.isDown || this.wasdKeys?.S.isDown) {
+            } else if (this.cursors.down.isDown) {
                 velocityY = speed;
                 direction = 'down';
             }
@@ -984,7 +1084,6 @@ export class TownSquare extends Scene {
                     });
                 }
             }
-            console.log('[TownSquare] Loaded fruits into chestInventory:', this.chestInventory);
         }
 
         // Load seeds from cached data (array of SeedInventoryItem)
@@ -1044,7 +1143,6 @@ export class TownSquare extends Scene {
      * Refreshes UI when game data changes (e.g., after mission claim)
      */
     private onGameDataUpdated(): void {
-        console.log('[TownSquare] Received gamedata:updated event');
         
         // Refresh profile UI (XP, reputation, currency)
         this.profileManager?.createProfileUI();
@@ -1052,7 +1150,6 @@ export class TownSquare extends Scene {
         // Refresh toolbar if needed
         this.toolbarManager?.updateToolbar();
         
-        console.log('[TownSquare] UI refreshed');
     }
 
     /**
@@ -1060,7 +1157,6 @@ export class TownSquare extends Scene {
      * CRITICAL: This is where cleanup must happen for scene transitions!
      */
     shutdown() {
-        console.log('🔄 [TownSquare] shutdown - cleaning up resources');
 
         // Remove event listeners
         this.scale.off('resize', this.onResize, this);
@@ -1104,7 +1200,6 @@ export class TownSquare extends Scene {
         // Force fresh connection when entering TownSquare to get lobby_state
         // This ensures users joining later will see all existing users
         if (this.lobbySocketService.isConnected()) {
-            console.log('🔄 [TownSquare] Socket already connected, forcing reconnect for fresh lobby_state');
             this.lobbySocketService.disconnect();
         }
 
@@ -1162,7 +1257,6 @@ export class TownSquare extends Scene {
      * Handle incoming lobby chat message from WebSocket
      */
     private handleLobbyChatMessage = (payload: LobbyChatPayload) => {
-        console.log('💬 [TownSquare] Received chat message:', payload);
         
         // Add to chat history
         this.chatHistory.push({
@@ -1197,7 +1291,6 @@ export class TownSquare extends Scene {
      * Handle lobby connected event
      */
     private handleLobbyConnected = () => {
-        console.log('✅ [TownSquare] Lobby WebSocket connected');
 
         // Send initial position immediately after connection
         // This ensures other players see us right away
@@ -1207,7 +1300,6 @@ export class TownSquare extends Scene {
                 this.lastPositionSent.x = this.player.x;
                 this.lastPositionSent.y = this.player.y;
                 this.lastPositionSent.time = Date.now();
-                console.log('📍 [TownSquare] Sent initial position:', this.player.x, this.player.y);
             });
         }
     };
@@ -1216,7 +1308,6 @@ export class TownSquare extends Scene {
      * Handle lobby disconnected event
      */
     private handleLobbyDisconnected = (reason: string) => {
-        console.log('❌ [TownSquare] Lobby WebSocket disconnected:', reason);
     };
 
     // ==========================================
@@ -1227,12 +1318,9 @@ export class TownSquare extends Scene {
      * Handle initial lobby state - spawn all existing players
      */
     private handleLobbyState = (payload: LobbyStatePayload) => {
-        console.log('👥 [TownSquare] Received lobby state:', payload.length, 'users');
-        console.log('👥 [TownSquare] Users in lobby:', payload.map(u => u.username).join(', '));
 
         const cachedData = GameDataService.getCachedData();
         const currentUserId = cachedData?.user?.id;
-        console.log('👤 [TownSquare] Current user ID:', currentUserId);
 
         // Clear existing players first (in case of reconnection)
         this.otherPlayers.forEach((player, id) => {
@@ -1245,7 +1333,6 @@ export class TownSquare extends Scene {
         payload.forEach((user) => {
             // Don't create sprite for self
             if (user.userId === currentUserId) {
-                console.log('👤 [TownSquare] Skipping self:', user.username);
                 return;
             }
 
@@ -1253,14 +1340,12 @@ export class TownSquare extends Scene {
             createdCount++;
         });
 
-        console.log(`✅ [TownSquare] Created ${createdCount} other player sprites`);
     };
 
     /**
      * Handle new user joined
      */
     private handleUserJoined = (payload: UserJoinedPayload) => {
-        console.log('➕ [TownSquare] User joined:', payload.username);
 
         const cachedData = GameDataService.getCachedData();
         const currentUserId = cachedData?.user?.id;
@@ -1279,7 +1364,6 @@ export class TownSquare extends Scene {
      * Handle user left
      */
     private handleUserLeft = (payload: UserLeftPayload) => {
-        console.log('➖ [TownSquare] User left:', payload.userId);
 
         const player = this.otherPlayers.get(payload.userId);
         if (player) {
@@ -1315,7 +1399,6 @@ export class TownSquare extends Scene {
     private createOtherPlayer(user: UserLobbyState) {
         // Don't create duplicate
         if (this.otherPlayers.has(user.userId)) {
-            console.log(`⚠️ [TownSquare] Player ${user.username} already exists, skipping`);
             return;
         }
 
@@ -1366,7 +1449,6 @@ export class TownSquare extends Scene {
             characterKey: characterKey
         });
 
-        console.log(`🎮 [TownSquare] Created player: ${user.username} (char: ${characterKey}) at (${user.x}, ${user.y})`);
     }
 
     /**
@@ -1645,6 +1727,24 @@ export class TownSquare extends Scene {
         const factoryPos = tileToMiniMap(42, 28);
         const factory = this.add.text(factoryPos.x, factoryPos.y, '🏭', emojiStyle).setOrigin(0.5);
         this.miniMapContainer.add(factory);
+
+        // Houses - house emoji (smaller size for houses)
+        const houseStyle = { fontSize: '6px', resolution: 2 };
+        const housePositions = [
+            // Top row
+            { x: 16, y: 10 }, { x: 26, y: 10 }, { x: 36, y: 10 }, { x: 44, y: 10 },
+            // Left side
+            { x: 14, y: 24 }, { x: 14, y: 40 },
+            // Right side
+            { x: 46, y: 24 }, { x: 46, y: 40 },
+            // Bottom row
+            { x: 16, y: 50 }, { x: 26, y: 50 }, { x: 36, y: 50 }, { x: 44, y: 50 },
+        ];
+        housePositions.forEach(pos => {
+            const housePos = tileToMiniMap(pos.x, pos.y);
+            const house = this.add.text(housePos.x, housePos.y, '🏠', houseStyle).setOrigin(0.5);
+            this.miniMapContainer.add(house);
+        });
 
         // Player avatar (use character avatar image)
         const avatarKey = `${this.currentCharacterKey}-avatar`;
@@ -2094,7 +2194,6 @@ export class TownSquare extends Scene {
 
         // Send via WebSocket (fire-and-forget)
         // Server will broadcast back via 'lobby_chat' event
-        console.log('💬 [TownSquare] Sending global chat:', message);
         this.lobbySocketService.chatGlobal(message);
 
         // Update last chat time for cooldown
@@ -2242,7 +2341,6 @@ export class TownSquare extends Scene {
     private showOtherPlayerSpeechBubble(userId: string, message: string) {
         const player = this.otherPlayers.get(userId);
         if (!player) {
-            console.log(`⚠️ [TownSquare] Cannot show speech bubble - player ${userId} not found`);
             return;
         }
 
