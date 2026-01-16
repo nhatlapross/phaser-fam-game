@@ -7,6 +7,7 @@ import { QuizService, Quiz } from '../QuizService';
 import { MissionManager } from './MissionManager';
 import { QuizManager } from './QuizManager';
 import { EventModalManager } from './EventModalManager';
+import { EventBus } from '../EventBus';
 
 interface QuickActionsCallbacks {
     showToastMessage?: (text: string, color: number) => void;
@@ -60,6 +61,17 @@ export class QuickActionsManager extends BaseManager {
         this.missionManager = new MissionManager(scene, callbacks);
         this.quizManager = new QuizManager(scene, callbacks);
         this.eventModalManager = new EventModalManager(scene, callbacks);
+        
+        // Listen for checkin success to refresh badge
+        EventBus.on('event:checkin_success', this.onEventCheckinSuccess, this);
+    }
+    
+    /**
+     * Handle event checkin success
+     */
+    private onEventCheckinSuccess(): void {
+        console.log('[QuickActionsManager] Event checkin success, refreshing badge...');
+        this.updateEventNotificationBadge(true);
     }
 
     /**
@@ -338,12 +350,17 @@ export class QuickActionsManager extends BaseManager {
     /**
      * Update event notification badge
      */
-    public async updateEventNotificationBadge(): Promise<void> {
+    public async updateEventNotificationBadge(forceRefresh: boolean = false): Promise<void> {
         if (!this.eventNotificationBadge) return;
 
-        // Try cached data first
+        // Clear local cache if force refresh
+        if (forceRefresh) {
+            this.cachedEvents = null;
+        }
+
+        // Try cached data first (unless force refresh)
         const cachedData = GameDataService.getCachedData();
-        let events: GameEvent[] | null = cachedData?.events || this.cachedEvents;
+        let events: GameEvent[] | null = forceRefresh ? null : (cachedData?.events || this.cachedEvents);
         
         if (!events) {
             events = await EventService.getActiveEvents();
@@ -351,6 +368,8 @@ export class QuickActionsManager extends BaseManager {
                 this.cachedEvents = events;
             }
         }
+
+        console.log('[QuickActionsManager] Events for badge:', events?.map(e => ({ name: e.name, status: e.status, isClaimed: e.isClaimed })));
 
         if (!events || events.length === 0) {
             this.eventNotificationBadge.setVisible(false);
@@ -361,6 +380,8 @@ export class QuickActionsManager extends BaseManager {
         // Only count unclaimed events
         const unclaimedEvents = events.filter(e => e.status !== 'CLAIMED' && !e.isClaimed);
         const count = unclaimedEvents.length;
+        
+        console.log('[QuickActionsManager] Unclaimed events count:', count);
         
         if (count > 0) {
             const badgeText = this.eventNotificationBadge.getByName('badgeText') as Phaser.GameObjects.Text;
@@ -653,6 +674,7 @@ export class QuickActionsManager extends BaseManager {
      * Destroy manager and cleanup
      */
     public destroy(): void {
+        EventBus.off('event:checkin_success', this.onEventCheckinSuccess, this);
         this.missionManager.destroy();
         this.quizManager.destroy();
         this.eventModalManager.destroy();
