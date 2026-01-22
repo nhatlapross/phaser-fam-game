@@ -12,6 +12,7 @@ import {
     SOCKET_EVENTS,
     WaterPlantPayload,
     HarvestPlantPayload,
+    PlantSeedPayload,
     BuyShopItemPayload,
     MissionSubmitProofPayload,
     MissionClaimRewardPayload,
@@ -296,6 +297,26 @@ export class SocketService {
 
         const payload: HarvestPlantPayload = { plantId };
         this.socket.emit(SOCKET_EVENTS.HARVEST_PLANT, payload);
+    }
+
+    /**
+     * Plant a seed on a land plot
+     * Emit: 'plant_seed', { landId: string, seedType: string }
+     * Response comes via 'action_success' or 'action_error' events
+     * @param landId - The UUID of the land plot
+     * @param seedType - The type of seed (e.g., "ALGAE", "MUSHROOM", "TREE")
+     * @returns true if emit was successful, false otherwise
+     */
+    public plantSeed(landId: string, seedType: string): boolean {
+        if (!this.socket?.connected) {
+            console.log('[SocketService] Cannot plant seed - not connected');
+            return false;
+        }
+
+        const payload: PlantSeedPayload = { landId, seedType };
+        console.log('[SocketService] Emitting plant_seed:', payload);
+        this.socket.emit(SOCKET_EVENTS.PLANT_SEED, payload);
+        return true;
     }
 
     /**

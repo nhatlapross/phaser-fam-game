@@ -125,6 +125,32 @@ export interface HarvestPlantPayload {
 }
 
 /**
+ * Payload for plant_seed event (Client -> Server)
+ */
+export interface PlantSeedPayload {
+    landId: string;
+    seedType: string;
+}
+
+/**
+ * Plant seed success data in action_success response
+ */
+export interface PlantSeedSuccessData {
+    plant: {
+        id: string;
+        type: string;
+        stage: string;
+        plantedAt: string;
+    };
+    message: string;
+    phase: string;
+    diggingTime: string;
+    growingTime: string;
+    totalTime: string;
+    canWaterNow: boolean;
+}
+
+/**
  * Payload for buy_shop_item event (Client -> Server)
  * Used to purchase items from Gold or Gem shop via WebSocket
  */
@@ -320,6 +346,7 @@ export const SOCKET_EVENTS = {
     CLAIM_WATER: 'claim_water',
     WATER_PLANT: 'water_plant',
     HARVEST_PLANT: 'harvest_plant',
+    PLANT_SEED: 'plant_seed',
     BUY_LAND: 'buy_land',
     BUY_SHOP_ITEM: 'buy_shop_item',
     
