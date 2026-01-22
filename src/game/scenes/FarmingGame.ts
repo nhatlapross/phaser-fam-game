@@ -28,6 +28,7 @@ import {
     PlantDetailManager,
     StationManager,
     NavigationData,
+    PetManager,
     // Import types from GameTypes
     PlantType,
     TileState,
@@ -185,6 +186,7 @@ export class FarmingGame extends Scene {
     private wellManager!: WellManager;
     private plantDetailManager!: PlantDetailManager;
     private stationManager!: StationManager;
+    private petManager!: PetManager;
 
     // ========== SOCKET & REAL-TIME ==========
     private socketService!: SocketService;
@@ -478,6 +480,12 @@ export class FarmingGame extends Scene {
                 });
             },
             showToastMessage: (text, color) => this.showToastMessage(text, color)
+        });
+
+        // PetManager - Pet following system
+        this.petManager = new PetManager(this, {
+            getPlayer: () => this.player,
+            getUICamera: () => this.uiCamera
         });
     }
 
@@ -2150,6 +2158,14 @@ export class FarmingGame extends Scene {
         keyT.on('down', () => {
             this.scene.start('TilesetDebug');
         });
+
+        // Pet toggle - press O to show/hide pet
+        const keyO = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.O);
+        keyO.on('down', () => {
+            this.petManager.toggle();
+            const isActive = this.petManager.getIsActive();
+            this.showToastMessage(isActive ? 'Pet summoned!' : 'Pet dismissed', isActive ? 0x8BC34A : 0x9E9E9E);
+        });
     }
 
     private initializeInventory() {
@@ -3561,6 +3577,9 @@ export class FarmingGame extends Scene {
 
         // Update mini map
         this.updateMiniMap();
+
+        // Update pet position
+        this.petManager?.update();
     }
 
     shutdown() {
@@ -3584,6 +3603,7 @@ export class FarmingGame extends Scene {
         // Cleanup managers
         this.soundManager?.destroy();
         this.stationManager?.destroy();
+        this.petManager?.destroy();
         this.profileManager?.destroy();
         this.toolbarManager?.destroy();
         this.checkinManager?.destroy();

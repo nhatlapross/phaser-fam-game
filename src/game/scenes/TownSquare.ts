@@ -1,7 +1,7 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { TOWN_SQUARE_MAP_DATA, TOWN_SQUARE_MAP_WIDTH, TOWN_SQUARE_MAP_HEIGHT } from './TownSquareMapData';
-import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager, FactoryManager, GAME_CONSTANTS } from '../managers';
+import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager, FactoryManager, GAME_CONSTANTS, PetManager } from '../managers';
 import { GameDataService } from '../GameDataService';
 import { UserService } from '../UserService';
 import { LobbySocketService } from '../LobbySocketService';
@@ -67,6 +67,9 @@ export class TownSquare extends Scene {
 
     // Factory manager
     private factoryManager!: FactoryManager;
+
+    // Pet manager
+    private petManager!: PetManager;
 
     // Toolbar items (same as FarmingGame)
     private toolbarItems: ToolbarItem[] = [
@@ -262,6 +265,12 @@ export class TownSquare extends Scene {
         }, this.TILE_SIZE);
         // Position factory above shop (tile 42, 28)
         this.factoryManager.createFactory(42 * this.TILE_SIZE, 28 * this.TILE_SIZE);
+
+        // Create pet manager
+        this.petManager = new PetManager(this, {
+            getPlayer: () => this.player,
+            getUICamera: () => this.uiCamera
+        });
 
         // Create marquee announcement
         this.createMarquee();
@@ -813,6 +822,14 @@ export class TownSquare extends Scene {
                     this.closeChatModal();
                 }
             });
+
+            // O key to toggle pet
+            const keyO = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.O);
+            keyO.on('down', () => {
+                this.petManager.toggle();
+                const isActive = this.petManager.getIsActive();
+                this.showToastMessage(isActive ? 'Pet summoned!' : 'Pet dismissed', isActive ? 0x8BC34A : 0x9E9E9E);
+            });
         }
     }
 
@@ -917,6 +934,9 @@ export class TownSquare extends Scene {
         this.handlePlayerMovement();
         this.updateClock();
         this.updateMiniMap();
+
+        // Update pet position
+        this.petManager?.update();
 
         // Multiplayer: send position and update other players
         this.sendPlayerPosition();
@@ -1169,6 +1189,7 @@ export class TownSquare extends Scene {
         this.toolbarManager?.destroy();
         this.shopManager?.destroy();
         this.factoryManager?.destroy();
+        this.petManager?.destroy();
 
         // Cleanup lobby socket - disconnect to prevent orphaned connections
         this.cleanupLobbySocketListeners();

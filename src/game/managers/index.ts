@@ -20,6 +20,7 @@ export { WelcomeManager } from './WelcomeManager';
 export { MissionManager } from './MissionManager';
 export { QuizManager } from './QuizManager';
 export { EventModalManager } from './EventModalManager';
+export { PetManager } from './PetManager';
 
 // Re-export types
 export * from '../types/GameTypes';

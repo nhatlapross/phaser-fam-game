@@ -272,6 +272,12 @@ export class Preloader extends Scene
             frameHeight: 92
         });
 
+        // Pet spritesheets (4x4 grid = 16 frames, 300x300 total, 75x75 each)
+        this.load.spritesheet('pet-cat', 'pet/cat/cat.png', {
+            frameWidth: 75,
+            frameHeight: 75
+        });
+
         // Place backgrounds for station travel modal
         this.load.image('place-farm', 'places/farm.png');
         this.load.image('place-townsquare', 'places/townSquare.png');
