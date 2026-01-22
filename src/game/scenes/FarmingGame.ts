@@ -113,6 +113,13 @@ export class FarmingGame extends Scene {
         previousWaterCount: number;
     } | null = null;
 
+    // Pending plant action for handling WebSocket response
+    private pendingPlantAction: {
+        tileKey: string;
+        landId: string;
+        seedType: 'algae' | 'mushroom' | 'tree';
+    } | null = null;
+
     // Selected item for transfer between chest and warehouse
     private selectedItem: { itemType: string; amount: number; source: 'backpack' | 'storage' } | null = null;
 
@@ -527,6 +534,7 @@ export class FarmingGame extends Scene {
         EventBus.on('socket:inventory_update', this.onInventoryUpdate, this);
         EventBus.on('socket:land_update', this.onLandUpdate, this);
         EventBus.on('socket:currency_update', this.onCurrencyUpdate, this);
+        EventBus.on('socket:action_success', this.onActionSuccess, this);
         EventBus.on('socket:action_error', this.onActionError, this);
 
     }
@@ -655,6 +663,40 @@ export class FarmingGame extends Scene {
     }
 
     /**
+     * Handle action_success event from socket
+     * Processes successful game actions
+     */
+    private onActionSuccess(payload: { action: string; data: unknown }): void {
+        console.log('[FarmingGame] Action success:', payload.action, payload.data);
+
+        if (payload.action === 'plant_seed' && this.pendingPlantAction) {
+            const data = payload.data as {
+                plant?: { id: string; type: string; stage: string; plantedAt: string };
+                message?: string;
+                canWaterNow?: boolean;
+            };
+
+            if (data.plant?.id) {
+                const { tileKey } = this.pendingPlantAction;
+                const state = this.farmLandStates.get(tileKey);
+                
+                if (state) {
+                    state.plantId = data.plant.id;
+                    console.log('[FarmingGame] Plant ID set:', data.plant.id, 'for tile:', tileKey);
+                }
+            }
+
+            // Show success message
+            if (data.message) {
+                this.showToastMessage(data.message, 0x22c55e);
+            }
+
+            // Clear pending action
+            this.pendingPlantAction = null;
+        }
+    }
+
+    /**
      * Handle action_error event from socket
      * Shows error message to user when a game action fails
      * Reverts optimistic UI updates
@@ -702,6 +744,42 @@ export class FarmingGame extends Scene {
 
             // Clear pending action
             this.pendingWaterAction = null;
+        }
+
+        // Handle plant_seed error
+        if (payload.action === 'plant_seed' && this.pendingPlantAction) {
+            const { tileKey, seedType } = this.pendingPlantAction;
+            const state = this.farmLandStates.get(tileKey);
+
+            if (state) {
+                // Revert plant state
+                state.planted = false;
+                state.cropType = null;
+                state.plantStage = 0;
+                state.plantId = undefined;
+
+                // Remove plant sprite
+                if (state.plantSprite) {
+                    state.plantSprite.destroy();
+                    state.plantSprite = undefined;
+                }
+
+                // Remove health bar
+                if (state.healthBarBg) {
+                    state.healthBarBg.destroy();
+                    state.healthBarBg = undefined;
+                }
+                if (state.healthBarFill) {
+                    state.healthBarFill.destroy();
+                    state.healthBarFill = undefined;
+                }
+
+                // Restore seed count
+                this.seedCounts[seedType]++;
+                this.updateToolbar();
+            }
+
+            this.pendingPlantAction = null;
         }
     }
 
@@ -2451,6 +2529,16 @@ export class FarmingGame extends Scene {
                     }
                 }
             }
+
+            // Sync streak data to CheckinManager (fixes notification icon after background refresh)
+            if (cachedData.streak) {
+                this.checkinManager.setStreakFromCache(cachedData.streak.status, cachedData.streak.history);
+            }
+
+            // Sync missions to MailboxManager
+            if (cachedData.missions) {
+                this.mailboxManager.setMissionsFromCache(cachedData.missions);
+            }
         }
 
         // Update profile display (gold, gems, XP, etc.)
@@ -2789,23 +2877,49 @@ export class FarmingGame extends Scene {
                 // Create health bar
                 this.createHealthBar(x, y, tileKey);
 
-
-                // Call API to plant seed on backend and store the plantId for future API calls
                 // Use landId from state if available, otherwise use tileKey
                 const landId = state.landId || tileKey;
-                SeedService.plantSeed(landId, selectedPlantType)
-                    .then(plantId => {
-                        if (plantId) {
-                            const currentState = this.farmLandStates.get(tileKey);
-                            if (currentState) {
-                                currentState.plantId = plantId;
-                            }
-                        }
-                    })
-                    .catch(error => {
-                    });
+                const seedType = SeedService.mapPlantTypeToApiSeedType(selectedPlantType);
+
+                // Try WebSocket first, fallback to REST API
+                const socketService = getSocketService();
+                if (socketService.isConnected()) {
+                    // Store pending plant action for handling response
+                    this.pendingPlantAction = {
+                        tileKey,
+                        landId,
+                        seedType: selectedPlantType
+                    };
+                    
+                    const emitted = socketService.plantSeed(landId, seedType);
+                    if (!emitted) {
+                        // WebSocket failed, fallback to REST
+                        this.plantSeedViaRest(tileKey, landId, selectedPlantType);
+                    }
+                    // Response will come via action_success or action_error events
+                } else {
+                    // No WebSocket, use REST API
+                    this.plantSeedViaRest(tileKey, landId, selectedPlantType);
+                }
             } else {
             }
+        }
+    }
+
+    /**
+     * Plant seed via REST API (fallback when WebSocket not available)
+     */
+    private async plantSeedViaRest(tileKey: string, landId: string, plantType: 'algae' | 'mushroom' | 'tree'): Promise<void> {
+        try {
+            const plantId = await SeedService.plantSeed(landId, plantType);
+            if (plantId) {
+                const currentState = this.farmLandStates.get(tileKey);
+                if (currentState) {
+                    currentState.plantId = plantId;
+                }
+            }
+        } catch (error) {
+            console.error('[FarmingGame] Error planting seed via REST:', error);
         }
     }
 
@@ -3577,6 +3691,11 @@ export class FarmingGame extends Scene {
         }
         EventBus.off('socket:connected', this.onSocketConnected, this);
         EventBus.off('socket:disconnected', this.onSocketDisconnected, this);
+        EventBus.off('socket:inventory_update', this.onInventoryUpdate, this);
+        EventBus.off('socket:land_update', this.onLandUpdate, this);
+        EventBus.off('socket:currency_update', this.onCurrencyUpdate, this);
+        EventBus.off('socket:action_success', this.onActionSuccess, this);
+        EventBus.off('socket:action_error', this.onActionError, this);
 
         EventBus.off('wallet-connected', this.onWalletConnected, this);
         this.scale.off('resize', this.onResize, this);
