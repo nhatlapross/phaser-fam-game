@@ -2529,6 +2529,16 @@ export class FarmingGame extends Scene {
                     }
                 }
             }
+
+            // Sync streak data to CheckinManager (fixes notification icon after background refresh)
+            if (cachedData.streak) {
+                this.checkinManager.setStreakFromCache(cachedData.streak.status, cachedData.streak.history);
+            }
+
+            // Sync missions to MailboxManager
+            if (cachedData.missions) {
+                this.mailboxManager.setMissionsFromCache(cachedData.missions);
+            }
         }
 
         // Update profile display (gold, gems, XP, etc.)
