@@ -3,6 +3,7 @@ import { BaseManager } from './BaseManager';
 import { EventService, GameEvent } from '../EventService';
 import { RedeemService } from '../RedeemService';
 import { GameDataService } from '../GameDataService';
+import { EventBus } from '../EventBus';
 
 interface EventModalCallbacks {
     showToastMessage?: (text: string, color: number) => void;
@@ -35,6 +36,9 @@ export class EventModalManager extends BaseManager {
     public async open(): Promise<void> {
         if (this.eventModalOpen) return;
         this.eventModalOpen = true;
+        
+        // Clear cache to force refresh event list
+        this.cachedEvents = null;
 
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
@@ -162,9 +166,8 @@ export class EventModalManager extends BaseManager {
         const scrollMask = maskGraphics.createGeometryMask();
         this.modalElements.push(maskGraphics);
 
-        // Try to use cached data first for instant display
-        const cachedData = GameDataService.getCachedData();
-        let events: GameEvent[] | null = cachedData?.events || this.cachedEvents;
+        // Always fetch fresh events (cache was cleared in open())
+        let events: GameEvent[] | null = this.cachedEvents;
         
         if (!events) {
             events = await EventService.getActiveEvents();
@@ -172,6 +175,8 @@ export class EventModalManager extends BaseManager {
                 this.cachedEvents = events;
             }
         }
+        
+        console.log('[EventModalManager] Events for list:', events?.map(e => ({ name: e.name, status: e.status, isClaimed: e.isClaimed })));
 
         if (!events || events.length === 0) {
             const noEventsText = this.scene.add.text(modalX + 15, modalY, '🚧 No active events', {
@@ -777,7 +782,7 @@ export class EventModalManager extends BaseManager {
                 return;
             }
 
-            submitText.setText('...');
+            submitText.setText('⏳ Submitting...');
             submitBtn.disableInteractive();
 
             try {
@@ -793,7 +798,15 @@ export class EventModalManager extends BaseManager {
                     this.callbacks.showToastMessage?.(successMsg, 0x22c55e);
                     this.callbacks.playSuccessSound?.();
                     
+                    // Clear cached events to force refresh
+                    this.cachedEvents = null;
+                    
                     this.closeEventDetails();
+                    this.close();
+                    
+                    // Emit event to refresh badge
+                    console.log('[EventModalManager] Emitting event:checkin_success');
+                    EventBus.emit('event:checkin_success');
                     GameDataService.refreshAndUpdateUI();
                 } else {
                     this.callbacks.showToastMessage?.(result.message || 'Invalid code', 0xef4444);
@@ -895,7 +908,14 @@ export class EventModalManager extends BaseManager {
                         this.callbacks.showToastMessage?.(successMsg, 0x22c55e);
                         this.callbacks.playSuccessSound?.();
                         
+                        // Clear cached events to force refresh
+                        this.cachedEvents = null;
+                        
                         this.closeEventDetails();
+                        this.close();
+                        
+                        // Emit event to refresh badge
+                        EventBus.emit('event:checkin_success');
                         GameDataService.refreshAndUpdateUI();
                     } else {
                         this.callbacks.showToastMessage?.(result.message || 'Invalid QR code', 0xef4444);

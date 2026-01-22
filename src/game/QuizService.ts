@@ -1,24 +1,26 @@
 // src/game/QuizService.ts
 
-export interface QuizEvent {
-    id: string;
-    name: string;
-    startTime: string;
-    endTime: string;
+export interface QuizUserStatus {
+    completed: boolean;
+    score: number;
+    badgeEarned: string | null;
 }
 
 export interface Quiz {
     id: string;
+    slug: string;
     title: string;
     description: string;
-    timePerQuestion: number;
+    imageUrl: string | null;
+    category: string;
+    difficulty: string;
+    questionCount: number;
+    totalAttempts: number;
     rewardXp: number;
     rewardGold: number;
-    isActive: boolean;
-    event: QuizEvent;
-    questionCount: number;
-    attemptCount: number;
-    createdAt: string;
+    rewardBadgeSlug: string | null;
+    isCompleted: boolean;
+    userStatus: QuizUserStatus | null;
 }
 
 export interface QuizQuestion {
@@ -33,19 +35,33 @@ export interface QuizQuestion {
 
 export interface QuizDetail {
     id: string;
+    slug: string;
     title: string;
     description: string;
+    imageUrl: string | null;
+    category: string;
+    difficulty: string;
     timePerQuestion: number;
     rewardXp: number;
     rewardGold: number;
+    rewardBadgeSlug: string | null;
     questions: QuizQuestion[];
-    event: QuizEvent;
+}
+
+export interface QuizAttemptDetail {
+    status: string;
+    score: number;
+    correctAnswers: number;
+    totalQuestions: number;
+    xpEarned: number;
+    goldEarned: number;
+    badgeEarned: string | null;
 }
 
 export interface QuizDetailResponse {
     quiz: QuizDetail;
     hasAttempted: boolean;
-    attempt: unknown | null;
+    attempt: QuizAttemptDetail | null;
 }
 
 export interface StartQuizResponse {
@@ -81,6 +97,7 @@ export interface SubmitQuizResponse {
         totalQuestions: number;
         xpEarned: number;
         goldEarned: number;
+        badgeEarned: string | null;
         isPerfect: boolean;
     };
     answers: AnswerResult[];
@@ -89,6 +106,32 @@ export interface SubmitQuizResponse {
 
 export interface QuizListResponse {
     quizzes: Quiz[];
+}
+
+export interface QuizAttempt {
+    id: string;
+    quizId: string;
+    quizSlug: string;
+    quizTitle: string;
+    category: string;
+    difficulty: string;
+    score: number;
+    correctAnswers: number;
+    totalQuestions: number;
+    xpEarned: number;
+    goldEarned: number;
+    badgeEarned: string | null;
+    status: string;
+    startedAt: string;
+    completedAt: string;
+}
+
+export interface QuizHistoryResponse {
+    attempts: QuizAttempt[];
+    totalAttempts: number;
+    completedCount: number;
+    perfectCount: number;
+    averageScore: number;
 }
 
 export class QuizService {
@@ -101,9 +144,9 @@ export class QuizService {
     }
 
     /**
-     * Get all available quizzes
+     * Get all active quizzes from /quiz/list
      */
-    static async getAllQuizzes(): Promise<Quiz[]> {
+    static async getActiveQuizzes(): Promise<Quiz[]> {
         const token = QuizService.getAccessToken();
         if (!token) {
             return [];
@@ -111,7 +154,7 @@ export class QuizService {
 
         try {
             const response = await fetch(
-                `${QuizService.API_BASE_URL}/quiz/admin/all`,
+                `${QuizService.API_BASE_URL}/quiz/list`,
                 {
                     method: "GET",
                     headers: {
@@ -132,17 +175,9 @@ export class QuizService {
     }
 
     /**
-     * Get only active quizzes
+     * Get quiz details with questions by slug
      */
-    static async getActiveQuizzes(): Promise<Quiz[]> {
-        const quizzes = await QuizService.getAllQuizzes();
-        return quizzes.filter(q => q.isActive);
-    }
-
-    /**
-     * Get quiz details with questions for an event
-     */
-    static async getQuizByEvent(eventId: string): Promise<QuizDetailResponse | null> {
+    static async getQuizBySlug(slug: string): Promise<QuizDetailResponse | null> {
         const token = QuizService.getAccessToken();
         if (!token) {
             return null;
@@ -150,7 +185,7 @@ export class QuizService {
 
         try {
             const response = await fetch(
-                `${QuizService.API_BASE_URL}/quiz/event/${eventId}`,
+                `${QuizService.API_BASE_URL}/quiz/slug/${slug}`,
                 {
                     method: "GET",
                     headers: {
@@ -235,6 +270,41 @@ export class QuizService {
                 return null;
             }
         } catch (error) {
+            return null;
+        }
+    }
+
+    /**
+     * Get quiz history (all attempts by user)
+     */
+    static async getQuizHistory(): Promise<QuizHistoryResponse | null> {
+        const token = QuizService.getAccessToken();
+        if (!token) {
+            console.log('No access token available');
+            return null;
+        }
+
+        try {
+            const response = await fetch(
+                `${QuizService.API_BASE_URL}/quiz/history`,
+                {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (response.ok) {
+                const data: QuizHistoryResponse = await response.json();
+                console.log('Quiz history loaded:', data.totalAttempts, 'attempts');
+                return data;
+            } else {
+                console.error('Error fetching quiz history:', response.statusText);
+                return null;
+            }
+        } catch (error) {
+            console.error('Network error fetching quiz history:', error);
             return null;
         }
     }
