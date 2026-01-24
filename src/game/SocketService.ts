@@ -18,6 +18,7 @@ import {
     MissionClaimRewardPayload,
     MissionUpdatedPayload,
     MissionClaimedPayload,
+    EventCheckinPayload,
 } from './types/SocketTypes';
 
 /**
@@ -386,6 +387,35 @@ export class SocketService {
 
         const payload: MissionClaimRewardPayload = { missionId };
         this.socket.emit(SOCKET_EVENTS.MISSION_CLAIM_REWARD, payload);
+    }
+
+    // ==========================================
+    // Event Checkin Methods (Client -> Server)
+    // Fire-and-forget: responses come via event listeners
+    // ==========================================
+
+    /**
+     * Check in to an event
+     * Emit: 'event_checkin', { eventId: string, verificationCode?: string }
+     * Response comes via 'action_success' or 'action_error' events
+     * @param eventId - The UUID of the event to check in to
+     * @param verificationCode - Optional verification code for the event
+     * @returns true if emit was successful, false otherwise
+     */
+    public eventCheckin(eventId: string, verificationCode?: string): boolean {
+        if (!this.socket?.connected) {
+            console.log('[SocketService] Cannot check in to event - not connected');
+            return false;
+        }
+
+        const payload: EventCheckinPayload = { eventId };
+        if (verificationCode) {
+            payload.verificationCode = verificationCode;
+        }
+
+        console.log('[SocketService] Emitting event_checkin:', payload);
+        this.socket.emit(SOCKET_EVENTS.EVENT_CHECKIN, payload);
+        return true;
     }
 }
 

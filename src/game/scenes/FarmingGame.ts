@@ -702,6 +702,41 @@ export class FarmingGame extends Scene {
             // Clear pending action
             this.pendingPlantAction = null;
         }
+
+        if (payload.action === 'event_checkin') {
+            const data = payload.data as {
+                success: true;
+                event: {
+                    id: string;
+                    name: string;
+                    location: string;
+                    startTime: string;
+                    endTime: string;
+                };
+                reward: {
+                    itemType: string;
+                    amount: number;
+                    totalAmount: number;
+                };
+            };
+
+            // Show success message with event name and reward
+            const eventName = data.event.name;
+            const rewardText = `+${data.reward.amount} ${this.getItemDisplayName(data.reward.itemType)}`;
+            this.showToastMessage(`Checked in to "${eventName}"! Received ${rewardText}`, 0x22c55e);
+
+            // Play success sound
+            this.soundManager.playSuccessSound();
+
+            // Emit event for EventModalManager to handle
+            EventBus.emit('event:checkin_websocket_success', {
+                eventName,
+                rewardText
+            });
+
+            // Refresh inventory to update item counts
+            GameDataService.refreshInventoryAndUpdateUI();
+        }
     }
 
     /**
@@ -713,6 +748,16 @@ export class FarmingGame extends Scene {
 
         // Show error toast to user
         this.showToastMessage(payload.message || 'Action failed!', 0xef4444);
+
+        // Handle specific action errors
+        if (payload.action === 'event_checkin') {
+            // Event checkin failed - emit event for EventModalManager
+            EventBus.emit('event:checkin_websocket_error', {
+                message: payload.message
+            });
+            console.log('[FarmingGame] Event checkin failed:', payload.message);
+            return;
+        }
 
         // Revert optimistic updates based on action type
         if (payload.action === 'water_plant' && this.pendingWaterAction) {
@@ -2442,6 +2487,37 @@ export class FarmingGame extends Scene {
     private isChestFull(): boolean {
         const totalItems = this.getTotalChestItems();
         return totalItems >= this.CHEST_SLOTS * this.MAX_PER_SLOT;
+    }
+
+    /**
+     * Get display name for item type (for event checkin rewards)
+     */
+    private getItemDisplayName(itemType: string): string {
+        const nameMap: Record<string, string> = {
+            // Seeds
+            'SEED_ALGAE': 'Algae Seed',
+            'SEED_MUSHROOM': 'Mushroom Spore',
+            'SEED_TREE': 'Tree Seed',
+            'SEED_SOCIAL': 'Social Seed',
+            'SEED_TECHNICAL': 'Technical Seed',
+            'SEED_BRANDED': 'Branded Seed',
+            // Fruits
+            'FRUIT_ALGAE': 'Algae',
+            'FRUIT_MUSHROOM': 'Mushroom',
+            'FRUIT_TREE': 'Tree Fruit',
+            'FRUIT_SOCIAL': 'Social Fruit',
+            'FRUIT_TECHNICAL': 'Technical Fruit',
+            'FRUIT_BRANDED': 'Branded Fruit',
+            // Tools and items
+            'WATER': 'Water',
+            'BUG_GLOVE': 'Bug Glove',
+            'PESTICIDE': 'Pesticide',
+            'FERTILIZER_COMMON': 'Common Fertilizer',
+            'FERTILIZER_RARE': 'Rare Fertilizer',
+            'FERTILIZER_EPIC': 'Epic Fertilizer',
+            'FERTILIZER_LEGENDARY': 'Legend Fertilizer',
+        };
+        return nameMap[itemType] || itemType;
     }
 
     private addToChest(fruitType: PlantType): boolean {

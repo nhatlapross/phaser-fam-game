@@ -243,6 +243,47 @@ export interface MissionClaimedPayload {
 }
 
 // ==========================================
+// Event Checkin WebSocket Types
+// ==========================================
+
+/**
+ * Event information from WebSocket
+ */
+export interface SocketEvent {
+    id: string;
+    name: string;
+    location: string;
+    startTime: string;  // ISO date string
+    endTime: string;    // ISO date string
+}
+
+/**
+ * Event checkin reward from WebSocket
+ */
+export interface EventCheckinReward {
+    itemType: string;   // e.g., "SEED_ALGAE"
+    amount: number;     // Amount received
+    totalAmount: number; // User's new total for this item
+}
+
+/**
+ * Payload for event_checkin event (Client -> Server)
+ */
+export interface EventCheckinPayload {
+    eventId: string;
+    verificationCode?: string;
+}
+
+/**
+ * Success data for event_checkin action_success response
+ */
+export interface EventCheckinSuccessData {
+    success: true;
+    event: SocketEvent;
+    reward: EventCheckinReward;
+}
+
+// ==========================================
 // Quiz WebSocket Types
 // ==========================================
 
@@ -357,6 +398,9 @@ export const SOCKET_EVENTS = {
     // Quiz events (Client -> Server)
     QUIZ_START: 'quiz:start',
     QUIZ_SUBMIT: 'quiz:submit',
+    
+    // Event checkin events (Client -> Server)
+    EVENT_CHECKIN: 'event_checkin',
     
     // Connection events
     CONNECT: 'connect',
