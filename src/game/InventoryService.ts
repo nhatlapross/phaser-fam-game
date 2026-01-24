@@ -76,6 +76,38 @@ export class InventoryService {
     }
 
     /**
+     * Get tools inventory (water, gloves, etc. with location = 'TOOLS')
+     */
+    static async getTools(): Promise<InventoryItem[]> {
+        const token = UserService.getAccessToken();
+        if (!token) {
+            return [];
+        }
+
+        try {
+            const response = await fetch(
+                `${InventoryService.API_BASE_URL}/inventory?location=TOOLS`,
+                {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                // API returns { inventory: InventoryItem[] }
+                return data.inventory || [];
+            } else {
+                return [];
+            }
+        } catch (error) {
+            return [];
+        }
+    }
+
+    /**
      * Get storage items (warehouse in game)
      */
     static async getStorage(): Promise<StorageResponse | null> {

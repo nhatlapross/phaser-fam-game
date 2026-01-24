@@ -12,7 +12,7 @@ import { QuizService, Quiz } from './QuizService';
 import { EventService, GameEvent } from './EventService';
 import { StreakService, StreakStatusResponse, StreakHistoryResponse } from './StreakService';
 import { ShopService, GoldShopResponse, GemShopResponse, CashShopResponse } from './ShopService';
-import { InventoryService, StorageResponse, BackpackResponse } from './InventoryService';
+import { InventoryService, StorageResponse, BackpackResponse, InventoryItem } from './InventoryService';
 import { BadgeService, SoulboundToken, ApiBadge } from './BadgeService';
 import { PlantType } from './types/GameTypes';
 import { GameCache, CACHE_KEYS, CACHE_TTL } from './utils/GameCache';
@@ -64,6 +64,7 @@ export interface ShopData {
 export interface InventoryData {
     storage: StorageResponse | null;
     backpack: BackpackResponse | null;
+    tools: InventoryItem[];
 }
 
 export interface GameData {
@@ -124,7 +125,7 @@ export class GameDataService {
                 events: null,
                 streak: { status: null, history: null },
                 shop: { goldShop: null, gemShop: null, cashShop: null },
-                inventory: { storage: null, backpack: null },
+                inventory: { storage: null, backpack: null, tools: [] },
                 badges: [],
                 allBadges: [],
                 loadedAt: Date.now()
@@ -174,6 +175,7 @@ export class GameDataService {
             cashShopResult,
             storageResult,
             backpackResult,
+            toolsResult,
             badgesResult,
             allBadgesResult
         ] = await Promise.allSettled([
@@ -193,6 +195,7 @@ export class GameDataService {
             ShopService.getCashShop(),
             InventoryService.getStorage(),
             InventoryService.getBackpack(),
+            InventoryService.getTools(),
             BadgeService.fetchSoulboundTokens(),
             BadgeService.getAllBadges()
         ]);
@@ -248,7 +251,8 @@ export class GameDataService {
             },
             inventory: {
                 storage: storageResult.status === 'fulfilled' ? storageResult.value : null,
-                backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null
+                backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null,
+                tools: toolsResult.status === 'fulfilled' ? toolsResult.value : []
             },
             badges: badgesResult.status === 'fulfilled' ? badgesResult.value : [],
             allBadges: allBadgesResult.status === 'fulfilled' ? allBadgesResult.value : [],
@@ -391,6 +395,7 @@ export class GameDataService {
             cashShopResult,
             storageResult,
             backpackResult,
+            toolsResult,
             badgesResult,
             allBadgesResult
         ] = await Promise.allSettled([
@@ -410,6 +415,7 @@ export class GameDataService {
             ShopService.getCashShop(),
             InventoryService.getStorage(),
             InventoryService.getBackpack(),
+            InventoryService.getTools(),
             BadgeService.fetchSoulboundTokens(),
             BadgeService.getAllBadges()
         ]);
@@ -455,7 +461,8 @@ export class GameDataService {
             },
             inventory: {
                 storage: storageResult.status === 'fulfilled' ? storageResult.value : null,
-                backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null
+                backpack: backpackResult.status === 'fulfilled' ? backpackResult.value : null,
+                tools: toolsResult.status === 'fulfilled' ? toolsResult.value : []
             },
             badges: badgesResult.status === 'fulfilled' ? badgesResult.value : [],
             allBadges: allBadgesResult.status === 'fulfilled' ? allBadgesResult.value : [],
@@ -1042,5 +1049,56 @@ export class GameDataService {
             cachedGameData.inventory.backpack.capacity.used = totalUsed;
             cachedGameData.inventory.backpack.capacity.available = maxCapacity - totalUsed;
         }
+    }
+
+    /**
+     * Update tools cache from WebSocket inventory_update payload
+     * Called when receiving inventory_update event from server
+     * @param items Array of inventory items from WebSocket
+     */
+    static updateToolsCacheFromSocket(items: Array<{ itemType: string; amount: number; location?: string }>): void {
+        if (!cachedGameData?.inventory) {
+            return;
+        }
+
+        // Initialize tools array if not exists
+        if (!cachedGameData.inventory.tools) {
+            cachedGameData.inventory.tools = [];
+        }
+
+        const tools = cachedGameData.inventory.tools;
+
+        // Update each item in the cache
+        items.forEach(item => {
+            // Only update TOOLS items
+            if (item.location !== 'TOOLS') return;
+
+            const existingIndex = tools.findIndex(t => t.itemType === item.itemType);
+
+            if (item.amount <= 0) {
+                // Remove item if amount is 0 or negative
+                if (existingIndex >= 0) {
+                    tools.splice(existingIndex, 1);
+                }
+            } else if (existingIndex >= 0) {
+                // Update existing item
+                tools[existingIndex].amount = item.amount;
+            } else {
+                // Add new item
+                tools.push({
+                    id: `ws-${Date.now()}-${item.itemType}`,
+                    itemType: item.itemType,
+                    amount: item.amount,
+                    location: 'TOOLS',
+                    name: item.itemType,
+                    rarity: 'common',
+                    category: 'tool',
+                    icon: ''
+                });
+            }
+        });
+
+        // Persist to localStorage
+        this.persistCache();
     }
 }
