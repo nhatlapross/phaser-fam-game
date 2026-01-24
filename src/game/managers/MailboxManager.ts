@@ -7,6 +7,7 @@ import { GameDataService } from '../GameDataService';
 import { getMissionSocketService, MissionUpdatedPayload } from '../MissionSocketService';
 import { EventBus } from '../EventBus';
 import { SocialSubmissionManager } from './SocialSubmissionManager';
+import { getSocketService } from '../SocketService';
 
 interface MailboxCallbacks {
     getSeedCounts: () => Record<PlantType, number>;
@@ -1794,8 +1795,59 @@ export class MailboxManager extends BaseManager {
         this.showRedeemResultModal(true, 'Validating code...', undefined, true);
 
         try {
-            const result = await RedeemService.redeemCode(code);
-            this.handleRedeemResult(result);
+            // Try WebSocket first if connected
+            const socketService = getSocketService();
+            let useWebSocket = false;
+            
+            if (socketService.isConnected()) {
+                // Use WebSocket for real-time response
+                const success = socketService.claimGift(code);
+                if (success) {
+                    useWebSocket = true;
+                    // Response will come via socket events in FarmingGame
+                    // Setup one-time listeners for this specific claim
+                    const successHandler = (data: any) => {
+                        EventBus.off('event:claim_gift_websocket_success', successHandler);
+                        EventBus.off('event:claim_gift_websocket_error', errorHandler);
+                        
+                        let rewardMessage = '';
+                        if (data.eventName) {
+                            rewardMessage += `Event: ${data.eventName}\n`;
+                        }
+                        if (data.message) {
+                            rewardMessage += data.message + '\n';
+                        }
+                        if (data.reward) {
+                            rewardMessage += `Reward: ${data.reward.itemName || data.reward.itemType}\nAmount: ${data.reward.amount}`;
+                        }
+
+                        this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
+
+                        this.scene.time.delayedCall(3000, () => {
+                            this.closeRedeemResultModal();
+                            this.close();
+                        });
+                    };
+                    
+                    const errorHandler = (data: any) => {
+                        EventBus.off('event:claim_gift_websocket_success', successHandler);
+                        EventBus.off('event:claim_gift_websocket_error', errorHandler);
+                        
+                        this.showRedeemResultModal(false, data.message || 'Invalid or expired code');
+                    };
+                    
+                    EventBus.on('event:claim_gift_websocket_success', successHandler);
+                    EventBus.on('event:claim_gift_websocket_error', errorHandler);
+                    
+                    return; // Exit early, response handled by socket events
+                }
+            }
+            
+            // Fallback to REST API if WebSocket not available or failed
+            if (!useWebSocket) {
+                const result = await RedeemService.redeemCode(code);
+                this.handleRedeemResult(result);
+            }
         } catch {
             this.showRedeemResultModal(false, 'Error validating code. Please try again.');
         }
