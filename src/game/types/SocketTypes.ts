@@ -284,6 +284,41 @@ export interface EventCheckinSuccessData {
 }
 
 // ==========================================
+// Claim Gift WebSocket Types
+// ==========================================
+
+/**
+ * Payload for claim_gift event (Client -> Server)
+ */
+export interface ClaimGiftPayload {
+    code: string;
+}
+
+/**
+ * Gift reward from WebSocket
+ */
+export interface ClaimGiftReward {
+    itemType: string;       // e.g., "SEED_MUSHROOM"
+    itemName: string;       // e.g., "Bào Tử Nấm x2"
+    amount: number;         // Amount received
+    icon: string;           // e.g., "🍄🍄"
+    probability: number;    // Probability value
+}
+
+/**
+ * Success data for claim_gift action_success response
+ */
+export interface ClaimGiftSuccessData {
+    success: true;
+    event: {
+        name: string;       // e.g., "OverGuild Bangkok Meetup"
+        code: string;       // e.g., "BANGKOK2025"
+    };
+    reward: ClaimGiftReward;
+    message: string;        // e.g., "🎉 Check-in successful! You got 🍄🍄 2x Bào Tử Nấm x2!"
+}
+
+// ==========================================
 // Quiz WebSocket Types
 // ==========================================
 
@@ -401,6 +436,9 @@ export const SOCKET_EVENTS = {
     
     // Event checkin events (Client -> Server)
     EVENT_CHECKIN: 'event_checkin',
+    
+    // Claim gift events (Client -> Server)
+    CLAIM_GIFT: 'claim_gift',
     
     // Connection events
     CONNECT: 'connect',

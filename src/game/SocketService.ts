@@ -19,6 +19,7 @@ import {
     MissionUpdatedPayload,
     MissionClaimedPayload,
     EventCheckinPayload,
+    ClaimGiftPayload,
 } from './types/SocketTypes';
 
 /**
@@ -415,6 +416,25 @@ export class SocketService {
 
         console.log('[SocketService] Emitting event_checkin:', payload);
         this.socket.emit(SOCKET_EVENTS.EVENT_CHECKIN, payload);
+        return true;
+    }
+
+    /**
+     * Claim a gift with a code (offline event check-in)
+     * Emit: 'claim_gift', { code: string }
+     * Response comes via 'action_success' or 'action_error' events
+     * @param code - The gift/event code to claim (e.g., "BANGKOK2025")
+     * @returns true if emit was successful, false otherwise
+     */
+    public claimGift(code: string): boolean {
+        if (!this.socket?.connected) {
+            console.log('[SocketService] Cannot claim gift - not connected');
+            return false;
+        }
+
+        const payload: ClaimGiftPayload = { code };
+        console.log('[SocketService] Emitting claim_gift:', payload);
+        this.socket.emit(SOCKET_EVENTS.CLAIM_GIFT, payload);
         return true;
     }
 }

@@ -737,6 +737,41 @@ export class FarmingGame extends Scene {
             // Refresh inventory to update item counts
             GameDataService.refreshInventoryAndUpdateUI();
         }
+
+        if (payload.action === 'claim_gift') {
+            const data = payload.data as {
+                success: true;
+                event: {
+                    name: string;
+                    code: string;
+                };
+                reward: {
+                    itemType: string;
+                    itemName: string;
+                    amount: number;
+                    icon: string;
+                    probability: number;
+                };
+                message: string;
+            };
+
+            // Show success message
+            this.showToastMessage(data.message, 0x22c55e);
+
+            // Play success sound
+            this.soundManager.playSuccessSound();
+
+            // Emit event for EventModalManager to handle
+            EventBus.emit('event:claim_gift_websocket_success', {
+                eventName: data.event.name,
+                code: data.event.code,
+                reward: data.reward,
+                message: data.message
+            });
+
+            // Refresh inventory to update item counts
+            GameDataService.refreshInventoryAndUpdateUI();
+        }
     }
 
     /**
@@ -756,6 +791,15 @@ export class FarmingGame extends Scene {
                 message: payload.message
             });
             console.log('[FarmingGame] Event checkin failed:', payload.message);
+            return;
+        }
+
+        if (payload.action === 'claim_gift') {
+            // Claim gift failed - emit event for EventModalManager
+            EventBus.emit('event:claim_gift_websocket_error', {
+                message: payload.message
+            });
+            console.log('[FarmingGame] Claim gift failed:', payload.message);
             return;
         }
 
