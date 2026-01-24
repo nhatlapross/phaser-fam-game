@@ -661,7 +661,7 @@ export class TownSquare extends Scene {
 
         // Create player with character from user data
         this.player = this.physics.add.sprite(startX, startY, this.currentCharacterKey, 0);
-        this.player.setOrigin(0.5, 0.8);
+        this.player.setOrigin(GAME_CONSTANTS.CHARACTER_ORIGIN_X, GAME_CONSTANTS.CHARACTER_ORIGIN_Y);
         this.player.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         this.player.setCollideWorldBounds(false);
         this.player.setDepth(startY);
@@ -823,12 +823,11 @@ export class TownSquare extends Scene {
                 }
             });
 
-            // O key to toggle pet
+            // O key to cycle pet (Cat → Dino → Dragon → Lion)
             const keyO = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.O);
             keyO.on('down', () => {
-                this.petManager.toggle();
-                const isActive = this.petManager.getIsActive();
-                this.showToastMessage(isActive ? 'Pet summoned!' : 'Pet dismissed', isActive ? 0x8BC34A : 0x9E9E9E);
+                const petName = this.petManager.cyclePet();
+                this.showToastMessage(`${petName} summoned!`, 0x8BC34A);
             });
         }
     }
@@ -1430,7 +1429,7 @@ export class TownSquare extends Scene {
 
         // Create sprite using character from user data
         const sprite = this.add.sprite(user.x, user.y, characterKey, 0);
-        sprite.setOrigin(0.5, 0.8); // Same origin as main player
+        sprite.setOrigin(GAME_CONSTANTS.CHARACTER_ORIGIN_X, GAME_CONSTANTS.CHARACTER_ORIGIN_Y);
         sprite.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         sprite.setDepth(user.y); // Depth based on Y position for proper layering
 

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GAME_CONSTANTS } from '../types/GameTypes';
 
 interface PetCallbacks {
     getPlayer: () => Phaser.Physics.Arcade.Sprite | null;
@@ -29,11 +30,44 @@ const PET_CONFIGS: Record<string, PetConfig> = {
         spriteKey: 'pet-cat',
         frameWidth: 75,
         frameHeight: 75,
-        scale: 0.25,  // Smaller size
-        followDistance: 20,  // Closer to player
-        followSpeed: 0.1,
+        scale: 0.25,
+        followDistance: 8,    // Closer to player before stopping
+        followSpeed: 0.15,    // Faster follow for closer tracking
+    },
+    dino: {
+        key: 'dino',
+        name: 'Dino',
+        spriteKey: 'pet-dino',
+        frameWidth: 75,
+        frameHeight: 75,
+        scale: 0.25,
+        followDistance: 8,
+        followSpeed: 0.15,
+    },
+    dragon: {
+        key: 'dragon',
+        name: 'Dragon',
+        spriteKey: 'pet-dragon',
+        frameWidth: 75,
+        frameHeight: 75,
+        scale: 0.25,
+        followDistance: 8,
+        followSpeed: 0.15,
+    },
+    lion: {
+        key: 'lion',
+        name: 'Lion',
+        spriteKey: 'pet-lion',
+        frameWidth: 75,
+        frameHeight: 75,
+        scale: 0.25,
+        followDistance: 8,
+        followSpeed: 0.15,
     },
 };
+
+// List of pet keys for cycling
+const PET_KEYS = Object.keys(PET_CONFIGS);
 
 // Global state to persist pet across scenes
 let globalPetActive = false;
@@ -49,10 +83,14 @@ export class PetManager {
     private isMoving: boolean = false;
     private animationsCreated: boolean = false;
 
-    // Position history for delayed following (0.5s delay)
+    // Position history for delayed following
     private positionHistory: PositionRecord[] = [];
-    private readonly DELAY_MS = 500; // 0.5 second delay
-    private readonly MAX_HISTORY_SIZE = 60; // Store up to 1 second of positions
+    private readonly DELAY_MS = 200; // 0.2 second delay (closer follow)
+    private readonly MAX_HISTORY_SIZE = 30; // Store up to 0.5 second of positions
+
+    // Pet offset from player (use centralized config)
+    private readonly OFFSET_X = GAME_CONSTANTS.PET_OFFSET_X;
+    private readonly OFFSET_Y = GAME_CONSTANTS.PET_OFFSET_Y;
 
     constructor(scene: Phaser.Scene, callbacks: PetCallbacks) {
         this.scene = scene;
@@ -193,13 +231,9 @@ export class PetManager {
 
         // Create pet sprite if not exists
         if (!this.pet) {
-            // Position pet behind player initially (bottom-left offset)
-            const offsetX = -8;
-            const offsetY = 10;
-
             this.pet = this.scene.physics.add.sprite(
-                player.x + offsetX,
-                player.y + offsetY,
+                player.x + this.OFFSET_X,
+                player.y + this.OFFSET_Y,
                 config.spriteKey
             );
 
@@ -219,10 +253,10 @@ export class PetManager {
 
         // Initialize position history with current player position
         const now = Date.now();
-        for (let i = 0; i < 30; i++) {
+        for (let i = 0; i < 15; i++) {
             this.positionHistory.push({
-                x: player.x - 8,
-                y: player.y + 10,
+                x: player.x + this.OFFSET_X,
+                y: player.y + this.OFFSET_Y,
                 time: now - (this.DELAY_MS - i * 16)
             });
         }
@@ -259,8 +293,8 @@ export class PetManager {
         const now = Date.now();
 
         // Record current player position with offset (pet follows behind player)
-        const targetX = player.x - 8;   // Slightly to the left
-        const targetY = player.y + 10;  // Slightly below (behind)
+        const targetX = player.x + this.OFFSET_X;
+        const targetY = player.y + this.OFFSET_Y;
 
         this.positionHistory.push({
             x: targetX,
@@ -291,7 +325,7 @@ export class PetManager {
 
         // Smooth follow using lerp
         const followSpeed = config.followSpeed;
-        const minMoveDistance = 3;
+        const minMoveDistance = 2; // Smaller threshold for closer pet
 
         if (distance > minMoveDistance) {
             // Move towards delayed target
@@ -322,8 +356,8 @@ export class PetManager {
             }
         }
 
-        // Update depth based on Y position (slightly behind player)
-        this.pet.setDepth(this.pet.y);
+        // Update depth: pet always behind player (lower depth)
+        this.pet.setDepth(player.depth - 1);
     }
 
     /**
@@ -362,6 +396,41 @@ export class PetManager {
         if (wasActive) {
             this.show(petKey);
         }
+    }
+
+    /**
+     * Cycle to next pet (show if not active, change if active)
+     * Returns the new pet's display name
+     */
+    public cyclePet(): string {
+        const currentIndex = PET_KEYS.indexOf(this.currentPetKey);
+        const nextIndex = (currentIndex + 1) % PET_KEYS.length;
+        const nextPetKey = PET_KEYS[nextIndex];
+        const nextConfig = PET_CONFIGS[nextPetKey];
+
+        if (!this.isActive) {
+            // If pet is not active, show the next pet
+            this.show(nextPetKey);
+        } else {
+            // If pet is active, change to next pet
+            this.changePet(nextPetKey);
+        }
+
+        return nextConfig.name;
+    }
+
+    /**
+     * Get current pet's display name
+     */
+    public getCurrentPetName(): string {
+        return PET_CONFIGS[this.currentPetKey]?.name ?? 'Pet';
+    }
+
+    /**
+     * Get list of all available pet keys
+     */
+    public static getAvailablePets(): string[] {
+        return [...PET_KEYS];
     }
 
     /**

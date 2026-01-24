@@ -70,10 +70,10 @@ export class Preloader extends Scene
         this.load.image('star', 'star.png');
 
         // Farming game assets
-        // Character spritesheet (48x64 sprite, 16 frames in 4x4 grid)
+        // Character spritesheet (125x125 sprite, 16 frames in 4x4 grid, 500x500 total)
         this.load.spritesheet('player', 'characters/player.png', {
-            frameWidth: 48,
-            frameHeight: 48
+            frameWidth: 125,
+            frameHeight: 125
         });
 
         // Load all playable character spritesheets from config
@@ -274,6 +274,18 @@ export class Preloader extends Scene
 
         // Pet spritesheets (4x4 grid = 16 frames, 300x300 total, 75x75 each)
         this.load.spritesheet('pet-cat', 'pet/cat/cat.png', {
+            frameWidth: 75,
+            frameHeight: 75
+        });
+        this.load.spritesheet('pet-dino', 'pet/dino/dino.png', {
+            frameWidth: 75,
+            frameHeight: 75
+        });
+        this.load.spritesheet('pet-dragon', 'pet/dragon/dragon.png', {
+            frameWidth: 75,
+            frameHeight: 75
+        });
+        this.load.spritesheet('pet-lion', 'pet/lion/lion.png', {
             frameWidth: 75,
             frameHeight: 75
         });

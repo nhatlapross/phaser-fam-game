@@ -7,7 +7,7 @@
  * To add a new character:
  * 1. Create folder: public/assets/characters/{key}/
  * 2. Add spritesheet: public/assets/characters/{key}/{key}.png
- *    - 4x4 grid (16 frames), 192x192 pixels (48x48 per frame)
+ *    - 4x4 grid (16 frames), 500x500 pixels (125x125 per frame)
  *    - Row 0: Down, Row 1: Up, Row 2: Left, Row 3: Right
  * 3. Run: npm run generate:characters
  */
@@ -24,13 +24,13 @@ export interface CharacterDefinition {
  * Generated from: public/assets/characters/
  */
 export const PLAYABLE_CHARACTERS: CharacterDefinition[] = [
-    { key: 'Alice', displayName: 'Alice', frameWidth: 48, frameHeight: 48 },
-    { key: 'Jane', displayName: 'Jane', frameWidth: 48, frameHeight: 48 },
-    { key: 'Marry', displayName: 'Marry', frameWidth: 48, frameHeight: 48 },
-    { key: 'Peter', displayName: 'Peter', frameWidth: 48, frameHeight: 48 },
-    { key: 'RED', displayName: 'RED', frameWidth: 48, frameHeight: 48 },
-    { key: 'Shin', displayName: 'Shin', frameWidth: 48, frameHeight: 48 },
-    { key: 'Willi', displayName: 'Willi', frameWidth: 48, frameHeight: 48 }
+    { key: 'Alice', displayName: 'Alice', frameWidth: 125, frameHeight: 125 },
+    { key: 'Jane', displayName: 'Jane', frameWidth: 125, frameHeight: 125 },
+    { key: 'Marry', displayName: 'Marry', frameWidth: 125, frameHeight: 125 },
+    { key: 'Peter', displayName: 'Peter', frameWidth: 125, frameHeight: 125 },
+    { key: 'RED', displayName: 'RED', frameWidth: 125, frameHeight: 125 },
+    { key: 'Shin', displayName: 'Shin', frameWidth: 125, frameHeight: 125 },
+    { key: 'Willi', displayName: 'Willi', frameWidth: 125, frameHeight: 125 }
 ];
 
 /**

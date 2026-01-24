@@ -2106,6 +2106,7 @@ export class FarmingGame extends Scene {
         );
 
         this.player.setCollideWorldBounds(true);
+        this.player.setOrigin(GAME_CONSTANTS.CHARACTER_ORIGIN_X, GAME_CONSTANTS.CHARACTER_ORIGIN_Y);
         this.player.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         this.player.setDepth(this.player.y); // Dynamic depth based on Y position
 
@@ -2237,12 +2238,11 @@ export class FarmingGame extends Scene {
             this.scene.start('TilesetDebug');
         });
 
-        // Pet toggle - press O to show/hide pet
+        // Pet cycle - press O to cycle through pets (Cat → Dino → Dragon → Lion)
         const keyO = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.O);
         keyO.on('down', () => {
-            this.petManager.toggle();
-            const isActive = this.petManager.getIsActive();
-            this.showToastMessage(isActive ? 'Pet summoned!' : 'Pet dismissed', isActive ? 0x8BC34A : 0x9E9E9E);
+            const petName = this.petManager.cyclePet();
+            this.showToastMessage(`${petName} summoned!`, 0x8BC34A);
         });
     }
 
