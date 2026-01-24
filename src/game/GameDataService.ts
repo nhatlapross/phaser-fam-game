@@ -12,7 +12,7 @@ import { QuizService, Quiz } from './QuizService';
 import { EventService, GameEvent } from './EventService';
 import { StreakService, StreakStatusResponse, StreakHistoryResponse } from './StreakService';
 import { ShopService, GoldShopResponse, GemShopResponse, CashShopResponse } from './ShopService';
-import { InventoryService, StorageResponse, BackpackResponse } from './InventoryService';
+import { InventoryService, StorageResponse, BackpackResponse, InventoryItem } from './InventoryService';
 import { BadgeService, SoulboundToken, ApiBadge } from './BadgeService';
 import { PlantType } from './types/GameTypes';
 import { GameCache, CACHE_KEYS, CACHE_TTL } from './utils/GameCache';

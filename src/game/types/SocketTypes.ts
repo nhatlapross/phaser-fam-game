@@ -243,6 +243,82 @@ export interface MissionClaimedPayload {
 }
 
 // ==========================================
+// Event Checkin WebSocket Types
+// ==========================================
+
+/**
+ * Event information from WebSocket
+ */
+export interface SocketEvent {
+    id: string;
+    name: string;
+    location: string;
+    startTime: string;  // ISO date string
+    endTime: string;    // ISO date string
+}
+
+/**
+ * Event checkin reward from WebSocket
+ */
+export interface EventCheckinReward {
+    itemType: string;   // e.g., "SEED_ALGAE"
+    amount: number;     // Amount received
+    totalAmount: number; // User's new total for this item
+}
+
+/**
+ * Payload for event_checkin event (Client -> Server)
+ */
+export interface EventCheckinPayload {
+    eventId: string;
+    verificationCode?: string;
+}
+
+/**
+ * Success data for event_checkin action_success response
+ */
+export interface EventCheckinSuccessData {
+    success: true;
+    event: SocketEvent;
+    reward: EventCheckinReward;
+}
+
+// ==========================================
+// Claim Gift WebSocket Types
+// ==========================================
+
+/**
+ * Payload for claim_gift event (Client -> Server)
+ */
+export interface ClaimGiftPayload {
+    code: string;
+}
+
+/**
+ * Gift reward from WebSocket
+ */
+export interface ClaimGiftReward {
+    itemType: string;       // e.g., "SEED_MUSHROOM"
+    itemName: string;       // e.g., "Bào Tử Nấm x2"
+    amount: number;         // Amount received
+    icon: string;           // e.g., "🍄🍄"
+    probability: number;    // Probability value
+}
+
+/**
+ * Success data for claim_gift action_success response
+ */
+export interface ClaimGiftSuccessData {
+    success: true;
+    event: {
+        name: string;       // e.g., "OverGuild Bangkok Meetup"
+        code: string;       // e.g., "BANGKOK2025"
+    };
+    reward: ClaimGiftReward;
+    message: string;        // e.g., "🎉 Check-in successful! You got 🍄🍄 2x Bào Tử Nấm x2!"
+}
+
+// ==========================================
 // Quiz WebSocket Types
 // ==========================================
 
@@ -357,6 +433,12 @@ export const SOCKET_EVENTS = {
     // Quiz events (Client -> Server)
     QUIZ_START: 'quiz:start',
     QUIZ_SUBMIT: 'quiz:submit',
+    
+    // Event checkin events (Client -> Server)
+    EVENT_CHECKIN: 'event_checkin',
+    
+    // Claim gift events (Client -> Server)
+    CLAIM_GIFT: 'claim_gift',
     
     // Connection events
     CONNECT: 'connect',
