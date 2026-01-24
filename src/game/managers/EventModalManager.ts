@@ -4,6 +4,7 @@ import { EventService, GameEvent } from '../EventService';
 import { RedeemService } from '../RedeemService';
 import { GameDataService } from '../GameDataService';
 import { EventBus } from '../EventBus';
+import { getSocketService } from '../SocketService';
 
 interface EventModalCallbacks {
     showToastMessage?: (text: string, color: number) => void;
@@ -28,6 +29,10 @@ export class EventModalManager extends BaseManager {
     constructor(scene: Phaser.Scene, callbacks: EventModalCallbacks = {}) {
         super(scene);
         this.callbacks = callbacks;
+        
+        // Listen for WebSocket event checkin responses
+        EventBus.on('event:checkin_websocket_success', this.handleWebSocketSuccess, this);
+        EventBus.on('event:checkin_websocket_error', this.handleWebSocketError, this);
     }
 
     /**
@@ -786,32 +791,50 @@ export class EventModalManager extends BaseManager {
             submitBtn.disableInteractive();
 
             try {
-                const result = await RedeemService.redeemCode(code, event.id);
+                // Try WebSocket first if connected
+                const socketService = getSocketService();
+                let useWebSocket = false;
                 
-                if (result.success) {
-                    let successMsg = '🎉 Check-in successful!';
-                    if (result.reward) {
-                        const itemName = result.reward.itemName || result.reward.itemType?.replace(/_/g, ' ') || 'item';
-                        successMsg = `🎉 +${result.reward.amount} ${itemName}`;
+                if (socketService.isConnected()) {
+                    // Use WebSocket for real-time response
+                    const success = socketService.eventCheckin(event.id, code);
+                    if (success) {
+                        useWebSocket = true;
+                        // Response will come via socket events in FarmingGame
+                        // The onActionSuccess/onActionError handlers will handle the response
+                        return; // Exit early, response handled by socket events
                     }
+                }
+                
+                // Fallback to REST API if WebSocket not available or failed
+                if (!useWebSocket) {
+                    const result = await RedeemService.redeemCode(code, event.id);
                     
-                    this.callbacks.showToastMessage?.(successMsg, 0x22c55e);
-                    this.callbacks.playSuccessSound?.();
-                    
-                    // Clear cached events to force refresh
-                    this.cachedEvents = null;
-                    
-                    this.closeEventDetails();
-                    this.close();
-                    
-                    // Emit event to refresh badge
-                    console.log('[EventModalManager] Emitting event:checkin_success');
-                    EventBus.emit('event:checkin_success');
-                    GameDataService.refreshAndUpdateUI();
-                } else {
-                    this.callbacks.showToastMessage?.(result.message || 'Invalid code', 0xef4444);
-                    submitText.setText('Submit');
-                    submitBtn.setInteractive({ useHandCursor: true });
+                    if (result.success) {
+                        let successMsg = '🎉 Check-in successful!';
+                        if (result.reward) {
+                            const itemName = result.reward.itemName || result.reward.itemType?.replace(/_/g, ' ') || 'item';
+                            successMsg = `🎉 +${result.reward.amount} ${itemName}`;
+                        }
+                        
+                        this.callbacks.showToastMessage?.(successMsg, 0x22c55e);
+                        this.callbacks.playSuccessSound?.();
+                        
+                        // Clear cached events to force refresh
+                        this.cachedEvents = null;
+                        
+                        this.closeEventDetails();
+                        this.close();
+                        
+                        // Emit event to refresh badge
+                        console.log('[EventModalManager] Emitting event:checkin_success');
+                        EventBus.emit('event:checkin_success');
+                        GameDataService.refreshAndUpdateUI();
+                    } else {
+                        this.callbacks.showToastMessage?.(result.message || 'Invalid code', 0xef4444);
+                        submitText.setText('Submit');
+                        submitBtn.setInteractive({ useHandCursor: true });
+                    }
                 }
             } catch {
                 this.callbacks.showToastMessage?.('Error checking in', 0xef4444);
@@ -896,29 +919,49 @@ export class EventModalManager extends BaseManager {
                         // Not JSON, use raw text
                     }
                     
-                    const result = await RedeemService.redeemCode(verificationCode, event.id);
+                    // Try WebSocket first if connected
+                    const socketService = getSocketService();
+                    let useWebSocket = false;
                     
-                    if (result.success) {
-                        let successMsg = '🎉 Check-in successful!';
-                        if (result.reward) {
-                            const itemName = result.reward.itemName || result.reward.itemType?.replace(/_/g, ' ') || 'item';
-                            successMsg = `🎉 +${result.reward.amount} ${itemName}`;
+                    if (socketService.isConnected()) {
+                        // Use WebSocket for real-time response
+                        const success = socketService.eventCheckin(event.id, verificationCode);
+                        if (success) {
+                            useWebSocket = true;
+                            // Response will come via socket events in FarmingGame
+                            // The onActionSuccess/onActionError handlers will handle the response
+                            this.closeEventDetails();
+                            this.close();
+                            return; // Exit early, response handled by socket events
                         }
+                    }
+                    
+                    // Fallback to REST API if WebSocket not available or failed
+                    if (!useWebSocket) {
+                        const result = await RedeemService.redeemCode(verificationCode, event.id);
                         
-                        this.callbacks.showToastMessage?.(successMsg, 0x22c55e);
-                        this.callbacks.playSuccessSound?.();
-                        
-                        // Clear cached events to force refresh
-                        this.cachedEvents = null;
-                        
-                        this.closeEventDetails();
-                        this.close();
-                        
-                        // Emit event to refresh badge
-                        EventBus.emit('event:checkin_success');
-                        GameDataService.refreshAndUpdateUI();
-                    } else {
-                        this.callbacks.showToastMessage?.(result.message || 'Invalid QR code', 0xef4444);
+                        if (result.success) {
+                            let successMsg = '🎉 Check-in successful!';
+                            if (result.reward) {
+                                const itemName = result.reward.itemName || result.reward.itemType?.replace(/_/g, ' ') || 'item';
+                                successMsg = `🎉 +${result.reward.amount} ${itemName}`;
+                            }
+                            
+                            this.callbacks.showToastMessage?.(successMsg, 0x22c55e);
+                            this.callbacks.playSuccessSound?.();
+                            
+                            // Clear cached events to force refresh
+                            this.cachedEvents = null;
+                            
+                            this.closeEventDetails();
+                            this.close();
+                            
+                            // Emit event to refresh badge
+                            EventBus.emit('event:checkin_success');
+                            GameDataService.refreshAndUpdateUI();
+                        } else {
+                            this.callbacks.showToastMessage?.(result.message || 'Invalid QR code', 0xef4444);
+                        }
                     }
                 } catch {
                     this.callbacks.showToastMessage?.('Error checking in', 0xef4444);
@@ -955,9 +998,56 @@ export class EventModalManager extends BaseManager {
     }
 
     /**
+     * Handle successful event check-in from WebSocket via EventBus
+     */
+    private handleWebSocketSuccess(data: { eventName: string; rewardText: string }): void {
+        // Clear cached events to force refresh
+        this.cachedEvents = null;
+        
+        // Close any open modals
+        this.closeEventDetails();
+        this.close();
+        
+        // Emit event to refresh badge
+        console.log('[EventModalManager] Emitting event:checkin_success from WebSocket');
+        EventBus.emit('event:checkin_success');
+        GameDataService.refreshAndUpdateUI();
+    }
+
+    /**
+     * Handle failed event check-in from WebSocket via EventBus
+     */
+    private handleWebSocketError(data: { message: string }): void {
+        // Just show the error message, keep modals open for retry
+        this.callbacks.showToastMessage?.(data.message, 0xef4444);
+    }
+
+    /**
+     * Handle successful event check-in from WebSocket
+     * Called by FarmingGame when receiving action_success for event_checkin
+     * @deprecated Use EventBus instead
+     */
+    public handleEventCheckinSuccess(eventName: string, rewardText: string): void {
+        this.handleWebSocketSuccess({ eventName, rewardText });
+    }
+
+    /**
+     * Handle failed event check-in from WebSocket
+     * Called by FarmingGame when receiving action_error for event_checkin
+     * @deprecated Use EventBus instead
+     */
+    public handleEventCheckinError(message: string): void {
+        this.handleWebSocketError({ message });
+    }
+
+    /**
      * Destroy manager and cleanup
      */
     public destroy(): void {
+        // Remove EventBus listeners
+        EventBus.off('event:checkin_websocket_success', this.handleWebSocketSuccess, this);
+        EventBus.off('event:checkin_websocket_error', this.handleWebSocketError, this);
+        
         this.closeEventDetails();
         this.close();
         this.closeQRScanner();

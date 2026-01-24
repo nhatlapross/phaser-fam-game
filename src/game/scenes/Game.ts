@@ -1,5 +1,6 @@
 import { EventBus } from '../EventBus';
 import { Scene } from 'phaser';
+import { GAME_CONSTANTS } from '../types/GameTypes';
 
 export class Game extends Scene
 {
@@ -26,7 +27,7 @@ export class Game extends Scene
 
         // Create player character in the center of the screen
         this.player = this.add.sprite(512, 384, 'player');
-        this.player.setScale(0.5); // Make the player smaller
+        this.player.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
 
         // Add keyboard controls
         this.cursors = this.input.keyboard!.createCursorKeys();

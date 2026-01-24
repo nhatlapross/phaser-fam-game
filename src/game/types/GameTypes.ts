@@ -252,7 +252,11 @@ export const GAME_CONSTANTS = {
     FRUITS_PER_FERTILIZER: 3,
     MISSIONS_CACHE_DURATION: 60000, // 1 minute
     CHECKIN_STORAGE_KEY: 'fam_game_checkin_data',
-    CHARACTER_SCALE: 0.8 // Character sprite scale (0.8 = 80% of original size)
+    CHARACTER_SCALE: 0.31, // Character sprite scale (adjusted for 500x500 spritesheet, 125x125 frames)
+    CHARACTER_ORIGIN_X: 0.5, // Horizontal origin (center)
+    CHARACTER_ORIGIN_Y: 0.8, // Vertical origin (near feet for proper depth sorting)
+    PET_OFFSET_X: -10, // Pet offset from player X (left of player)
+    PET_OFFSET_Y: -8,  // Pet offset from player Y (behind/above player)
 } as const;
 
 // Interface for scene reference (to be used by managers)

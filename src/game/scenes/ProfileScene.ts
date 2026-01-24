@@ -150,9 +150,9 @@ export class ProfileScene extends Scene {
         const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
 
 
-        // Character sprite
+        // Character sprite (125x125 frames, scale to fit 70x70 frame)
         this.characterSprite = this.add.sprite(centerX, y, characterKey, 0);
-        this.characterSprite.setScale(3);
+        this.characterSprite.setDisplaySize(120, 120);
 
         // Idle animation for the selected character
         const animKey = `profile-${characterKey}-idle`;

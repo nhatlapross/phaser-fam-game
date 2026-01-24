@@ -552,7 +552,7 @@ export class ProfileManager extends BaseManager {
      */
     private createProfileContent(modalX: number, contentStartY: number, modalWidth: number, contentHeight: number, user: any): void {
         const avatarY = contentStartY + 30;
-        const avatarSize = 64;
+        const avatarSize = 50; // Consistent with mini profile card
 
         // Avatar frame
         const avatarFrame = this.scene.add.sprite(modalX, avatarY, 'square-buttons', 6);
@@ -1084,7 +1084,7 @@ export class ProfileManager extends BaseManager {
         const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
 
         const characterSprite = this.scene.add.sprite(centerX, centerY, characterKey, 0);
-        characterSprite.setDisplaySize(88, 88); // 10% larger
+        characterSprite.setDisplaySize(64, 64); // Adjusted for 500x500 spritesheet
         characterSprite.setDepth(5102);
         characterSprite.setAlpha(0);
         this.scene.cameras.main.ignore(characterSprite);

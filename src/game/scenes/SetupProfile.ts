@@ -87,10 +87,10 @@ export class SetupProfile extends Scene {
         frameBg.setDisplaySize(frameSize + 12, frameSize + 12);
         frameBg.setTint(0x5D4037);
 
-        // Character preview sprite (large)
+        // Character preview sprite (125x125 frames, display at 70x70 to fit 90px frame)
         const currentChar = PLAYABLE_CHARACTERS[this.selectedCharacter - 1];
         this.characterPreview = this.add.sprite(centerX, y, currentChar.key, 0);
-        this.characterPreview.setScale(2.5);
+        this.characterPreview.setDisplaySize(70, 70);
 
         // Create idle animation for current character
         this.playCharacterAnimation();

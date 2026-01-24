@@ -10,7 +10,7 @@
  * Requirements for each character folder:
  * - Folder name = character key (e.g., "dog")
  * - Contains {key}.png spritesheet (e.g., "dog.png")
- * - Spritesheet: 4x4 grid (16 frames), 192x192 pixels (48x48 per frame)
+ * - Spritesheet: 4x4 grid (16 frames), 500x500 pixels (125x125 per frame)
  */
 
 const fs = require('fs');
@@ -20,8 +20,9 @@ const CHARACTERS_DIR = path.join(__dirname, '../public/assets/characters');
 const OUTPUT_FILE = path.join(__dirname, '../src/game/config/CharacterConfig.ts');
 
 // Default frame size (can be overridden per character if needed)
-const DEFAULT_FRAME_WIDTH = 48;
-const DEFAULT_FRAME_HEIGHT = 48;
+// 500x500 spritesheet with 4x4 grid = 125x125 per frame
+const DEFAULT_FRAME_WIDTH = 125;
+const DEFAULT_FRAME_HEIGHT = 125;
 
 function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
@@ -74,7 +75,7 @@ function generateConfigFile(characters) {
  * To add a new character:
  * 1. Create folder: public/assets/characters/{key}/
  * 2. Add spritesheet: public/assets/characters/{key}/{key}.png
- *    - 4x4 grid (16 frames), 192x192 pixels (48x48 per frame)
+ *    - 4x4 grid (16 frames), 500x500 pixels (125x125 per frame)
  *    - Row 0: Down, Row 1: Up, Row 2: Left, Row 3: Right
  * 3. Run: npm run generate:characters
  */
