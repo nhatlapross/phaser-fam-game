@@ -568,10 +568,9 @@ export class FarmingGame extends Scene {
     private onInventoryUpdate(items: Array<{ itemType: string; amount: number; location?: string }>): void {
         let needsToolbarUpdate = false;
         
-        // Update GameDataService cache for warehouse/backpack/tools
+        // Update GameDataService cache for warehouse/backpack
         GameDataService.updateStorageCacheFromSocket(items);
         GameDataService.updateBackpackCacheFromSocket(items);
-        GameDataService.updateToolsCacheFromSocket(items);
         
         // Process each inventory item for toolbar
         items.forEach(item => {
@@ -961,14 +960,8 @@ export class FarmingGame extends Scene {
                 });
             }
 
-            // Load water count from tools inventory (location = 'TOOLS')
-            if (cachedData.inventory?.tools) {
-                const waterItem = cachedData.inventory.tools.find(item => item.itemType === 'WATER');
-                const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
-                if (wateringCan) {
-                    wateringCan.count = waterItem?.amount || 0;
-                }
-            }
+            // Load water count from API (no cache for tools)
+            this.fetchWaterInventory();
 
             // Load fruits (chest inventory) from cache
             this.chestInventory = [];
@@ -1309,16 +1302,31 @@ export class FarmingGame extends Scene {
     }
 
     /**
-     * Fetches water count from tools inventory (location = 'TOOLS') and updates watering can
+     * Fetches water count from inventory API (filter location = 'TOOLS') and updates watering can
      */
     private async fetchWaterInventory() {
         try {
-            const tools = await InventoryService.getTools();
-            const waterItem = tools.find(item => item.itemType === 'WATER');
-            
-            const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
-            if (wateringCan) {
-                wateringCan.count = waterItem?.amount || 0;
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000'}/inventory`,
+                {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${localStorage.getItem('fam_game_access_token')}`,
+                    },
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                const allItems = data.inventory || [];
+                const waterItem = allItems.find((item: { itemType: string; location: string; amount: number }) => 
+                    item.itemType === 'WATER' && item.location === 'TOOLS'
+                );
+                
+                const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
+                if (wateringCan) {
+                    wateringCan.count = waterItem?.amount || 0;
+                }
             }
 
             // Update toolbar to reflect new count
@@ -2557,14 +2565,8 @@ export class FarmingGame extends Scene {
                 }
             }
 
-            // Sync water count from tools inventory (location = 'TOOLS')
-            if (cachedData.inventory?.tools) {
-                const waterItem = cachedData.inventory.tools.find(item => item.itemType === 'WATER');
-                const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
-                if (wateringCan) {
-                    wateringCan.count = waterItem?.amount || 0;
-                }
-            }
+            // Sync water count from API (no cache for tools)
+            this.fetchWaterInventory();
 
             // Sync streak data to CheckinManager (fixes notification icon after background refresh)
             if (cachedData.streak) {
