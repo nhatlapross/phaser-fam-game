@@ -228,7 +228,7 @@ export class Transformation extends Scene {
         // Scale up with bounce
         this.tweens.add({
             targets: this.characterSprite,
-            scale: 5,
+            scale: 2.5,  // 125 * 2.5 = ~312px
             duration: 800,
             ease: 'Back.easeOut',
             onComplete: () => {
@@ -262,8 +262,8 @@ export class Transformation extends Scene {
             });
         }
 
-        // Username reveal
-        const nameText = this.add.text(centerX, centerY + 80, username, {
+        // Username reveal (adjusted for smaller character)
+        const nameText = this.add.text(centerX, centerY + 120, username, {
             fontSize: '18px',
             fontFamily: 'PixelFont',
             color: '#FFD700',
@@ -284,8 +284,8 @@ export class Transformation extends Scene {
             ease: 'Back.easeOut'
         });
 
-        // "Ready!" text
-        const readyText = this.add.text(centerX, centerY + 110, '✨ Ready to Farm! ✨', {
+        // "Ready!" text (adjusted for smaller character)
+        const readyText = this.add.text(centerX, centerY + 150, '✨ Ready to Farm! ✨', {
             fontSize: '12px',
             fontFamily: 'PixelFont',
             color: '#4ade80',
@@ -303,11 +303,11 @@ export class Transformation extends Scene {
             delay: 1200
         });
 
-        // Pulsing glow behind character
+        // Pulsing glow behind character (adjusted for smaller character)
         const characterGlow = this.add.graphics();
         characterGlow.setDepth(45);
         characterGlow.fillStyle(0x4ade80, 0.3);
-        characterGlow.fillCircle(centerX, centerY, 60);
+        characterGlow.fillCircle(centerX, centerY, 100);
 
         this.tweens.add({
             targets: characterGlow,

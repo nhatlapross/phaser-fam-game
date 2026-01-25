@@ -87,10 +87,11 @@ export class SetupProfile extends Scene {
         frameBg.setDisplaySize(frameSize + 12, frameSize + 12);
         frameBg.setTint(0x5D4037);
 
-        // Character preview sprite (125x125 frames, display at 70x70 to fit 90px frame)
+        // Character preview sprite (125x125 frames)
         const currentChar = PLAYABLE_CHARACTERS[this.selectedCharacter - 1];
         this.characterPreview = this.add.sprite(centerX, y, currentChar.key, 0);
-        this.characterPreview.setDisplaySize(70, 70);
+        // Scale 1.0 = 125px display size
+        this.characterPreview.setScale(1.0);
 
         // Create idle animation for current character
         this.playCharacterAnimation();
@@ -204,7 +205,7 @@ export class SetupProfile extends Scene {
 
                 this.tweens.add({
                     targets: this.characterPreview,
-                    scale: 2.5,
+                    scale: 1,  // Match initial scale
                     alpha: 1,
                     duration: 150,
                     ease: 'Back.easeOut'
