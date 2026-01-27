@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useLayoutEffect, useRef } from 'react';
 import StartGame from './game/main';
 import { EventBus } from './game/EventBus';
 import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
+import { initMiniGameOverlay } from './components/MiniGameOverlay';
 
 export interface IRefPhaserGame
 {
@@ -81,6 +82,12 @@ export const PhaserGame = forwardRef<IRefPhaserGame, IProps>(function PhaserGame
         
         }
     }, [currentActiveScene, ref]);
+
+    // Initialize mini game overlay listener
+    useEffect(() => {
+        const cleanup = initMiniGameOverlay();
+        return cleanup;
+    }, []);
 
     return (
         <>
