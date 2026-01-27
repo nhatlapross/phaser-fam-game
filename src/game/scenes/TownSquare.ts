@@ -1,7 +1,7 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { TOWN_SQUARE_MAP_DATA, TOWN_SQUARE_MAP_WIDTH, TOWN_SQUARE_MAP_HEIGHT } from './TownSquareMapData';
-import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager, FactoryManager, GAME_CONSTANTS, PetManager } from '../managers';
+import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager, FactoryManager, GAME_CONSTANTS, PetManager, GameHouseManager } from '../managers';
 import { GameDataService } from '../GameDataService';
 import { UserService } from '../UserService';
 import { LobbySocketService } from '../LobbySocketService';
@@ -70,6 +70,9 @@ export class TownSquare extends Scene {
 
     // Pet manager
     private petManager!: PetManager;
+
+    // Game house manager
+    private gameHouseManager!: GameHouseManager;
 
     // Toolbar items (same as FarmingGame)
     private toolbarItems: ToolbarItem[] = [
@@ -270,6 +273,11 @@ export class TownSquare extends Scene {
         this.petManager = new PetManager(this, {
             getPlayer: () => this.player,
             getUICamera: () => this.uiCamera
+        });
+
+        // Create game house manager
+        this.gameHouseManager = new GameHouseManager(this, {
+            showToastMessage: (text, color) => this.showToastMessage(text, color)
         });
 
         // Create marquee announcement
@@ -599,9 +607,28 @@ export class TownSquare extends Scene {
             });
         });
 
-        // Click handler - show "Coming soon" message
+        // Click handler - only house #1 (Mouse House) opens game modal
         house.on('pointerdown', () => {
-            this.showToastMessage(`Coming soon...`, 0xf59e0b);
+            if (houseId === 1) {
+                // House #1 - Mouse House: Mini Games
+                this.gameHouseManager.openGameModal(houseId);
+            } else {
+                // Other houses: Coming soon with specific messages
+                const houseNames: Record<number, string> = {
+                    2: 'Cat House',
+                    3: 'Dog House',
+                    4: 'Bird House',
+                    5: 'Fish House',
+                    6: 'Rabbit House',
+                    7: 'Hamster House',
+                    8: 'Turtle House',
+                    9: 'Snake House',
+                    10: 'Frog House',
+                    11: 'Lizard House',
+                    12: 'Spider House'
+                };
+                this.showToastMessage(`Coming soon...`, 0xf59e0b);
+            }
         });
     }
 
@@ -949,6 +976,7 @@ export class TownSquare extends Scene {
             this.stationManager?.getIsOpen() ||
             this.shopManager?.getIsOpen() ||
             this.factoryManager?.getIsOpen() ||
+            this.gameHouseManager?.getIsOpen() ||
             (this.chatInputElement && document.activeElement === this.chatInputElement);
 
         if (isAnyModalOpen) {
@@ -1189,6 +1217,7 @@ export class TownSquare extends Scene {
         this.shopManager?.destroy();
         this.factoryManager?.destroy();
         this.petManager?.destroy();
+        this.gameHouseManager?.destroy();
 
         // Cleanup lobby socket - disconnect to prevent orphaned connections
         this.cleanupLobbySocketListeners();
