@@ -21,6 +21,7 @@ export { MissionManager } from './MissionManager';
 export { QuizManager } from './QuizManager';
 export { EventModalManager } from './EventModalManager';
 export { PetManager } from './PetManager';
+export { GameHouseManager } from './GameHouseManager';
 
 // Re-export types
 export * from '../types/GameTypes';
