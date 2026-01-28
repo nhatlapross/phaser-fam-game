@@ -1,6 +1,5 @@
 import { GamepadIcon, ScrollTextIcon } from "lucide-react";
 import GameCard from "./GameCard";
-import Leaderboard from "./Leaderboard";
 
 export default function PopularGames() {
   const games = [
@@ -57,8 +56,6 @@ export default function PopularGames() {
             Leaderboard
           </h2>
         </div>
-
-        <Leaderboard />
       </div>
     </div>
   );
