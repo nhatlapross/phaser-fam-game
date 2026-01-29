@@ -390,18 +390,79 @@ const MangaStudio: React.FC = () => {
                 </div>
             )}
 
-            {/* Generate Button */}
-            <button
-                onClick={handleGenerate}
-                disabled={isGenerating}
-                style={{
-                    ...buttonStyle,
-                    opacity: isGenerating ? 0.7 : 1,
-                    cursor: isGenerating ? 'wait' : 'pointer',
-                }}
-            >
-                {isGenerating ? '⏳ Generating...' : '🎨 Generate Manga Page'}
-            </button>
+            {/* Generate Button - centered with loading effect */}
+            <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column',
+                alignItems: 'center', 
+                gap: '12px',
+                marginTop: '8px',
+            }}>
+                {isGenerating && (
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '8px',
+                    }}>
+                        <div style={{
+                            fontSize: '32px',
+                            animation: 'pencilDraw 0.5s ease-in-out infinite',
+                        }}>
+                            ✏️
+                        </div>
+                        <div style={{
+                            color: '#FFD700',
+                            fontSize: '12px',
+                            textAlign: 'center',
+                        }}>
+                            AI is drawing your manga...
+                        </div>
+                        <div style={{
+                            width: '200px',
+                            height: '6px',
+                            background: '#3D1A1A',
+                            borderRadius: '3px',
+                            overflow: 'hidden',
+                        }}>
+                            <div style={{
+                                width: '30%',
+                                height: '100%',
+                                background: 'linear-gradient(90deg, #FFD700, #FFA500)',
+                                borderRadius: '3px',
+                                animation: 'loadingBar 1.5s ease-in-out infinite',
+                            }} />
+                        </div>
+                    </div>
+                )}
+                
+                <button
+                    onClick={handleGenerate}
+                    disabled={isGenerating}
+                    style={{
+                        ...buttonStyle,
+                        opacity: isGenerating ? 0.5 : 1,
+                        cursor: isGenerating ? 'not-allowed' : 'pointer',
+                    }}
+                >
+                    {isGenerating ? '⏳ Generating...' : '🎨 Generate Manga Page'}
+                </button>
+            </div>
+
+            {/* CSS Animations */}
+            <style>{`
+                @keyframes pencilDraw {
+                    0%, 100% { transform: rotate(-10deg) translateY(0); }
+                    25% { transform: rotate(5deg) translateY(-3px); }
+                    50% { transform: rotate(-5deg) translateY(0); }
+                    75% { transform: rotate(10deg) translateY(-3px); }
+                }
+                @keyframes loadingBar {
+                    0% { transform: translateX(-100%); }
+                    50% { transform: translateX(250%); }
+                    100% { transform: translateX(-100%); }
+                }
+            `}</style>
 
             <button
                 onClick={() => setView(currentStory ? 'viewer' : 'home')}

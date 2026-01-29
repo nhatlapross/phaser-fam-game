@@ -6,10 +6,7 @@
 import { GoogleGenAI } from '@google/genai';
 
 const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-// Model tương tự infinite-heroes
 const MODEL_IMAGE_GEN = 'gemini-3-pro-image-preview';
-
-
 
 export type MangaStyle = 'shounen' | 'shoujo' | 'chibi' | 'seinen' | 'classic';
 
@@ -29,11 +26,11 @@ export const MANGA_STYLES: MangaStyleInfo[] = [
 ];
 
 export interface MangaGenerationRequest {
-    characterImage?: string; // Base64 image
+    characterImage?: string;
     characterDescription: string;
     storyContext: string;
     style: MangaStyle;
-    previousPages?: string[]; // For continuation
+    previousPages?: string[];
 }
 
 export interface MangaPage {
@@ -52,9 +49,7 @@ export interface MangaStory {
     updatedAt: number;
 }
 
-/**
- * Build prompt for manga generation
- */
+
 function buildMangaPrompt(request: MangaGenerationRequest, isFirstPage: boolean): string {
     const styleDescriptions: Record<MangaStyle, string> = {
         shounen: 'dynamic action shounen manga style with bold lines, speed effects, and dramatic angles',
@@ -86,9 +81,6 @@ function buildMangaPrompt(request: MangaGenerationRequest, isFirstPage: boolean)
     return prompt;
 }
 
-/**
- * Get AI instance
- */
 function getAI() {
     if (!GEMINI_API_KEY) {
         throw new Error('Gemini API key not configured');
@@ -96,32 +88,21 @@ function getAI() {
     return new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 }
 
-/**
- * Convert base64 data URL to raw base64
- */
 function extractBase64(dataUrl: string): string {
     return dataUrl.replace(/^data:image\/\w+;base64,/, '');
 }
 
-/**
- * Sleep helper
- */
 function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Generate manga page using Gemini API (multimodal) - tương tự infinite-heroes
- */
 export async function generateMangaPage(request: MangaGenerationRequest, maxRetries = 3): Promise<string> {
     const ai = getAI();
     const isFirstPage = !request.previousPages || request.previousPages.length === 0;
     const promptText = buildMangaPrompt(request, isFirstPage);
 
-    // Build multimodal contents array - giống infinite-heroes
     const contents: any[] = [];
 
-    // Add character reference image if provided (như REFERENCE 1 [HERO] trong infinite-heroes)
     if (request.characterImage) {
         contents.push({ text: "REFERENCE [MAIN CHARACTER]:" });
         contents.push({
@@ -132,7 +113,6 @@ export async function generateMangaPage(request: MangaGenerationRequest, maxRetr
         });
     }
 
-    // Add prompt text cuối cùng
     let finalPrompt = promptText;
     if (request.characterImage) {
         finalPrompt = `INSTRUCTIONS: Maintain strict character likeness using the REFERENCE image above. ${promptText}`;
@@ -143,18 +123,14 @@ export async function generateMangaPage(request: MangaGenerationRequest, maxRetr
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            // Config đơn giản như infinite-heroes - chỉ dùng imageConfig
             const res = await ai.models.generateContent({
                 model: MODEL_IMAGE_GEN,
                 contents: contents,
                 config: {
-                    imageConfig: { 
-                        aspectRatio: '2:3' // Vertical manga format
-                    }
+                    imageConfig: { aspectRatio: '2:3' }
                 }
             });
 
-            // Extract image from response - giống infinite-heroes
             const part = res.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
             if (part?.inlineData?.data) {
                 const mimeType = part.inlineData.mimeType || 'image/png';
@@ -165,22 +141,18 @@ export async function generateMangaPage(request: MangaGenerationRequest, maxRetr
         } catch (error: any) {
             lastError = error;
             const msg = String(error);
-            console.error(`Gemini API error (attempt ${attempt}/${maxRetries}):`, error);
             
-            // Handle rate limit
             if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
                 const retryMatch = msg.match(/retry in (\d+(?:\.\d+)?)/i);
                 const waitTime = retryMatch ? Math.ceil(parseFloat(retryMatch[1]) * 1000) + 1000 : 35000;
                 
                 if (attempt < maxRetries) {
-                    console.log(`Rate limited. Waiting ${waitTime/1000}s before retry...`);
                     await sleep(waitTime);
                     continue;
                 }
                 throw new Error(`API quota exceeded. Please wait ${Math.ceil(waitTime/1000)} seconds and try again.`);
             }
             
-            // Non-retryable errors
             if (msg.includes('API_KEY_INVALID') || msg.includes('permission denied')) {
                 throw new Error('Invalid API key. Please check your Gemini API key.');
             }
@@ -195,9 +167,7 @@ export async function generateMangaPage(request: MangaGenerationRequest, maxRetr
     throw lastError;
 }
 
-/**
- * Generate character persona từ description - tương tự generatePersona trong infinite-heroes
- */
+
 export async function generateCharacterImage(description: string, style: MangaStyle = 'shounen'): Promise<string> {
     const ai = getAI();
     const styleDescriptions: Record<MangaStyle, string> = {
@@ -210,28 +180,22 @@ export async function generateCharacterImage(description: string, style: MangaSt
 
     const prompt = `STYLE: Masterpiece ${styleDescriptions[style]} character sheet, detailed ink, neutral background. FULL BODY. Character: ${description}`;
 
-    try {
-        const res = await ai.models.generateContent({
-            model: MODEL_IMAGE_GEN,
-            contents: { text: prompt },
-            config: {
-                imageConfig: { aspectRatio: '1:1' }
-            }
-        });
-
-        const part = res.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
-        if (part?.inlineData?.data) {
-            const mimeType = part.inlineData.mimeType || 'image/png';
-            return `data:${mimeType};base64,${part.inlineData.data}`;
+    const res = await ai.models.generateContent({
+        model: MODEL_IMAGE_GEN,
+        contents: { text: prompt },
+        config: {
+            imageConfig: { aspectRatio: '1:1' }
         }
-        throw new Error('Failed to generate character image');
-    } catch (error) {
-        console.error('Character generation failed:', error);
-        throw error;
+    });
+
+    const part = res.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+    if (part?.inlineData?.data) {
+        const mimeType = part.inlineData.mimeType || 'image/png';
+        return `data:${mimeType};base64,${part.inlineData.data}`;
     }
+    throw new Error('Failed to generate character image');
 }
 
-// Local storage helpers
 const STORAGE_KEY = 'manga_stories';
 
 export function saveStory(story: MangaStory): void {
