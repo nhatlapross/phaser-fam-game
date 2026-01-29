@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { EventBus } from '@/game/EventBus';
+import { GameDataService } from '@/game/GameDataService';
 import MangaStudio from './Games/MangaStudio/MangaStudio';
 
 // Store root reference for cleanup
@@ -21,9 +22,13 @@ export function initMangaStudioOverlay() {
             mangaRoot = null;
         }
 
-        // Create new root and render MangaStudio
+        // Get username from cached game data
+        const cachedData = GameDataService.getCachedData();
+        const username = cachedData?.user?.username || cachedData?.user?.address || 'anonymous';
+
+        // Create new root and render MangaStudio with username
         mangaRoot = createRoot(container);
-        mangaRoot.render(<MangaStudio />);
+        mangaRoot.render(<MangaStudio username={username} />);
     };
 
     const handleClose = () => {

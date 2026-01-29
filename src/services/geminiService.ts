@@ -196,36 +196,4 @@ export async function generateCharacterImage(description: string, style: MangaSt
     throw new Error('Failed to generate character image');
 }
 
-const STORAGE_KEY = 'manga_stories';
-
-export function saveStory(story: MangaStory): void {
-    const stories = getStories();
-    const existingIndex = stories.findIndex(s => s.id === story.id);
-    
-    if (existingIndex >= 0) {
-        stories[existingIndex] = story;
-    } else {
-        stories.push(story);
-    }
-    
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
-}
-
-export function getStories(): MangaStory[] {
-    try {
-        const data = localStorage.getItem(STORAGE_KEY);
-        return data ? JSON.parse(data) : [];
-    } catch {
-        return [];
-    }
-}
-
-export function getStory(id: string): MangaStory | null {
-    const stories = getStories();
-    return stories.find(s => s.id === id) || null;
-}
-
-export function deleteStory(id: string): void {
-    const stories = getStories().filter(s => s.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
-}
+// localStorage functions removed - using Shelby for storage instead
