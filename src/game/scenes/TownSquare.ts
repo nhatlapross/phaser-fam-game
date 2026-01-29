@@ -1,7 +1,7 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { TOWN_SQUARE_MAP_DATA, TOWN_SQUARE_MAP_WIDTH, TOWN_SQUARE_MAP_HEIGHT } from './TownSquareMapData';
-import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager, FactoryManager, GAME_CONSTANTS, PetManager, GameHouseManager } from '../managers';
+import { SoundManager, StationManager, NavigationData, ProfileManager, ToolbarManager, ToolbarItem, PlantType, ShopManager, FactoryManager, GAME_CONSTANTS, PetManager, GameHouseManager, MangaStudioManager } from '../managers';
 import { GameDataService } from '../GameDataService';
 import { UserService } from '../UserService';
 import { LobbySocketService } from '../LobbySocketService';
@@ -73,6 +73,9 @@ export class TownSquare extends Scene {
 
     // Game house manager
     private gameHouseManager!: GameHouseManager;
+
+    // Manga studio manager
+    private mangaStudioManager!: MangaStudioManager;
 
     // Toolbar items (same as FarmingGame)
     private toolbarItems: ToolbarItem[] = [
@@ -277,6 +280,11 @@ export class TownSquare extends Scene {
 
         // Create game house manager
         this.gameHouseManager = new GameHouseManager(this, {
+            showToastMessage: (text, color) => this.showToastMessage(text, color)
+        });
+
+        // Create manga studio manager
+        this.mangaStudioManager = new MangaStudioManager(this, {
             showToastMessage: (text, color) => this.showToastMessage(text, color)
         });
 
@@ -607,15 +615,17 @@ export class TownSquare extends Scene {
             });
         });
 
-        // Click handler - only house #1 (Mouse House) opens game modal
+        // Click handler - house #1 (Mouse House) opens game modal, house #2 (Cat House) opens manga studio
         house.on('pointerdown', () => {
             if (houseId === 1) {
                 // House #1 - Mouse House: Mini Games
                 this.gameHouseManager.openGameModal(houseId);
+            } else if (houseId === 2) {
+                // House #2 - Cat House: Manga Studio
+                this.mangaStudioManager.openModal();
             } else {
                 // Other houses: Coming soon with specific messages
                 const houseNames: Record<number, string> = {
-                    2: 'Cat House',
                     3: 'Dog House',
                     4: 'Bird House',
                     5: 'Fish House',
@@ -650,7 +660,7 @@ export class TownSquare extends Scene {
         if (!this.anims.exists('fountain-anim')) {
             this.anims.create({
                 key: 'fountain-anim',
-                frames: this.anims.generateFrameNumbers('fountain', { start: 0, end: 4 }),
+                frames: this.anims.generateFrameNumbers('fountain', { start: 0, end: 3 }),
                 frameRate: 3,  // Slower animation
                 repeat: -1
             });
