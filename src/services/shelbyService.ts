@@ -23,7 +23,24 @@ export interface ShelbyListResult {
 }
 
 /**
- * Upload image to Shelby storage
+ * Convert base64 to Blob
+ */
+function base64ToBlob(base64: string): Blob {
+    const parts = base64.split(';base64,');
+    const mimeType = parts[0].split(':')[1] || 'image/png';
+    const byteString = atob(parts[1]);
+    const arrayBuffer = new ArrayBuffer(byteString.length);
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    for (let i = 0; i < byteString.length; i++) {
+        uint8Array[i] = byteString.charCodeAt(i);
+    }
+    
+    return new Blob([uint8Array], { type: mimeType });
+}
+
+/**
+ * Upload image to Shelby storage using FormData (binary upload)
  */
 export async function uploadToShelby(
     imageBase64: string,
@@ -31,16 +48,18 @@ export async function uploadToShelby(
     filename: string
 ): Promise<ShelbyUploadResult> {
     try {
+        // Convert base64 to Blob for binary upload
+        const blob = base64ToBlob(imageBase64);
+        
+        // Use FormData for binary upload
+        const formData = new FormData();
+        formData.append('file', blob, filename);
+        formData.append('username', username);
+        formData.append('filename', filename);
+
         const response = await fetch('/api/shelby/upload', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                imageBase64,
-                username,
-                filename,
-            }),
+            body: formData,
         });
 
         const result = await response.json();
