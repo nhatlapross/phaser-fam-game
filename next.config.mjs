@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    // Note: 'output: export' removed to enable API routes
-    // Use 'npm run build && npm run start' for production
+    output: 'export',
     distDir: 'dist'
 };
 

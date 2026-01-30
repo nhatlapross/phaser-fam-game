@@ -74,7 +74,7 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
             setUploadResult({ 
                 success: true, 
                 message: 'Uploaded successfully!',
-                url: result.blobUrl 
+                url: result.explorerUrl 
             });
         } else {
             setUploadResult({ 
