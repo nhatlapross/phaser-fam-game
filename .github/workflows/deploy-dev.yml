@@ -30,6 +30,12 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
+      - name: Copy public assets to dist
+        run: |
+          cp -r public/assets dist/
+          cp -r public/sound dist/
+          cp public/favicon.png dist/
+
       - name: Deploy to VPS
         uses: easingthemes/ssh-deploy@main
         with:
