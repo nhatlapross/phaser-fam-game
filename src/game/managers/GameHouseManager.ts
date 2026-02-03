@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
+import { getSocketService } from '../SocketService';
 
 /**
  * GameHouseManager - Manages game house interactions in Town Square
@@ -239,6 +240,12 @@ export class GameHouseManager {
         this.currentGame = gameId;
         
         const isMobile = window.innerWidth < 500;
+        
+        // Ensure socket is connected for score submission
+        const socketService = getSocketService();
+        if (!socketService.isConnected()) {
+            socketService.connect();
+        }
         
         // Clear modal content and show game
         if (this.modalElement) {
