@@ -1,6 +1,5 @@
 import { GamepadIcon, ScrollTextIcon } from "lucide-react";
 import GameCard from "./GameCard";
-import Leaderboard from "./Leaderboard";
 
 export default function PopularGames() {
   const games = [
@@ -45,20 +44,6 @@ export default function PopularGames() {
             />
           ))}
         </div>
-      </div>
-      
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <ScrollTextIcon className="text-[#FFD700]" />
-          <h2 
-            className="text-2xl font-bold tracking-wide text-[#FFD700]"
-            style={{ fontFamily: 'PixelFont, Arial, sans-serif' }}
-          >
-            Leaderboard
-          </h2>
-        </div>
-
-        <Leaderboard />
       </div>
     </div>
   );
