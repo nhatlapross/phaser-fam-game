@@ -154,6 +154,16 @@ export class TownSquare extends Scene {
     // House colliders for collision with player
     private houseColliders: Phaser.GameObjects.Rectangle[] = [];
 
+    // House info for proximity labels
+    private houses: Array<{
+        id: number;
+        x: number;
+        y: number;
+        name: string;
+        label: Phaser.GameObjects.Text | null;
+    }> = [];
+    private readonly HOUSE_LABEL_DISTANCE = 70; // pixels
+
     constructor() {
         super('TownSquare');
     }
@@ -574,10 +584,35 @@ export class TownSquare extends Scene {
         const y = tileY * this.TILE_SIZE;
         const scale = 0.3; // x2 size (was 0.15)
 
+        // House names
+        const houseNames: Record<number, string> = {
+            1: '🎮 Arcade',
+            2: '🎨 Manga Studio',
+            3: 'Dog House',
+            4: 'Bird House',
+            5: 'Fish House',
+            6: 'Rabbit House',
+            7: 'Hamster House',
+            8: 'Turtle House',
+            9: 'Snake House',
+            10: 'Frog House',
+            11: 'Lizard House',
+            12: 'Spider House'
+        };
+
         const house = this.add.image(x, y, `house-${houseId}`);
         house.setOrigin(0.5, 0.85); // Bottom-center origin for depth sorting
         house.setScale(scale);
         house.setDepth(y);
+
+        // Store house info for proximity labels
+        this.houses.push({
+            id: houseId,
+            x: x,
+            y: y - house.displayHeight / 2, // Center of house
+            name: houseNames[houseId] || `House ${houseId}`,
+            label: null
+        });
 
         // Create collision body for the base of the house (invisible)
         const collisionWidth = house.displayWidth * 0.6;
@@ -618,25 +653,13 @@ export class TownSquare extends Scene {
         // Click handler - house #1 (Mouse House) opens game modal, house #2 (Cat House) opens manga studio
         house.on('pointerdown', () => {
             if (houseId === 1) {
-                // House #1 - Mouse House: Mini Games
+                // House #1 - Arcade: Mini Games
                 this.gameHouseManager.openGameModal(houseId);
             } else if (houseId === 2) {
-                // House #2 - Cat House: Manga Studio
+                // House #2 - Manga Studio
                 this.mangaStudioManager.openModal();
             } else {
-                // Other houses: Coming soon with specific messages
-                const houseNames: Record<number, string> = {
-                    3: 'Dog House',
-                    4: 'Bird House',
-                    5: 'Fish House',
-                    6: 'Rabbit House',
-                    7: 'Hamster House',
-                    8: 'Turtle House',
-                    9: 'Snake House',
-                    10: 'Frog House',
-                    11: 'Lizard House',
-                    12: 'Spider House'
-                };
+                // Other houses: Coming soon
                 this.showToastMessage(`Coming soon...`, 0xf59e0b);
             }
         });
@@ -649,6 +672,100 @@ export class TownSquare extends Scene {
     private setupHouseCollisions() {
         this.houseColliders.forEach(collider => {
             this.physics.add.collider(this.player, collider);
+        });
+    }
+
+    /**
+     * Update house labels based on player proximity
+     */
+    private updateHouseLabels() {
+        if (!this.player) return;
+
+        const playerX = this.player.x;
+        const playerY = this.player.y;
+
+        this.houses.forEach(house => {
+            const distance = Phaser.Math.Distance.Between(playerX, playerY, house.x, house.y);
+            
+            if (distance < this.HOUSE_LABEL_DISTANCE) {
+                // Player is near - show label
+                if (!house.label) {
+                    // Create bubble style label (similar to chat speech bubble)
+                    const container = this.add.container(house.x, house.y - 30);
+                    
+                    // Measure text first
+                    const tempText = this.add.text(0, 0, house.name, {
+                        fontSize: '6px',
+                        fontFamily: 'PixelFont',
+                        color: '#000000',
+                        resolution: 2
+                    });
+                    const textWidth = tempText.width;
+                    const textHeight = tempText.height;
+                    tempText.destroy();
+                    
+                    const bubbleWidth = textWidth + 8;
+                    const bubbleHeight = textHeight + 6;
+                    
+                    // Draw bubble background
+                    const bubbleGraphics = new Phaser.GameObjects.Graphics(this);
+                    bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                    bubbleGraphics.lineStyle(1, 0x555555, 1);
+                    bubbleGraphics.fillRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                    bubbleGraphics.strokeRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                    
+                    // Speech bubble tail
+                    bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                    bubbleGraphics.fillTriangle(-3, bubbleHeight / 2 - 1, 3, bubbleHeight / 2 - 1, 0, bubbleHeight / 2 + 4);
+                    bubbleGraphics.lineStyle(1, 0x555555, 1);
+                    bubbleGraphics.lineBetween(-3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                    bubbleGraphics.lineBetween(3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                    
+                    // Text
+                    const textObj = new Phaser.GameObjects.Text(this, 0, 0, house.name, {
+                        fontSize: '6px',
+                        fontFamily: 'PixelFont',
+                        color: '#000000',
+                        resolution: 2
+                    });
+                    textObj.setOrigin(0.5);
+                    
+                    container.add([bubbleGraphics, textObj]);
+                    container.setDepth(house.y + 100);
+                    
+                    // Ignore by UI camera
+                    if (this.uiCamera) {
+                        this.uiCamera.ignore(container);
+                    }
+                    
+                    // Store as any since we're using container
+                    house.label = container as unknown as Phaser.GameObjects.Text;
+                    
+                    // Fade in
+                    container.setAlpha(0);
+                    this.tweens.add({
+                        targets: container,
+                        alpha: 1,
+                        duration: 150,
+                        ease: 'Quad.easeOut'
+                    });
+                }
+            } else {
+                // Player is far - hide label
+                if (house.label) {
+                    const labelToRemove = house.label;
+                    house.label = null;
+                    
+                    // Fade out and destroy
+                    this.tweens.add({
+                        targets: labelToRemove,
+                        alpha: 0,
+                        duration: 150,
+                        ease: 'Quad.easeIn',
+                        onComplete: () => labelToRemove.destroy()
+                    });
+                }
+            }
         });
     }
 
@@ -977,6 +1094,9 @@ export class TownSquare extends Scene {
         // Multiplayer: send position and update other players
         this.sendPlayerPosition();
         this.updateOtherPlayers();
+
+        // Update house proximity labels
+        this.updateHouseLabels();
     }
 
     private handlePlayerMovement() {
