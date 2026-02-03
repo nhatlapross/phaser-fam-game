@@ -42,6 +42,18 @@ export class GameHouseManager {
             emoji: '🐍',
             description: 'Eat food and grow longer!',
         },
+        {
+            id: 'brickbreaker',
+            title: 'Brick Breaker',
+            emoji: '🧱',
+            description: 'Break all the bricks!',
+        },
+        {
+            id: 'minesweeper',
+            title: 'Minesweeper',
+            emoji: '💣',
+            description: 'Find all the mines!',
+        },
     ];
 
     constructor(scene: Scene, config: GameHouseManagerConfig) {
