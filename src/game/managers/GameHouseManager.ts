@@ -42,6 +42,12 @@ export class GameHouseManager {
             emoji: '🐍',
             description: 'Eat food and grow longer!',
         },
+        {
+            id: 'brickbreaker',
+            title: 'Brick Breaker',
+            emoji: '🧱',
+            description: 'Break all the bricks!',
+        },
     ];
 
     constructor(scene: Scene, config: GameHouseManagerConfig) {

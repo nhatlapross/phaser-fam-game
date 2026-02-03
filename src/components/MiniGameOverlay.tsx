@@ -6,6 +6,7 @@ import { getSocketService } from '@/game/SocketService';
 import { ActionSuccessPayload, ActionErrorPayload } from '@/game/types/SocketTypes';
 import Tetris from './Games/Tetris/tetris';
 import Snake from './Games/Snake/snake';
+import BrickBreaker from './Games/BrickBreaker/brickbreaker';
 
 // Game configurations
 const GAME_CONFIGS: Record<string, { name: string; description: string }> = {
@@ -16,6 +17,10 @@ const GAME_CONFIGS: Record<string, { name: string; description: string }> = {
     snake: {
         name: 'Snake',
         description: 'Classic snake game',
+    },
+    brickbreaker: {
+        name: 'Brick Breaker',
+        description: 'Break all the bricks',
     },
 };
 
@@ -273,6 +278,28 @@ function GameWrapper({ gameId, config }: GameWrapperProps) {
             return (
                 <>
                     <Snake onGameOver={handleGameOver} onRestart={handleRestart} />
+                    {isSubmittingScore && (
+                        <div style={{
+                            position: 'absolute',
+                            bottom: '10px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            background: 'rgba(0,0,0,0.8)',
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            color: '#FFD700',
+                            fontFamily: 'PixelFont, Arial, sans-serif',
+                            fontSize: '12px',
+                        }}>
+                            Saving score...
+                        </div>
+                    )}
+                </>
+            );
+        case 'brickbreaker':
+            return (
+                <>
+                    <BrickBreaker onGameOver={handleGameOver} onRestart={handleRestart} />
                     {isSubmittingScore && (
                         <div style={{
                             position: 'absolute',
