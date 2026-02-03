@@ -4,6 +4,7 @@ import { UserService } from '../UserService';
 import { GameDataService } from '../GameDataService';
 import { BadgeService, ApiBadge } from '../BadgeService';
 import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
+import { showAccessKeyPrompt, isAccessVerified } from '../utils/AccessKeyUtils';
 
 /**
  * Profile Scene - Main profile screen with navigation options
@@ -1502,7 +1503,13 @@ export class ProfileScene extends Scene {
         btn.on('pointerout', () => btn.setScale(1));
     }
 
-    private goToGarden() {
+    private async goToGarden() {
+        // Check access key
+        if (!isAccessVerified()) {
+            const verified = await showAccessKeyPrompt();
+            if (!verified) return;
+        }
+
         localStorage.setItem('fam_game_destination', 'FarmingGame');
         
         this.cameras.main.fadeOut(500, 0, 0, 0);

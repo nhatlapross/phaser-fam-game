@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
+import { showAccessKeyPrompt, isAccessVerified } from '../utils/AccessKeyUtils';
 
 /**
  * MangaStudioManager - Manages Cat House (Manga Studio) interactions
@@ -26,12 +27,25 @@ export class MangaStudioManager {
     /**
      * Open Manga Studio modal
      */
-    public openModal() {
+    public async openModal() {
         if (this.modalOpen) return;
+
+        // Check access key
+        if (!isAccessVerified()) {
+            const verified = await showAccessKeyPrompt();
+            if (!verified) return;
+        }
+
         this.modalOpen = true;
 
         // Pause the game scene
         this.scene.scene.pause();
+
+        // Hide any chat input from TownSquare
+        const chatInput = document.querySelector('input[placeholder="Type your message..."]') as HTMLInputElement;
+        if (chatInput) {
+            chatInput.style.display = 'none';
+        }
 
         const isMobile = window.innerWidth < 500;
 
@@ -127,6 +141,12 @@ export class MangaStudioManager {
         }
 
         this.modalOpen = false;
+
+        // Show chat input again if it was hidden
+        const chatInput = document.querySelector('input[placeholder="Type your message..."]') as HTMLInputElement;
+        if (chatInput) {
+            chatInput.style.display = '';
+        }
 
         // Resume the game scene
         this.scene.scene.resume();

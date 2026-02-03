@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
+import { showAccessKeyPrompt, isAccessVerified } from '../utils/AccessKeyUtils';
 
 // Location destination data
 interface LocationDestination {
@@ -442,7 +443,15 @@ export class StationManager extends BaseManager {
     /**
      * Handle destination selection
      */
-    private onDestinationSelect(destination: LocationDestination): void {
+    private async onDestinationSelect(destination: LocationDestination): Promise<void> {
+        // Check access key for Farm
+        if (destination.id === 'farm') {
+            if (!isAccessVerified()) {
+                const verified = await showAccessKeyPrompt();
+                if (!verified) return;
+            }
+        }
+
         if (this.callbacks.showToastMessage) {
             this.callbacks.showToastMessage(`Traveling to ${destination.nameVi}...`, 0x4CAF50);
         }
