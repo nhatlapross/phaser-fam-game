@@ -319,6 +319,45 @@ export interface ClaimGiftSuccessData {
 }
 
 // ==========================================
+// Game Score WebSocket Types
+// ==========================================
+
+/**
+ * Payload for save_score event (Client -> Server)
+ */
+export interface SaveScorePayload {
+    gameId: string;
+    score: number;
+    metadata?: Record<string, unknown>;
+}
+
+/**
+ * Game score data from WebSocket
+ */
+export interface GameScoreData {
+    id: string;
+    userId: string;
+    gameId: string;
+    score: number;
+    metadata: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/**
+ * Success data for save_score action_success response
+ */
+export interface SaveScoreSuccessData {
+    id: string;
+    userId: string;
+    gameId: string;
+    score: number;
+    metadata: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// ==========================================
 // Quiz WebSocket Types
 // ==========================================
 
@@ -439,6 +478,9 @@ export const SOCKET_EVENTS = {
     
     // Claim gift events (Client -> Server)
     CLAIM_GIFT: 'claim_gift',
+    
+    // Game score events (Client -> Server)
+    SAVE_SCORE: 'save_score',
     
     // Connection events
     CONNECT: 'connect',

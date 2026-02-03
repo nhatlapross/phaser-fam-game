@@ -3,6 +3,7 @@ import StartGame from './game/main';
 import { EventBus } from './game/EventBus';
 import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
 import { initMiniGameOverlay } from './components/MiniGameOverlay';
+import { initMangaStudioOverlay } from './components/MangaStudioOverlay';
 
 export interface IRefPhaserGame
 {
@@ -86,6 +87,12 @@ export const PhaserGame = forwardRef<IRefPhaserGame, IProps>(function PhaserGame
     // Initialize mini game overlay listener
     useEffect(() => {
         const cleanup = initMiniGameOverlay();
+        return cleanup;
+    }, []);
+
+    // Initialize manga studio overlay listener
+    useEffect(() => {
+        const cleanup = initMangaStudioOverlay();
         return cleanup;
     }, []);
 

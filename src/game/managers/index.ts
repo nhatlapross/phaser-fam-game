@@ -22,6 +22,7 @@ export { QuizManager } from './QuizManager';
 export { EventModalManager } from './EventModalManager';
 export { PetManager } from './PetManager';
 export { GameHouseManager } from './GameHouseManager';
+export { MangaStudioManager } from './MangaStudioManager';
 
 // Re-export types
 export * from '../types/GameTypes';
