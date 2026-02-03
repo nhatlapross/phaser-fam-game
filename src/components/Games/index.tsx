@@ -7,7 +7,7 @@ export default function PopularGames() {
       id: 1,
       title: "Tetris",
       description:
-        "Score as many points as possible by clearing horizontal rows of blocks",
+        "Score as many points as possible by clearing horizontal rows of blocks.",
       image: "/tetris_img.jpg",
       players: 2,
       bgColor: "bg-[#3D1A1A]",
