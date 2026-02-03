@@ -85,28 +85,29 @@ function GameWrapper({ gameId, config }: GameWrapperProps) {
     const [scoreSubmitted, setScoreSubmitted] = useState(false); // Prevent duplicate submissions
     const startTimeRef = useRef<number>(0);
 
-    // Create session on mount
+    // Get or create game session on mount
     useEffect(() => {
-        const createSession = async () => {
+        const initGame = async () => {
             setIsLoading(true);
             setError(null);
             
-            const result = await GameSessionService.createSession({
-                name: config.name,
-                description: config.description,
-            });
+            // Get existing game or create new one (only creates once per user)
+            const result = await GameSessionService.getOrCreateGame(
+                config.name,
+                config.description
+            );
             
             if (result) {
                 setSession(result);
                 startTimeRef.current = Date.now();
             } else {
-                setError('Failed to create game session. Please try again.');
+                setError('Failed to initialize game. Please try again.');
             }
             
             setIsLoading(false);
         };
         
-        createSession();
+        initGame();
     }, [config]);
 
     // Listen for WebSocket responses
@@ -132,7 +133,7 @@ function GameWrapper({ gameId, config }: GameWrapperProps) {
         };
     }, []);
 
-    const handleGameOver = (score: number) => {
+    const handleGameOver = async (score: number) => {
         if (!session || scoreSubmitted) {
             return;
         }
@@ -142,16 +143,19 @@ function GameWrapper({ gameId, config }: GameWrapperProps) {
         
         const playTime = Math.floor((Date.now() - startTimeRef.current) / 1000);
         
-        // Use WebSocket to save score
+        // Try WebSocket first, fallback to REST API
         const socketService = getSocketService();
-        const success = socketService.saveScore(session.id, score, {
-            time: playTime,
-            gameType: gameId,
-            levelReached: 1,
-        });
-
-        if (!success) {
-            // Socket not connected, score submission failed silently
+        if (socketService.isConnected()) {
+            socketService.saveScore(session.id, score, {
+                time: playTime,
+                gameType: gameId,
+            });
+        } else {
+            // Fallback to REST API
+            await GameSessionService.submitScore(session.id, score, {
+                time: playTime,
+                gameType: gameId,
+            });
             setIsSubmittingScore(false);
         }
     };
