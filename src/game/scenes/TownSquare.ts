@@ -9,6 +9,7 @@ import { LobbyChatPayload, UserLobbyState, LobbyStatePayload, UserJoinedPayload,
 import { useGameState } from '../hooks/useGameState';
 import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacterKey, getCharacterByKey } from '../config/CharacterConfig';
 import { DynamicShadow } from '../objects/DynamicShadow';
+import { HoroscopeModal } from '../ui/HoroscopeModal';
 
 /**
  * Town Square Scene - A larger public space for social interactions
@@ -18,6 +19,8 @@ export class TownSquare extends Scene {
     private player!: Phaser.Physics.Arcade.Sprite;
     private playerShadow!: DynamicShadow;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+    private horoscopeModal!: HoroscopeModal;
+
 
     // World configuration
     private readonly TILE_SIZE = 16;
@@ -809,11 +812,11 @@ export class TownSquare extends Scene {
             });
         }
 
-        // Create fountain sprite at center (resized spritesheet 267x94, frame 53x94)
+        // Create fountain sprite at center (resized spritesheet 713x235, frame 142.6x235)
         this.fountainSprite = this.add.sprite(centerX, centerY, 'fountain', 0);
         this.fountainSprite.setOrigin(0.5, 0.7);
-        const frameW = 136;
-        const frameH = 236;
+        const frameW = 142.6;
+        const frameH = 235;
         const desiredTilesWide = 4;
         const scaleMultiplier = 1.4;
         const displayW = Math.round(desiredTilesWide * this.TILE_SIZE * scaleMultiplier);
@@ -821,6 +824,23 @@ export class TownSquare extends Scene {
         this.fountainSprite.setDisplaySize(displayW, displayH);
         this.fountainSprite.setDepth(centerY);
         this.fountainSprite.play('fountain-anim');
+
+        // Initialize Horoscope Modal
+        this.horoscopeModal = new HoroscopeModal(this);
+        this.horoscopeModal.onClose = () => {
+            const merlin1 = this.merlins.find(m => m.id === 'merlin1')?.sprite;
+            if (merlin1) {
+                merlin1.play('merlin1-idle');
+            }
+        };
+
+        // Listen for currency updates from HoroscopeModal
+        EventBus.on('currency-updated', (data: { gold: number }) => {
+            const gameState = useGameState(this);
+            gameState.setGold(data.gold);
+            // Refresh profile UI
+            this.profileManager.createProfileUI();
+        });
     }
 
     private createMerlinNPCs() {
@@ -874,16 +894,16 @@ export class TownSquare extends Scene {
         
         merlin1.on('pointerdown', () => {
             merlin1.play('merlin1-active');
-            this.showToastMessage('Consulting the stars...', 0x9C27B0);
-            this.time.delayedCall(3000, () => {
-                merlin1.play('merlin1-idle');
-            });
+            this.showToastMessage('Đang thỉnh giáo Thầy Đồ...', 0x9C27B0);
+            
+            // Open Horoscope Modal
+            this.horoscopeModal.show();
         });
 
         this.merlins.push({
             sprite: merlin1,
             shadow: shadow1,
-            name: "I can see your future in the stars!\nClick to consult.",
+            name: "Ta có thể xem tiền vận, hậu vận của con!\nNhấn để xem bói.",
             label: null,
             id: 'merlin1'
         });

@@ -4,7 +4,7 @@ import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 export class Preloader extends Scene
 {
     // Version to force cache busting for updated assets
-    private readonly ASSET_VERSION = '?v=1.0.2';
+    private readonly ASSET_VERSION = '?v=1.0.3';
 
     constructor ()
     {
@@ -107,10 +107,10 @@ export class Preloader extends Scene
             frameHeight: 16
         });
 
-        // Fountain spritesheet (5 frames, 682x236 total, each frame 136x236)
+        // Fountain spritesheet (5 frames, 713x235 total, each frame 142.6x235)
         this.load.spritesheet('fountain', `objects/square/fountain.png${this.ASSET_VERSION}`, {
-            frameWidth: 136,
-            frameHeight: 236
+            frameWidth: 142.6,
+            frameHeight: 235
         });
 
         // Merlin NPCs
