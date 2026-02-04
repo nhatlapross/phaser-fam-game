@@ -205,7 +205,7 @@ export class ProfileScene extends Scene {
             color: '#FFFFFF',
             resolution: 2
         });
-        chainLabel.setStroke('#5D4037', 1);
+        chainLabel.setStroke('#000000', 3);
         this.walletElements.push(chainLabel);
 
         if (evmAddress) {
@@ -217,16 +217,17 @@ export class ProfileScene extends Scene {
                 fontStyle: 'bold',
                 resolution: 2
             });
-            addrText.setStroke('#5D4037', 1);
+            addrText.setStroke('#000000', 3);
             this.walletElements.push(addrText);
 
             // Copy button
             const copyBtn = this.add.text(leftX + 140, startY, 'Copy', {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
-                color: '#4ade80',
+                color: '#FFFFFF',
                 resolution: 2
             });
+            copyBtn.setStroke('#000000', 3);
             copyBtn.setInteractive({ useHandCursor: true });
             this.walletElements.push(copyBtn);
 
@@ -234,19 +235,21 @@ export class ProfileScene extends Scene {
                 try {
                     await navigator.clipboard.writeText(evmAddress);
                     copyBtn.setText('Copied!');
-                    copyBtn.setColor('#86efac');
+                    copyBtn.setColor('#FFFFFF');
+                    copyBtn.setStroke('#000000', 3);
                     this.time.delayedCall(1500, () => {
                         if (copyBtn.active) {
                             copyBtn.setText('Copy');
-                            copyBtn.setColor('#4ade80');
+                            copyBtn.setColor('#FFFFFF');
+                            copyBtn.setStroke('#000000', 3);
                         }
                     });
                 } catch {
                 }
             });
-            copyBtn.on('pointerover', () => copyBtn.setColor('#86efac'));
+            copyBtn.on('pointerover', () => copyBtn.setColor('#CCCCCC'));
             copyBtn.on('pointerout', () => {
-                if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
+                if (copyBtn.text === 'Copy') copyBtn.setColor('#FFFFFF');
             });
         }
 
@@ -341,7 +344,7 @@ export class ProfileScene extends Scene {
                 resolution: 2
             });
             label.setDepth(102);
-            label.setStroke('#5D4037', 1);
+            label.setStroke('#000000', 3);
             this.walletModalElements.push(label);
 
             if (wallet.address) {
@@ -354,15 +357,17 @@ export class ProfileScene extends Scene {
                     resolution: 2
                 });
                 addrText.setDepth(102);
+                addrText.setStroke('#000000', 3);
                 this.walletModalElements.push(addrText);
 
                 const copyBtn = this.add.text(leftX + 185, y, 'Copy', {
                     fontSize: '8px',
                     fontFamily: 'PixelFont',
-                    color: '#4ade80',
+                    color: '#FFFFFF',
                     resolution: 2
                 });
                 copyBtn.setDepth(102);
+                copyBtn.setStroke('#000000', 3);
                 copyBtn.setInteractive({ useHandCursor: true });
                 this.walletModalElements.push(copyBtn);
 
@@ -370,19 +375,21 @@ export class ProfileScene extends Scene {
                     try {
                         await navigator.clipboard.writeText(wallet.address!);
                         copyBtn.setText('Copied!');
-                        copyBtn.setColor('#86efac');
+                        copyBtn.setColor('#FFFFFF');
+                        copyBtn.setStroke('#000000', 3);
                         this.time.delayedCall(1500, () => {
                             if (copyBtn.active) {
                                 copyBtn.setText('Copy');
-                                copyBtn.setColor('#4ade80');
+                                copyBtn.setColor('#FFFFFF');
+                                copyBtn.setStroke('#000000', 3);
                             }
                         });
                     } catch {
                     }
                 });
-                copyBtn.on('pointerover', () => copyBtn.setColor('#86efac'));
+                copyBtn.on('pointerover', () => copyBtn.setColor('#CCCCCC'));
                 copyBtn.on('pointerout', () => {
-                    if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
+                    if (copyBtn.text === 'Copy') copyBtn.setColor('#FFFFFF');
                 });
             } else {
                 const notLinked = this.add.text(leftX + 70, y, 'Not linked', {
@@ -397,20 +404,26 @@ export class ProfileScene extends Scene {
         });
 
         // Close button
-        const closeBtn = this.add.text(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, '✕', {
+        const closeBtnBg = this.add.sprite(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, 'square-buttons', 7);
+        closeBtnBg.setDisplaySize(24, 24);
+        closeBtnBg.setDepth(103);
+        closeBtnBg.setInteractive({ useHandCursor: true });
+        this.walletModalElements.push(closeBtnBg);
+
+        const closeText = this.add.text(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, 'X', {
             fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2
         });
-        closeBtn.setOrigin(0.5);
-        closeBtn.setDepth(103);
-        closeBtn.setInteractive({ useHandCursor: true });
-        this.walletModalElements.push(closeBtn);
+        closeText.setOrigin(0.5);
+        closeText.setDepth(104);
+        closeText.setStroke('#5D4037', 2);
+        this.walletModalElements.push(closeText);
 
-        closeBtn.on('pointerdown', () => this.closeWalletsModal());
-        closeBtn.on('pointerover', () => closeBtn.setColor('#ff6b6b'));
-        closeBtn.on('pointerout', () => closeBtn.setColor('#FFFFFF'));
+        closeBtnBg.on('pointerdown', () => this.closeWalletsModal());
+        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
 
         overlay.on('pointerdown', () => this.closeWalletsModal());
     }
@@ -648,10 +661,11 @@ export class ProfileScene extends Scene {
         const nameText = this.add.text(0, 0, badge.name, {
             fontSize: '8px',
             fontFamily: 'PixelFont',
-            color: '#4ade80',
+            color: '#FFFFFF',
             resolution: 2
         });
         nameText.setOrigin(0.5);
+        nameText.setStroke('#000000', 3);
         container.add(nameText);
 
         this.badgeModalTooltip = container;
@@ -707,10 +721,11 @@ export class ProfileScene extends Scene {
             const allClaimed = this.add.text(centerX, startY + 40, 'All badges claimed! 🎉', {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
-                color: '#4ade80',
+                color: '#FFFFFF',
                 resolution: 2
             });
             allClaimed.setOrigin(0.5);
+            allClaimed.setStroke('#000000', 3);
             this.badgeElements.push(allClaimed);
             return;
         }
@@ -814,8 +829,8 @@ export class ProfileScene extends Scene {
 
         // Badge name - centered vertically, color based on status
         let nameColor = '#FFFFFF'; // white for LOCKED
-        if (isClaimed) nameColor = '#4ade80'; // green
-        else if (canClaim) nameColor = '#4ade80'; // green
+        if (isClaimed) nameColor = '#FFFFFF'; // white
+        else if (canClaim) nameColor = '#FFFFFF'; // white
         else if (isPending) nameColor = '#fbbf24'; // yellow
         
         const name = this.add.text(leftX + 38, rowCenterY, badge.name, {
@@ -825,7 +840,11 @@ export class ProfileScene extends Scene {
             resolution: 2
         });
         name.setOrigin(0, 0.5);
-        name.setStroke('#3E2723', 2);
+        if (isClaimed || canClaim) {
+            name.setStroke('#000000', 3);
+        } else {
+            name.setStroke('#3E2723', 2);
+        }
         this.unlockBadgesContainer.add(name);
         this.badgeElements.push(name);
 
@@ -937,7 +956,8 @@ export class ProfileScene extends Scene {
                         iconElement.setAlpha(0.9);
                         
                         // Update name color
-                        name.setColor('#4ade80');
+                        name.setColor('#FFFFFF');
+                        name.setStroke('#000000', 3);
                     } else {
                         this.showToast(`❌ ${result.message}`, 0xef4444);
                         // Re-enable button on error
@@ -1064,10 +1084,11 @@ export class ProfileScene extends Scene {
         const nameText = this.add.text(0, 0, badge.name, {
             fontSize: '8px',
             fontFamily: 'PixelFont',
-            color: '#4ade80',
+            color: '#FFFFFF',
             resolution: 2
         });
         nameText.setOrigin(0.5);
+        nameText.setStroke('#000000', 3);
         container.add(nameText);
 
         this.badgeTooltip = container;

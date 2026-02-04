@@ -325,6 +325,9 @@ export class TownSquare extends Scene {
         // Play theme music
         this.soundManager.playRandomTheme();
 
+        // Update UI positions after physics step to prevent jitter
+        this.events.on('postupdate', this.updatePlayerUI, this);
+
         EventBus.emit('current-scene-ready', this);
     }
 
@@ -1176,6 +1179,13 @@ export class TownSquare extends Scene {
         // Update player depth based on Y position
         this.player.setDepth(this.player.y);
 
+        // Constrain to land area
+        this.constrainPlayerToLand();
+    }
+
+    private updatePlayerUI() {
+        if (!this.player) return;
+
         // Update player name position and depth
         if (this.playerNameText) {
             this.playerNameText.setPosition(this.player.x, this.player.y - 18);
@@ -1187,9 +1197,6 @@ export class TownSquare extends Scene {
             this.speechBubble.setPosition(this.player.x, this.player.y - 40);
             this.speechBubble.setDepth(this.player.y + 100);
         }
-
-        // Constrain to land area
-        this.constrainPlayerToLand();
     }
 
     private constrainPlayerToLand() {
@@ -1338,6 +1345,7 @@ export class TownSquare extends Scene {
         // Remove event listeners
         this.scale.off('resize', this.onResize, this);
         EventBus.off('gamedata:updated', this.onGameDataUpdated, this);
+        this.events.off('postupdate', this.updatePlayerUI, this);
 
         // Cleanup managers
         this.soundManager?.destroy();
