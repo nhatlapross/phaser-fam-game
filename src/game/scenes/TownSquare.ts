@@ -8,6 +8,8 @@ import { LobbySocketService } from '../LobbySocketService';
 import { LobbyChatPayload, UserLobbyState, LobbyStatePayload, UserJoinedPayload, UserLeftPayload, UserMovedPayload } from '../types/LobbyTypes';
 import { useGameState } from '../hooks/useGameState';
 import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacterKey, getCharacterByKey } from '../config/CharacterConfig';
+import { DynamicShadow } from '../objects/DynamicShadow';
+import { HoroscopeModal } from '../ui/HoroscopeModal';
 
 /**
  * Town Square Scene - A larger public space for social interactions
@@ -15,7 +17,10 @@ import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacte
  */
 export class TownSquare extends Scene {
     private player!: Phaser.Physics.Arcade.Sprite;
+    private playerShadow!: DynamicShadow;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+    private horoscopeModal!: HoroscopeModal;
+
 
     // World configuration
     private readonly TILE_SIZE = 16;
@@ -71,11 +76,22 @@ export class TownSquare extends Scene {
     // Pet manager
     private petManager!: PetManager;
 
+    // Merlin NPCs
+    private merlins: Array<{
+        sprite: Phaser.GameObjects.Sprite;
+        shadow: DynamicShadow;
+        name: string;
+        label: Phaser.GameObjects.Container | null;
+        id: string;
+    }> = [];
+    private readonly MERLIN_LABEL_DISTANCE = 80;
+
     // Game house manager
     private gameHouseManager!: GameHouseManager;
 
     // Manga studio manager
     private mangaStudioManager!: MangaStudioManager;
+    private fountainSprite!: Phaser.GameObjects.Sprite;
 
     // Toolbar items (same as FarmingGame)
     private toolbarItems: ToolbarItem[] = [
@@ -131,6 +147,7 @@ export class TownSquare extends Scene {
     // Multiplayer - other players
     private otherPlayers: Map<string, {
         sprite: Phaser.GameObjects.Sprite;
+        shadow: DynamicShadow;
         nameText: Phaser.GameObjects.Text;
         speechBubble: Phaser.GameObjects.Container | null;
         targetX: number;
@@ -325,6 +342,8 @@ export class TownSquare extends Scene {
         // Play theme music
         this.soundManager.playRandomTheme();
 
+        this.events.on('postupdate', this.updatePlayerUI, this);
+
         EventBus.emit('current-scene-ready', this);
     }
 
@@ -458,6 +477,9 @@ export class TownSquare extends Scene {
         // Create fountain at center of map
         this.createFountain();
 
+        // Create Merlin NPCs in front of fountain
+        this.createMerlinNPCs();
+
         // Add trees, lamps, and chairs based on reference layout
         this.createTrees();
         this.createLamps();
@@ -474,6 +496,10 @@ export class TownSquare extends Scene {
         decoration.setOrigin(0.5, 0.85);  // Bottom-center origin for depth sorting
         decoration.setScale(scale);
         decoration.setDepth(y);
+
+        // Add shadow for decoration
+        new DynamicShadow(this, decoration, 0, 0);
+
         return decoration;
     }
 
@@ -604,6 +630,9 @@ export class TownSquare extends Scene {
         house.setOrigin(0.5, 0.85); // Bottom-center origin for depth sorting
         house.setScale(scale);
         house.setDepth(y);
+
+        // Add shadow for house
+        new DynamicShadow(this, house, 0, 0);
 
         // Store house info for proximity labels
         this.houses.push({
@@ -777,17 +806,227 @@ export class TownSquare extends Scene {
         if (!this.anims.exists('fountain-anim')) {
             this.anims.create({
                 key: 'fountain-anim',
-                frames: this.anims.generateFrameNumbers('fountain', { start: 0, end: 3 }),
+                frames: this.anims.generateFrameNumbers('fountain', { start: 0, end: 4 }),
                 frameRate: 3,  // Slower animation
                 repeat: -1
             });
         }
 
-        // Create fountain sprite at center (resized spritesheet 267x94, frame 53x94)
-        const fountain = this.add.sprite(centerX, centerY, 'fountain', 0);
-        fountain.setOrigin(0.5, 0.7);  // Adjust origin for bottom-center alignment
-        fountain.setDepth(centerY);
-        fountain.play('fountain-anim');
+        // Create fountain sprite at center (resized spritesheet 713x235, frame 142.6x235)
+        this.fountainSprite = this.add.sprite(centerX, centerY, 'fountain', 0);
+        this.fountainSprite.setOrigin(0.5, 0.7);
+        const frameW = 142.6;
+        const frameH = 235;
+        const desiredTilesWide = 4;
+        const scaleMultiplier = 1.4;
+        const displayW = Math.round(desiredTilesWide * this.TILE_SIZE * scaleMultiplier);
+        const displayH = Math.round(displayW * frameH / frameW);
+        this.fountainSprite.setDisplaySize(displayW, displayH);
+        this.fountainSprite.setDepth(centerY);
+        this.fountainSprite.play('fountain-anim');
+
+        // Initialize Horoscope Modal
+        this.horoscopeModal = new HoroscopeModal(this);
+        this.horoscopeModal.onClose = () => {
+            const merlin1 = this.merlins.find(m => m.id === 'merlin1')?.sprite;
+            if (merlin1) {
+                merlin1.play('merlin1-idle');
+            }
+        };
+
+        // Listen for currency updates from HoroscopeModal
+        EventBus.on('currency-updated', (data: { gold: number }) => {
+            const gameState = useGameState(this);
+            gameState.setGold(data.gold);
+            // Refresh profile UI
+            this.profileManager.createProfileUI();
+        });
+    }
+
+    private createMerlinNPCs() {
+        const centerX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
+        const centerY = this.MAP_HEIGHT / 2 * this.TILE_SIZE;
+        
+        // Position in front of fountain (higher Y)
+        // Fountain center is centerY. Fountain height is ~155px. Origin 0.7.
+        // So bottom is roughly centerY + (1-0.7)*155 = centerY + 46.
+        // We want NPCs in front of that.
+        const npcY = centerY + 120; // Increased distance from fountain
+        const spacing = 100; // Increased spacing
+
+        // Create animations
+        ['merlin1', 'merlin2'].forEach(key => {
+            if (!this.anims.exists(`${key}-idle`)) {
+                this.anims.create({
+                    key: `${key}-idle`,
+                    frames: this.anims.generateFrameNumbers(key, { start: 0, end: 1 }),
+                    frameRate: 2,
+                    repeat: -1
+                });
+            }
+            if (!this.anims.exists(`${key}-active`)) {
+                this.anims.create({
+                    key: `${key}-active`,
+                    frames: this.anims.generateFrameNumbers(key, { start: 2, end: 3 }),
+                    frameRate: 4,
+                    repeat: -1
+                });
+            }
+        });
+
+        // Clear existing merlins list
+        this.merlins = [];
+
+        // Merlin 1 (Astrology) - Left
+        const merlin1 = this.add.sprite(centerX - spacing, npcY, 'merlin1');
+        merlin1.setOrigin(0.5, 0.9); // Anchor at feet
+        // Increase scale slightly (player is around 1.0 but small spritesheet, merlin is large spritesheet)
+        // Player height on screen is ~40-50px. Merlin at 0.085 was ~40px. 
+        // User wants "larger than player a bit".
+        // Let's try 0.11 (approx 30% larger than 0.085)
+        merlin1.setScale(0.11); 
+        merlin1.setDepth(npcY);
+        merlin1.play('merlin1-idle');
+        merlin1.setInteractive({ useHandCursor: true });
+        
+        // Add DynamicShadow for Merlin 1
+        const shadow1 = new DynamicShadow(this, merlin1, 0, 2);
+        
+        merlin1.on('pointerdown', () => {
+            merlin1.play('merlin1-active');
+            this.showToastMessage('Đang thỉnh giáo Thầy Đồ...', 0x9C27B0);
+            
+            // Open Horoscope Modal
+            this.horoscopeModal.show();
+        });
+
+        this.merlins.push({
+            sprite: merlin1,
+            shadow: shadow1,
+            name: "Ta có thể xem tiền vận, hậu vận của con!\nNhấn để xem bói.",
+            label: null,
+            id: 'merlin1'
+        });
+
+        // Merlin 2 (Tarot) - Right
+        const merlin2 = this.add.sprite(centerX + spacing, npcY, 'merlin2');
+        merlin2.setOrigin(0.5, 0.9);
+        merlin2.setScale(0.11); 
+        merlin2.setDepth(npcY);
+        merlin2.play('merlin2-idle');
+        merlin2.setInteractive({ useHandCursor: true });
+
+        // Add DynamicShadow for Merlin 2
+        const shadow2 = new DynamicShadow(this, merlin2, 0, 2);
+
+        merlin2.on('pointerdown', () => {
+            merlin2.play('merlin2-active');
+            this.showToastMessage('Reading the cards...', 0xE91E63);
+            this.time.delayedCall(3000, () => {
+                merlin2.play('merlin2-idle');
+            });
+        });
+
+        this.merlins.push({
+            sprite: merlin2,
+            shadow: shadow2,
+            name: "The cards reveal all truths.\nClick for a reading.",
+            label: null,
+            id: 'merlin2'
+        });
+    }
+
+    private updateMerlinLabels() {
+        if (!this.player) return;
+
+        const playerX = this.player.x;
+        const playerY = this.player.y;
+
+        this.merlins.forEach(merlin => {
+            const distance = Phaser.Math.Distance.Between(playerX, playerY, merlin.sprite.x, merlin.sprite.y);
+            
+            if (distance < this.MERLIN_LABEL_DISTANCE) {
+                // Player is near - show label
+                if (!merlin.label) {
+                    // Create bubble style label (similar to chat speech bubble)
+                    const container = this.add.container(merlin.sprite.x, merlin.sprite.y - 70); // Higher offset for larger sprite
+                    
+                    // Measure text first
+                    const tempText = this.add.text(0, 0, merlin.name, {
+                        fontSize: '6px',
+                        fontFamily: 'PixelFont',
+                        color: '#000000',
+                        resolution: 2,
+                        align: 'center'
+                    });
+                    const textWidth = tempText.width;
+                    const textHeight = tempText.height;
+                    tempText.destroy();
+                    
+                    const bubbleWidth = textWidth + 10;
+                    const bubbleHeight = textHeight + 8;
+                    
+                    // Draw bubble background
+                    const bubbleGraphics = new Phaser.GameObjects.Graphics(this);
+                    bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                    bubbleGraphics.lineStyle(1, 0x555555, 1);
+                    bubbleGraphics.fillRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                    bubbleGraphics.strokeRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                    
+                    // Speech bubble tail
+                    bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                    bubbleGraphics.fillTriangle(-3, bubbleHeight / 2 - 1, 3, bubbleHeight / 2 - 1, 0, bubbleHeight / 2 + 4);
+                    bubbleGraphics.lineStyle(1, 0x555555, 1);
+                    bubbleGraphics.lineBetween(-3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                    bubbleGraphics.lineBetween(3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                    
+                    // Text
+                    const textObj = new Phaser.GameObjects.Text(this, 0, 0, merlin.name, {
+                        fontSize: '6px',
+                        fontFamily: 'PixelFont',
+                        color: '#000000',
+                        resolution: 2,
+                        align: 'center'
+                    });
+                    textObj.setOrigin(0.5);
+                    
+                    container.add([bubbleGraphics, textObj]);
+                    container.setDepth(merlin.sprite.y + 100);
+                    
+                    // Ignore by UI camera
+                    if (this.uiCamera) {
+                        this.uiCamera.ignore(container);
+                    }
+                    
+                    // Store as any since we're using container
+                    merlin.label = container;
+                    
+                    // Fade in
+                    container.setAlpha(0);
+                    this.tweens.add({
+                        targets: container,
+                        alpha: 1,
+                        duration: 150,
+                        ease: 'Quad.easeOut'
+                    });
+                }
+            } else {
+                // Player is far - hide label
+                if (merlin.label) {
+                    const labelToRemove = merlin.label;
+                    merlin.label = null;
+                    
+                    // Fade out and destroy
+                    this.tweens.add({
+                        targets: labelToRemove,
+                        alpha: 0,
+                        duration: 150,
+                        ease: 'Quad.easeIn',
+                        onComplete: () => labelToRemove.destroy()
+                    });
+                }
+            }
+        });
     }
 
     private createPlayer() {
@@ -819,6 +1058,9 @@ export class TownSquare extends Scene {
         this.player.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         this.player.setCollideWorldBounds(false);
         this.player.setDepth(startY);
+
+        // Create player shadow using DynamicShadow
+        this.playerShadow = new DynamicShadow(this, this.player, 0, 2);
 
         // Create player animations for all characters
         this.createPlayerAnimations();
@@ -1097,6 +1339,9 @@ export class TownSquare extends Scene {
 
         // Update house proximity labels
         this.updateHouseLabels();
+        
+        // Update Merlin proximity labels
+        this.updateMerlinLabels();
     }
 
     private handlePlayerMovement() {
@@ -1176,6 +1421,15 @@ export class TownSquare extends Scene {
         // Update player depth based on Y position
         this.player.setDepth(this.player.y);
 
+        // Constrain to land area
+        this.constrainPlayerToLand();
+    }
+
+    private updatePlayerUI() {
+        if (!this.player) return;
+
+        // Shadow updates automatically via preUpdate
+
         // Update player name position and depth
         if (this.playerNameText) {
             this.playerNameText.setPosition(this.player.x, this.player.y - 18);
@@ -1187,9 +1441,6 @@ export class TownSquare extends Scene {
             this.speechBubble.setPosition(this.player.x, this.player.y - 40);
             this.speechBubble.setDepth(this.player.y + 100);
         }
-
-        // Constrain to land area
-        this.constrainPlayerToLand();
     }
 
     private constrainPlayerToLand() {
@@ -1205,14 +1456,13 @@ export class TownSquare extends Scene {
         this.player.y = Phaser.Math.Clamp(this.player.y, minY, maxY);
 
         // Fountain collision zone (prevent player from walking into fountain base)
-        const fountainCenterX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
-        const fountainCenterY = this.MAP_HEIGHT / 2 * this.TILE_SIZE;
-
-        // Fountain frame is 67x118 with origin (0.5, 0.7)
-        // Collision zone covers the base area where player shouldn't walk
-        const fountainHalfWidth = 35;  // Half width of collision zone
-        const fountainTop = fountainCenterY - 15;  // Top of collision (allows walking behind water spray)
-        const fountainBottom = fountainCenterY + 35;  // Bottom of collision
+        const fountainCenterX = this.fountainSprite ? this.fountainSprite.x : this.MAP_WIDTH / 2 * this.TILE_SIZE;
+        const fountainCenterY = this.fountainSprite ? this.fountainSprite.y : this.MAP_HEIGHT / 2 * this.TILE_SIZE;
+        const displayW = this.fountainSprite ? this.fountainSprite.displayWidth : 67;
+        const displayH = this.fountainSprite ? this.fountainSprite.displayHeight : 118;
+        const fountainHalfWidth = displayW * 0.522;
+        const fountainTop = fountainCenterY - displayH * 0.127;
+        const fountainBottom = fountainCenterY + displayH * 0.297;
 
         // Check if player is inside fountain collision zone
         if (this.player.x > fountainCenterX - fountainHalfWidth &&
@@ -1338,6 +1588,7 @@ export class TownSquare extends Scene {
         // Remove event listeners
         this.scale.off('resize', this.onResize, this);
         EventBus.off('gamedata:updated', this.onGameDataUpdated, this);
+        this.events.off('postupdate', this.updatePlayerUI, this);
 
         // Cleanup managers
         this.soundManager?.destroy();
@@ -1424,6 +1675,7 @@ export class TownSquare extends Scene {
         // Destroy all other player sprites and speech bubbles
         this.otherPlayers.forEach((player) => {
             player.sprite.destroy();
+            player.shadow.destroy();
             player.nameText.destroy();
             if (player.speechBubble) {
                 player.speechBubble.destroy(true);
@@ -1504,6 +1756,7 @@ export class TownSquare extends Scene {
         // Clear existing players first (in case of reconnection)
         this.otherPlayers.forEach((player, id) => {
             player.sprite.destroy();
+            player.shadow.destroy();
             player.nameText.destroy();
             this.otherPlayers.delete(id);
         });
@@ -1592,6 +1845,9 @@ export class TownSquare extends Scene {
         sprite.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         sprite.setDepth(user.y); // Depth based on Y position for proper layering
 
+        // Create shadow
+        const shadow = new DynamicShadow(this, sprite, 0, 2);
+
         // Play idle animation with correct character
         if (this.anims.exists(`${characterKey}-idle-down`)) {
             sprite.play(`${characterKey}-idle-down`);
@@ -1613,11 +1869,13 @@ export class TownSquare extends Scene {
         // UI camera should ignore game objects
         if (this.uiCamera) {
             this.uiCamera.ignore(sprite);
+            this.uiCamera.ignore(shadow);
             this.uiCamera.ignore(nameText);
         }
 
         this.otherPlayers.set(user.userId, {
             sprite,
+            shadow,
             nameText,
             speechBubble: null,
             targetX: user.x,
@@ -1637,6 +1895,7 @@ export class TownSquare extends Scene {
         const player = this.otherPlayers.get(userId);
         if (player) {
             player.sprite.destroy();
+            player.shadow.destroy();
             player.nameText.destroy();
             if (player.speechBubble) {
                 player.speechBubble.destroy(true);
@@ -1738,6 +1997,8 @@ export class TownSquare extends Scene {
             // Update depth based on Y position for proper layering
             player.sprite.setDepth(player.sprite.y);
             player.nameText.setDepth(player.sprite.y + 1);
+
+            // Shadow updates automatically via preUpdate
 
             // Update name text position
             player.nameText.x = player.sprite.x;

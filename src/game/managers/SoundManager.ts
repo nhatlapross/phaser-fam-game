@@ -266,6 +266,18 @@ export class SoundManager extends BaseManager {
     public setSfxVolume(volume: number): void {
         this.sfxVolume = Math.max(0, Math.min(1, volume));
         this.saveSettings();
+        
+        if (this.walkSound && 'setVolume' in this.walkSound) {
+            (this.walkSound as Phaser.Sound.WebAudioSound).setVolume(this.sfxVolume * 0.7);
+        }
+    }
+
+    public getMusicVolume(): number {
+        return this.musicVolume;
+    }
+
+    public getSfxVolume(): number {
+        return this.sfxVolume;
     }
 
     /**

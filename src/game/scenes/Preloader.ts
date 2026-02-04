@@ -3,6 +3,9 @@ import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 
 export class Preloader extends Scene
 {
+    // Version to force cache busting for updated assets
+    private readonly ASSET_VERSION = '?v=1.0.3';
+
     constructor ()
     {
         super('Preloader');
@@ -88,36 +91,48 @@ export class Preloader extends Scene
         });
 
         // Tilesets
-        this.load.image('grass-tileset', 'tilesets/grass.png');
+        this.load.image('grass-tileset', `tilesets/grass.png${this.ASSET_VERSION}`);
 
         // Water tileset as spritesheet for animation (4 frames)
-        this.load.spritesheet('water-tileset', 'tilesets/water.png', {
+        this.load.spritesheet('water-tileset', `tilesets/water.png${this.ASSET_VERSION}`, {
             frameWidth: 16,
             frameHeight: 16
         });
 
-        this.load.image('tilled-dirt-tileset', 'tilesets/tilled-dirt.png');
-        this.load.image('hills-tileset', 'tilesets/hills.png');
+        this.load.image('tilled-dirt-tileset', `tilesets/tilled-dirt.png${this.ASSET_VERSION}`);
+        this.load.image('hills-tileset', `tilesets/hills.png${this.ASSET_VERSION}`);
         // Square tileset (176x112, 11 cols x 7 rows of 16x16 tiles)
-        this.load.spritesheet('square-tileset', 'tilesets/square.png', {
+        this.load.spritesheet('square-tileset', `tilesets/square.png${this.ASSET_VERSION}`, {
             frameWidth: 16,
             frameHeight: 16
         });
 
-        // Fountain spritesheet (5 frames animation, 334x118 total, each frame 67x118)
-        this.load.spritesheet('fountain', 'objects/square/fountain.png', {
-            frameWidth: 67,
-            frameHeight: 118
+        // Fountain spritesheet (5 frames, 713x235 total, each frame 142.6x235)
+        this.load.spritesheet('fountain', `objects/square/fountain.png${this.ASSET_VERSION}`, {
+            frameWidth: 142.6,
+            frameHeight: 235
+        });
+
+        // Merlin NPCs
+        // Merlin 1 (Astrology): 2156x467, 4 frames -> 539x467
+        this.load.spritesheet('merlin1', `objects/merlin/merline1.png${this.ASSET_VERSION}`, {
+            frameWidth: 539,
+            frameHeight: 467
+        });
+        // Merlin 2 (Tarot): 2040x493, 4 frames -> 510x493
+        this.load.spritesheet('merlin2', `objects/merlin/merline2.png${this.ASSET_VERSION}`, {
+            frameWidth: 510,
+            frameHeight: 493
         });
 
         // Town Square decorations (76x94 each)
-        this.load.image('square-chair', 'objects/square/chair.png');
-        this.load.image('square-lamp', 'objects/square/lamp.png');
-        this.load.image('square-tree', 'objects/square/tree.png');
+        this.load.image('square-chair', `objects/square/chair.png${this.ASSET_VERSION}`);
+        this.load.image('square-lamp', `objects/square/lamp.png${this.ASSET_VERSION}`);
+        this.load.image('square-tree', `objects/square/tree.png${this.ASSET_VERSION}`);
 
         // Town Square houses (1-12)
         for (let i = 1; i <= 12; i++) {
-            this.load.image(`house-${i}`, `objects/house/house-${i}.png`);
+            this.load.image(`house-${i}`, `objects/house/house-${i}.png${this.ASSET_VERSION}`);
         }
 
         // Objects
@@ -217,10 +232,10 @@ export class Preloader extends Scene
         this.load.image('mushroom-fruit', 'objects/plant/mushroom/mush-fruit.png');
 
         // Factory (4 frames: 1-2 idle, 3-4 working)
-        this.load.image('factory-1', 'objects/factory/factory_1.png');
-        this.load.image('factory-2', 'objects/factory/factory_2.png');
-        this.load.image('factory-3', 'objects/factory/factory_3.png');
-        this.load.image('factory-4', 'objects/factory/factory_4.png');
+        this.load.image('factory-1', `objects/factory/factory_1.png${this.ASSET_VERSION}`);
+        this.load.image('factory-2', `objects/factory/factory_2.png${this.ASSET_VERSION}`);
+        this.load.image('factory-3', `objects/factory/factory_3.png${this.ASSET_VERSION}`);
+        this.load.image('factory-4', `objects/factory/factory_4.png${this.ASSET_VERSION}`);
 
         // Warehouse spritesheet (2 frames: 0=closed, 1=open)
         this.load.spritesheet('warehouse', 'objects/ware-house/ware-house.png', {
@@ -249,25 +264,25 @@ export class Preloader extends Scene
         });
 
         // Shop spritesheet (2 frames for animation)
-        this.load.spritesheet('shop', 'objects/shop/shop.png', {
+        this.load.spritesheet('shop', `objects/shop/shop.png${this.ASSET_VERSION}`, {
             frameWidth: 159,
             frameHeight: 119
         });
 
         // Well spritesheet (2 frames for animation)
-        this.load.spritesheet('well', 'objects/well/well.png', {
+        this.load.spritesheet('well', `objects/well/well.png${this.ASSET_VERSION}`, {
             frameWidth: 177,
             frameHeight: 177
         });
 
         // Turtle tutor spritesheet (2 frames for idle animation)
-        this.load.spritesheet('tutor', 'objects/well/tutor.png', {
+        this.load.spritesheet('tutor', `objects/well/tutor.png${this.ASSET_VERSION}`, {
             frameWidth: 45,
             frameHeight: 55
         });
 
         // Station/Dock spritesheet (4 frames for animation)
-        this.load.spritesheet('station', 'objects/station/station.png', {
+        this.load.spritesheet('station', `objects/station/station.png${this.ASSET_VERSION}`, {
             frameWidth: 121,
             frameHeight: 92
         });

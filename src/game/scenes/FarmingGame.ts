@@ -189,7 +189,7 @@ export class FarmingGame extends Scene {
     private profileManager!: ProfileManager;
     private toolbarManager!: ToolbarManager;
     private plotManager!: PlotManager;
-    private soundManager!: SoundManager;
+    public soundManager!: SoundManager;
     private wellManager!: WellManager;
     private plantDetailManager!: PlantDetailManager;
     private stationManager!: StationManager;

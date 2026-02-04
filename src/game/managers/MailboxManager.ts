@@ -8,6 +8,7 @@ import { getMissionSocketService, MissionUpdatedPayload } from '../MissionSocket
 import { EventBus } from '../EventBus';
 import { SocialSubmissionManager } from './SocialSubmissionManager';
 import { getSocketService } from '../SocketService';
+import { DynamicShadow } from '../objects/DynamicShadow';
 
 interface MailboxCallbacks {
     getSeedCounts: () => Record<PlantType, number>;
@@ -73,6 +74,9 @@ export class MailboxManager extends BaseManager {
         this.mailboxSprite.setDepth(mailboxY + 16);
         this.mailboxSprite.setInteractive({ useHandCursor: true });
         this.mailboxSprite.play('mailbox-idle');
+
+        // Add shadow
+        new DynamicShadow(this.scene, this.mailboxSprite, 0, 0);
 
         this.mailboxSprite.on('pointerdown', () => {
             this.open();
