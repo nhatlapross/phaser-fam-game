@@ -104,10 +104,22 @@ export class Preloader extends Scene
             frameHeight: 16
         });
 
-        // Fountain spritesheet (5 frames animation, 334x118 total, each frame 67x118)
+        // Fountain spritesheet (5 frames, 682x236 total, each frame 136x236)
         this.load.spritesheet('fountain', 'objects/square/fountain.png', {
-            frameWidth: 67,
-            frameHeight: 118
+            frameWidth: 136,
+            frameHeight: 236
+        });
+
+        // Merlin NPCs
+        // Merlin 1 (Astrology): 2156x467, 4 frames -> 539x467
+        this.load.spritesheet('merlin1', 'objects/merlin/merline1.png', {
+            frameWidth: 539,
+            frameHeight: 467
+        });
+        // Merlin 2 (Tarot): 2040x493, 4 frames -> 510x493
+        this.load.spritesheet('merlin2', 'objects/merlin/merline2.png', {
+            frameWidth: 510,
+            frameHeight: 493
         });
 
         // Town Square decorations (76x94 each)

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_CONSTANTS } from '../types/GameTypes';
+import { DynamicShadow } from '../objects/DynamicShadow';
 
 interface PetCallbacks {
     getPlayer: () => Phaser.Physics.Arcade.Sprite | null;
@@ -77,6 +78,7 @@ export class PetManager {
     private scene: Phaser.Scene;
     private callbacks: PetCallbacks;
     private pet: Phaser.Physics.Arcade.Sprite | null = null;
+    private shadow: DynamicShadow | null = null;
     private isActive: boolean = false;
     private currentPetKey: string = 'cat';
     private lastDirection: string = 'down';
@@ -241,14 +243,31 @@ export class PetManager {
             this.pet.setDepth(player.y - 1);
             this.pet.play(`pet-${petKey}-idle-down`);
 
+            // Create shadow
+            this.shadow = new DynamicShadow(this.scene, this.pet, 0, 2);
+
             // Ignore pet by UI camera to prevent duplicate rendering
             const uiCamera = this.callbacks.getUICamera?.();
             if (uiCamera) {
                 uiCamera.ignore(this.pet);
+                uiCamera.ignore(this.shadow);
             }
         } else {
             this.pet.setVisible(true);
             this.pet.setActive(true);
+            
+            // Re-create shadow if missing (e.g. if destroyed separately)
+            if (!this.shadow || !this.shadow.active) {
+                this.shadow = new DynamicShadow(this.scene, this.pet, 0, 2);
+                
+                const uiCamera = this.callbacks.getUICamera?.();
+                if (uiCamera) {
+                    uiCamera.ignore(this.shadow);
+                }
+            } else {
+                this.shadow.setVisible(true);
+                this.shadow.setActive(true);
+            }
         }
 
         // Initialize position history with current player position
@@ -273,6 +292,10 @@ export class PetManager {
         if (this.pet) {
             this.pet.setVisible(false);
             this.pet.setActive(false);
+        }
+        if (this.shadow) {
+            this.shadow.setVisible(false);
+            this.shadow.setActive(false);
         }
         this.isActive = false;
         globalPetActive = false;
@@ -386,6 +409,10 @@ export class PetManager {
         if (this.pet) {
             this.pet.destroy();
             this.pet = null;
+        }
+        if (this.shadow) {
+            this.shadow.destroy();
+            this.shadow = null;
         }
 
         this.animationsCreated = false;
