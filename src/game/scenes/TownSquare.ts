@@ -10,6 +10,7 @@ import { useGameState } from '../hooks/useGameState';
 import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacterKey, getCharacterByKey } from '../config/CharacterConfig';
 import { DynamicShadow } from '../objects/DynamicShadow';
 import { HoroscopeModal } from '../ui/HoroscopeModal';
+import { TarotModal } from '../ui/TarotModal';
 
 /**
  * Town Square Scene - A larger public space for social interactions
@@ -20,6 +21,7 @@ export class TownSquare extends Scene {
     private playerShadow!: DynamicShadow;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private horoscopeModal!: HoroscopeModal;
+    private tarotModal!: TarotModal;
 
 
     // World configuration
@@ -834,6 +836,15 @@ export class TownSquare extends Scene {
             }
         };
 
+        // Initialize Tarot Modal
+        this.tarotModal = new TarotModal(this);
+        this.tarotModal.onClose = () => {
+            const merlin2 = this.merlins.find(m => m.id === 'merlin2')?.sprite;
+            if (merlin2) {
+                merlin2.play('merlin2-idle');
+            }
+        };
+
         // Listen for currency updates from HoroscopeModal
         EventBus.on('currency-updated', (data: { gold: number }) => {
             const gameState = useGameState(this);
@@ -921,10 +932,10 @@ export class TownSquare extends Scene {
 
         merlin2.on('pointerdown', () => {
             merlin2.play('merlin2-active');
-            this.showToastMessage('Reading the cards...', 0xE91E63);
-            this.time.delayedCall(3000, () => {
-                merlin2.play('merlin2-idle');
-            });
+            this.showToastMessage('Đang xem bài Tarot...', 0xE91E63);
+            
+            // Open Tarot Modal
+            this.tarotModal.show();
         });
 
         this.merlins.push({
@@ -1599,6 +1610,10 @@ export class TownSquare extends Scene {
         this.factoryManager?.destroy();
         this.petManager?.destroy();
         this.gameHouseManager?.destroy();
+
+        // Cleanup modals
+        this.horoscopeModal?.destroy();
+        this.tarotModal?.destroy();
 
         // Cleanup lobby socket - disconnect to prevent orphaned connections
         this.cleanupLobbySocketListeners();
