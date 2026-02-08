@@ -199,18 +199,16 @@ export class Preloader extends Scene
         this.load.image('tree-plant-2', 'objects/plant/social_plant/Social_plant_2.png');
         this.load.image('tree-plant-3', 'objects/plant/social_plant/Social_plant_3.png');
         this.load.image('tree-plant-4', 'objects/plant/social_plant/Social_plant_4.png');
-        this.load.image('tree-plant-5', 'objects/plant/social_plant/Social_plant_5.png');
         this.load.image('tree-plant-death', 'objects/plant/social_plant/Social_plant_death.png');
         this.load.image('tree-fruit', 'objects/plant/social_plant/social-fruit.png');
 
-        // Algae Plant (3 stages spritesheet: 144x54, 3 frames of 48x54)
-        this.load.image('algae-seed', 'objects/plant/technical_plant/Technical_Seed.png');
-        this.load.spritesheet('algae-spritesheet', 'objects/plant/aligant/Algae.png', {
-            frameWidth: 48,
-            frameHeight: 54
-        });
-        this.load.image('algae-plant-death', 'objects/plant/technical_plant/Technical_plant_death.png');
-        this.load.image('algae-fruit', 'objects/plant/technical_plant/technical-fruit.png');
+        // Algae Plant (Replaced spritesheet with individual images per user request)
+        this.load.image('algae-seed', 'objects/plant/algae/algae_Seed.png');
+        this.load.image('algae-plant-1', 'objects/plant/algae/algae_1.png');
+        this.load.image('algae-plant-2', 'objects/plant/algae/algae_2.png');
+        this.load.image('algae-plant-3', 'objects/plant/algae/algae_3.png');
+        this.load.image('algae-plant-death', 'objects/plant/algae/algae_death.png');
+        this.load.image('algae-fruit', 'objects/plant/algae/algae-fruit.png');
 
         // Branded Plant
         this.load.image('branded-seed', 'objects/plant/branded_plant/Branded_Seed.png');
@@ -222,12 +220,12 @@ export class Preloader extends Scene
         this.load.image('branded-plant-death', 'objects/plant/branded_plant/Branded_plant_death.png');
         this.load.image('branded-fruit', 'objects/plant/branded_plant/branded-fruit.png');
 
-        // Mushroom Plant (3 stages spritesheet: 144x48, 3 frames of 48x48)
+        // Mushroom Plant
         this.load.image('mushroom-seed', 'objects/plant/mushroom/mush_seed.png');
-        this.load.spritesheet('mushroom-spritesheet', 'objects/plant/mush-room/mush-room.png', {
-            frameWidth: 48,
-            frameHeight: 48
-        });
+        // Replaced spritesheet with individual images per user request
+        this.load.image('mushroom-plant-1', 'objects/plant/mushroom/mush_plant_1.png');
+        this.load.image('mushroom-plant-2', 'objects/plant/mushroom/mush_plant_2.png');
+        this.load.image('mushroom-plant-3', 'objects/plant/mushroom/mush_plant_3.png');
         this.load.image('mushroom-plant-death', 'objects/plant/mushroom/mush_plant_death.png');
         this.load.image('mushroom-fruit', 'objects/plant/mushroom/mush-fruit.png');
 

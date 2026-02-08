@@ -2201,6 +2201,22 @@ export class TownSquare extends Scene {
             this.miniMapContainer.add(house);
         });
 
+        // NPCs (Merlins) - Mage emoji
+        // We can get their positions from the merlins array if they exist, or calculate them
+        // Since createMiniMap is called in create(), merlins might not be fully populated or we can just recalculate positions
+        // The merlins array is populated in createMerlinNPCs which is called in addDecorativeElements -> createTownSquareMap -> create()
+        // But createMiniMap is called AFTER createTownSquareMap in create().
+        // So this.merlins should be populated.
+        
+        this.merlins.forEach(merlin => {
+            const tileX = merlin.sprite.x / this.TILE_SIZE;
+            const tileY = merlin.sprite.y / this.TILE_SIZE;
+            const pos = tileToMiniMap(tileX, tileY);
+            
+            const npcIcon = this.add.text(pos.x, pos.y, '🧙‍♂️', emojiStyle).setOrigin(0.5);
+            this.miniMapContainer.add(npcIcon);
+        });
+
         // Player avatar (use character avatar image)
         const avatarKey = `${this.currentCharacterKey}-avatar`;
         this.miniMapPlayerAvatar = this.add.image(mapSize / 2, mapSize / 2, avatarKey);

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { DynamicShadow } from '../objects/DynamicShadow';
 import { BaseManager } from './BaseManager';
 import { showAccessKeyPrompt, isAccessVerified } from '../utils/AccessKeyUtils';
 
@@ -76,6 +77,7 @@ export class StationManager extends BaseManager {
     private callbacks: StationCallbacks;
     private config: StationConfig;
     private stationSprite: Phaser.GameObjects.Sprite | null = null;
+    private stationCollider?: Phaser.GameObjects.Rectangle;
     private destinations: LocationDestination[] = [];
 
     private readonly TILE_SIZE = 16;
@@ -127,6 +129,8 @@ export class StationManager extends BaseManager {
         this.stationSprite.setDepth(pixelY + 10);
         this.stationSprite.setName('station');
 
+        // No shadow for station
+
         // Play idle animation
         this.stationSprite.play('station-idle');
 
@@ -146,6 +150,15 @@ export class StationManager extends BaseManager {
         this.stationSprite.on('pointerdown', () => {
             this.open();
         });
+
+        // Create collider at the base of the station
+        const collisionWidth = this.stationSprite.displayWidth * 0.8;
+        const collisionHeight = this.stationSprite.displayHeight * 0.35;
+        const bottomY = pixelY + this.stationSprite.displayHeight / 2;
+        const collisionY = bottomY - collisionHeight / 2 - 4;
+        this.stationCollider = this.scene.add.rectangle(pixelX, collisionY, collisionWidth, collisionHeight);
+        this.stationCollider.setVisible(false);
+        this.scene.physics.add.existing(this.stationCollider, true);
 
         // Ignore by UI camera (game object, not UI)
         const uiCamera = this.scene.cameras.cameras.find(cam => cam.name === 'uiCamera');
@@ -448,6 +461,10 @@ export class StationManager extends BaseManager {
      */
     public getStationSprite(): Phaser.GameObjects.Sprite | null {
         return this.stationSprite;
+    }
+
+    public getStationCollider(): Phaser.GameObjects.Rectangle | undefined {
+        return this.stationCollider;
     }
 
     /**

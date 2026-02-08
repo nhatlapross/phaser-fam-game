@@ -27,6 +27,7 @@ type SubmissionType = 'link' | 'image';
  */
 export class MailboxManager extends BaseManager {
     private mailboxSprite!: Phaser.GameObjects.Sprite;
+    private mailboxCollider?: Phaser.GameObjects.Rectangle;
     private activeTab: 'missions' | 'redeem' = 'missions';
     private callbacks: MailboxCallbacks;
     private cachedMissions: Mission[] | null = null;
@@ -71,7 +72,7 @@ export class MailboxManager extends BaseManager {
 
         this.mailboxSprite = this.scene.add.sprite(mailboxX, mailboxY, 'mailbox');
         this.mailboxSprite.setDisplaySize(32, 32);
-        this.mailboxSprite.setDepth(mailboxY + 16);
+        this.mailboxSprite.setDepth(mailboxY + 25);
         this.mailboxSprite.setInteractive({ useHandCursor: true });
         this.mailboxSprite.play('mailbox-idle');
 
@@ -85,6 +86,15 @@ export class MailboxManager extends BaseManager {
         // Setup hover effect with tint + shadow
         this.setupHoverEffect(this.mailboxSprite, 8);
 
+        // Create collider at the base of the mailbox
+        const collisionWidth = this.mailboxSprite.displayWidth * 0.75-20;
+        const collisionHeight = this.mailboxSprite.displayHeight * 0.35-35;
+        const bottomY = mailboxY + this.mailboxSprite.displayHeight / 2 - 10;
+        const collisionY = bottomY - collisionHeight / 2 - 4;
+        this.mailboxCollider = this.scene.add.rectangle(mailboxX, collisionY, collisionWidth, collisionHeight);
+        this.mailboxCollider.setVisible(false);
+        this.scene.physics.add.existing(this.mailboxCollider, true);
+
         // Add decorative bushes below mailbox
         const bushY = mailboxY + 16;
         const bushFrame1 = 27; // Bush sprite frame
@@ -93,17 +103,17 @@ export class MailboxManager extends BaseManager {
         // Left bush
         const leftBush = this.scene.add.sprite(mailboxX - 12, bushY, 'basic-plants', bushFrame1);
         leftBush.setOrigin(0.5);
-        leftBush.setDepth(bushY);
+        leftBush.setDepth(bushY + 10);
 
         // Right bush
         const rightBush = this.scene.add.sprite(mailboxX + 12, bushY, 'basic-plants', bushFrame2);
         rightBush.setOrigin(0.5);
-        rightBush.setDepth(bushY);
+        rightBush.setDepth(bushY + 10);
 
         // Center bush (slightly lower)
         const centerBush = this.scene.add.sprite(mailboxX, bushY + 6, 'basic-plants', bushFrame1);
         centerBush.setOrigin(0.5);
-        centerBush.setDepth(bushY + 6);
+        centerBush.setDepth(bushY + 16);
     }
 
     /**
@@ -111,6 +121,10 @@ export class MailboxManager extends BaseManager {
      */
     public getMailboxSprite(): Phaser.GameObjects.Sprite {
         return this.mailboxSprite;
+    }
+
+    public getMailboxCollider(): Phaser.GameObjects.Rectangle | undefined {
+        return this.mailboxCollider;
     }
 
     /**
