@@ -624,7 +624,7 @@ export class TownSquare extends Scene {
         // House names
         const houseNames: Record<number, string> = {
             1: '🎮 Arcade',
-            2: '🎨 Manga Studio',
+            2: '🎨 Comic Studio',
             3: 'Dog House',
             4: 'Bird House',
             5: 'Fish House',
