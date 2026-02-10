@@ -126,29 +126,29 @@ export const CROP_DEFINITIONS: Record<PlantType, CropDefinition> = {
     algae: {
         name: 'Algae',
         seedImage: 'algae-seed',
-        growthImages: [], // Uses spritesheet instead
+        growthImages: ['algae-plant-1', 'algae-plant-2', 'algae-plant-3'],
         fruitImage: 'algae-fruit',
         deathImage: 'algae-plant-death',
-        spritesheet: 'algae-spritesheet', // 2 visual stages: frame 0 (seedling), frame 2 (mature)
-        stageCount: 2
+        // spritesheet: 'algae-spritesheet', // Deprecated
+        stageCount: 3
     },
     mushroom: {
         name: 'Mushroom',
         seedImage: 'mushroom-seed',
-        growthImages: [], // Uses spritesheet instead
+        growthImages: ['mushroom-plant-1', 'mushroom-plant-2', 'mushroom-plant-3'],
         fruitImage: 'mushroom-fruit',
         deathImage: 'mushroom-plant-death',
-        spritesheet: 'mushroom-spritesheet', // 2 visual stages: frame 0 (seedling), frame 2 (mature)
-        stageCount: 2
+        // spritesheet: 'mushroom-spritesheet', // Deprecated
+        stageCount: 3
     },
     tree: {
         name: 'Tree',
         seedImage: 'tree-seed',
-        growthImages: ['tree-plant-1', 'tree-plant-2', 'tree-plant-3'], // 3 visual stages
+        growthImages: ['tree-plant-1', 'tree-plant-2', 'tree-plant-3', 'tree-plant-4'], // 4 visual stages
         fruitImage: 'tree-fruit',
         deathImage: 'tree-plant-death',
         // No spritesheet - uses growthImages
-        stageCount: 3
+        stageCount: 4
     }
 };
 
@@ -228,15 +228,15 @@ export const EXCHANGE_REWARDS: ExchangeReward[] = [
 export const WATER_DROP_HOURS = 3;
 
 export const PLANT_WATER_CONFIG: Record<PlantType, { waterCapacityDrops: number; maxWaterHours: number }> = {
-    algae: { waterCapacityDrops: 3, maxWaterHours: 3 * WATER_DROP_HOURS },      // 9 hours max
-    mushroom: { waterCapacityDrops: 5, maxWaterHours: 5 * WATER_DROP_HOURS },   // 15 hours max
-    tree: { waterCapacityDrops: 8, maxWaterHours: 8 * WATER_DROP_HOURS },       // 24 hours max
+    algae: { waterCapacityDrops: 16, maxWaterHours: 16 * WATER_DROP_HOURS },      // 48 hours max
+    mushroom: { waterCapacityDrops: 16, maxWaterHours: 16 * WATER_DROP_HOURS },   // 48 hours max
+    tree: { waterCapacityDrops: 16, maxWaterHours: 16 * WATER_DROP_HOURS },       // 48 hours max
 };
 
 // Helper function to get max water hours for a plant type
 export function getMaxWaterHours(plantType: PlantType | string): number {
     const type = plantType.toLowerCase() as PlantType;
-    return PLANT_WATER_CONFIG[type]?.maxWaterHours ?? 9; // Default to algae
+    return PLANT_WATER_CONFIG[type]?.maxWaterHours ?? 48; // Default to 48 hours
 }
 
 // Game constants

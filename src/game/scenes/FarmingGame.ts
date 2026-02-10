@@ -42,9 +42,11 @@ import {
 } from '../managers';
 import { InventoryService, InventoryItem } from '../InventoryService';
 import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
+import { DynamicShadow } from '../objects/DynamicShadow';
 
 export class FarmingGame extends Scene {
     private player!: Phaser.Physics.Arcade.Sprite;
+    private playerShadow!: DynamicShadow;
     private currentCharacterKey: string = 'bear'; // Default character, will be set from user data
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
@@ -234,6 +236,9 @@ export class FarmingGame extends Scene {
 
         // Create the island map
         this.createIslandMap();
+        const worldW = this.MAP_WIDTH * this.TILE_SIZE;
+        const worldH = this.MAP_HEIGHT * this.TILE_SIZE;
+        this.physics.world.setBounds(0, 0, worldW, worldH);
 
         // Initialize all managers
         this.initializeManagers();
@@ -259,9 +264,13 @@ export class FarmingGame extends Scene {
         // Create player
         this.createPlayer();
 
+        // Setup object collisions to prevent walking through world objects
+        this.setupFarmObjectCollisions();
+
         // Setup main game camera (zoomed, follows player)
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.cameras.main.setZoom(3); // Zoom in for pixel art
+        this.cameras.main.setBounds(0, 0, worldW, worldH);
 
         // Create UI camera (no zoom, fixed position, for UI elements only)
         this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
@@ -345,6 +354,22 @@ export class FarmingGame extends Scene {
         this.initializeSocketConnection();
 
         EventBus.emit('current-scene-ready', this);
+    }
+
+    private setupFarmObjectCollisions(): void {
+        const colliders: Phaser.GameObjects.Rectangle[] = [];
+        const wellCollider = this.wellManager.getWellCollider?.();
+        if (wellCollider) colliders.push(wellCollider);
+        const warehouseCollider = this.warehouseManager.getWarehouseCollider?.();
+        if (warehouseCollider) colliders.push(warehouseCollider);
+        const mailboxCollider = this.mailboxManager.getMailboxCollider?.();
+        if (mailboxCollider) colliders.push(mailboxCollider);
+        const stationCollider = this.stationManager.getStationCollider?.();
+        if (stationCollider) colliders.push(stationCollider);
+
+        colliders.forEach(collider => {
+            this.physics.add.collider(this.player, collider);
+        });
     }
 
     private onResize(gameSize: Phaser.Structs.Size) {
@@ -433,11 +458,20 @@ export class FarmingGame extends Scene {
 
         // PlotManager
         this.plotManager = new PlotManager(this, {
-            getPlayerGems: () => this.playerGems,
+            // Use GameDataService/GameState as SSOT, fallback to local state
+            getPlayerGems: () => {
+                const cached = GameDataService.getCachedData();
+                return cached?.user?.balanceGem ?? this.playerGems;
+            },
             getOwnedPlotsCount: () => this.ownedPlotsCount,
             getLockedPlotOverlays: () => this.lockedPlotOverlays,
             getFarmLandStates: () => this.farmLandStates,
-            setPlayerGems: (gems) => { this.playerGems = gems; },
+            setPlayerGems: (gems) => { 
+                this.playerGems = gems; 
+                // Also update SSOT for consistency
+                GameDataService.updateCurrency(this.playerGold, gems);
+                useGameState(this).setCurrency(this.playerGold, gems);
+            },
             setOwnedPlotsCount: (count) => { this.ownedPlotsCount = count; },
             refreshProfileUI: () => this.createUserProfileUI(),
             showFloatingMessage: (msg, x, y) => this.showFloatingMessage(msg, x, y)
@@ -457,7 +491,9 @@ export class FarmingGame extends Scene {
                 const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
                 if (wateringCan) wateringCan.count = (wateringCan.count || 0) + amount;
             },
-            playSuccessSound: () => this.soundManager.playSuccessSound()
+            playSuccessSound: () => this.soundManager.playSuccessSound(),
+            getPlayer: () => this.player,
+            getUICamera: () => this.uiCamera
         }, this.TILE_SIZE);
 
         // PlantDetailManager
@@ -508,9 +544,9 @@ export class FarmingGame extends Scene {
         this.plantUpdateHandler = new PlantUpdateHandler(this, {
             getFarmLandStates: () => this.farmLandStates,
             showPlant: (x: number, y: number, plantType: PlantType, stage: number, isDead: boolean, isWilted: boolean) => {
-                this.showPlant(x, y, plantType, stage, isDead, isWilted);
+                this.updatePlantSprite(x, y, plantType, stage, isDead, isWilted);
             },
-            updateHealthBar: (tileKey: string, hoursToDeath: number, maxHours: number = 72) => {
+            updateHealthBar: (tileKey: string, hoursToDeath: number, maxHours: number = 48) => {
                 this.updateHealthBarFromSocket(tileKey, hoursToDeath, maxHours);
             },
             showWaterSplashEffect: (x: number, y: number) => {
@@ -624,6 +660,9 @@ export class FarmingGame extends Scene {
             
             // Refresh profile UI to update gem count
             this.createUserProfileUI();
+            
+            // Refresh gem shop data to update availability of next plots
+            GameDataService.refreshGemShop();
         }
         
         // Process each land update
@@ -665,6 +704,9 @@ export class FarmingGame extends Scene {
         // Update global game state (single source of truth)
         const gameState = useGameState(this);
         gameState.setCurrency(payload.gold, payload.gem);
+
+        // Sync with GameDataService cache (ensures modals and other services see updated values)
+        GameDataService.updateCurrency(payload.gold, payload.gem);
         
         // Refresh profile UI to show updated balances
         this.createUserProfileUI();
@@ -883,7 +925,7 @@ export class FarmingGame extends Scene {
     /**
      * Update health bar from socket data
      */
-    private updateHealthBarFromSocket(tileKey: string, hoursToDeath: number, maxHours: number = 72): void {
+    private updateHealthBarFromSocket(tileKey: string, hoursToDeath: number, maxHours: number = 48): void {
         const state = this.farmLandStates.get(tileKey);
         if (!state?.healthBarFill) return;
 
@@ -1079,10 +1121,17 @@ export class FarmingGame extends Scene {
 
             // Initialize global game state with cached data (SINGLE SOURCE OF TRUTH)
             // NOTE: Use user.balanceGold/Gem as primary source (more accurate than inventory API)
+            const gold = cachedData.user?.balanceGold ?? cachedData.currencies?.gold ?? 0;
+            const gem = cachedData.user?.balanceGem ?? cachedData.currencies?.gem ?? 0;
+            
+            // Sync local state (used by PlotManager and other legacy components)
+            this.playerGold = gold;
+            this.playerGems = gem;
+
             this.gameState.initialize({
                 currency: {
-                    gold: cachedData.user?.balanceGold ?? cachedData.currencies?.gold ?? 0,
-                    gem: cachedData.user?.balanceGem ?? cachedData.currencies?.gem ?? 0,
+                    gold: gold,
+                    gem: gem,
                 },
                 seeds: this.seedCounts,
                 fertilizers: this.fertilizerCounts,
@@ -1681,6 +1730,17 @@ export class FarmingGame extends Scene {
             }
 
             if (userData) {
+                // Sync local state with fetched user data
+                this.playerGold = userData.balanceGold ?? userData.gold ?? 0;
+                this.playerGems = userData.balanceGem ?? userData.gem ?? 0;
+                
+                // Update GameState
+                const gameState = useGameState(this);
+                gameState.setCurrency(this.playerGold, this.playerGems);
+
+                // Update GameDataService cache if possible (partial update)
+                // This ensures other components using GameDataService see the latest data
+                GameDataService.updateCurrency(this.playerGold, this.playerGems);
 
                 // Refresh UI to show updated balances
                 this.createUserProfileUI();
@@ -2217,6 +2277,8 @@ export class FarmingGame extends Scene {
         this.player.setOrigin(GAME_CONSTANTS.CHARACTER_ORIGIN_X, GAME_CONSTANTS.CHARACTER_ORIGIN_Y);
         this.player.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         this.player.setDepth(this.player.y); // Dynamic depth based on Y position
+        
+        this.playerShadow = new DynamicShadow(this, this.player, 0, 2);
 
         // Create animations for the selected character
         this.createPlayerAnimations();
@@ -2663,6 +2725,10 @@ export class FarmingGame extends Scene {
             const apiGold = cachedData.user?.balanceGold ?? cachedData.currencies?.gold ?? 0;
             const apiGem = cachedData.user?.balanceGem ?? cachedData.currencies?.gem ?? 0;
 
+            // Sync local state (used by PlotManager and other legacy components)
+            this.playerGold = apiGold;
+            this.playerGems = apiGem;
+
             // Only update if different to avoid triggering unnecessary state changes
             const currentState = this.gameState.get();
             if (currentState.currency.gold !== apiGold || currentState.currency.gem !== apiGem) {
@@ -2964,8 +3030,11 @@ export class FarmingGame extends Scene {
 
     private performAction() {
         // Get tile player is standing on or in front of
+        // Use negative offset to align selection with player's feet
+        // If it selects the tile below, we need to shift the detection point UP (negative Y)
+        const yOffset = -6;
         const playerTileX = Math.floor(this.player.x / this.TILE_SIZE);
-        const playerTileY = Math.floor(this.player.y / this.TILE_SIZE);
+        const playerTileY = Math.floor((this.player.y + yOffset) / this.TILE_SIZE);
 
         const tileKey = `${playerTileX},${playerTileY}`;
 
@@ -3017,10 +3086,34 @@ export class FarmingGame extends Scene {
             if (this.seedCounts[selectedPlantType] > 0) {
                 state.planted = true;
                 state.cropType = selectedPlantType;
-                state.plantStage = PLANT_STAGES.SPROUT; // Start as sprout, not seed
+                state.plantStage = PLANT_STAGES.DIGGING; // Start as digging
                 state.isDead = false;
                 state.isWilted = false;
                 state.lastCareTime = Date.now(); // Set initial care time
+
+                // OPTIMISTIC UPDATE: Initialize plant info for details modal
+                state.plantInfo = {
+                    id: 'temp-' + Date.now(),
+                    type: selectedPlantType.toUpperCase(),
+                    typeName: this.getItemDisplayName(`SEED_${selectedPlantType.toUpperCase()}`),
+                    name: this.getItemDisplayName(`FRUIT_${selectedPlantType.toUpperCase()}`),
+                    stage: 'DIGGING',
+                    stageName: 'Digging',
+                    plantedAt: new Date().toISOString(),
+                    lastWateredAt: new Date().toISOString(),
+                    waterBalance: 48,
+                    waterCount: 0
+                };
+
+                // OPTIMISTIC UPDATE: Initialize hydration info
+                state.hydration = {
+                    hoursToDeath: 48,
+                    isDead: false,
+                    isWithering: false,
+                    status: 'HEALTHY',
+                    message: 'Growing well',
+                    waterBalance: 48
+                };
 
                 // Decrease seed count for this specific type
                 this.seedCounts[selectedPlantType]--;
@@ -3029,8 +3122,8 @@ export class FarmingGame extends Scene {
                 // Play plant sound effect
                 this.soundManager.playPlantSound();
 
-                // Show plant sprite (sprout stage - when planted, seed becomes sprout)
-                this.showPlant(x, y, selectedPlantType, PLANT_STAGES.SPROUT);
+                // Show plant sprite (digging stage)
+                this.showPlant(x, y, selectedPlantType, PLANT_STAGES.DIGGING);
 
                 // Create health bar
                 this.createHealthBar(x, y, tileKey);
@@ -3321,32 +3414,35 @@ export class FarmingGame extends Scene {
         const state = this.farmLandStates.get(tileKey);
 
         if (state && state.planted && state.cropType) {
-            const landId = state.landId;
+            // Show confirmation modal
+            this.plotManager.showRemovePlantModal(() => {
+                const landId = state.landId;
 
-            // Remove plant regardless of stage or state
-            state.planted = false;
-            state.plantStage = 0;
-            state.cropType = null;
-            state.isDead = false;
-            state.isWilted = false;
-            state.lastCareTime = undefined;
-            state.plantId = undefined;
+                // Remove plant regardless of stage or state
+                state.planted = false;
+                state.plantStage = 0;
+                state.cropType = null;
+                state.isDead = false;
+                state.isWilted = false;
+                state.lastCareTime = undefined;
+                state.plantId = undefined;
 
-            // Remove plant sprite and health bar
-            this.removePlant(x, y);
+                // Remove plant sprite and health bar
+                this.removePlant(x, y);
 
-
-            // Call API to clear land on backend
-            if (landId) {
-                GardenService.clearLand(landId).then(result => {
-                    if (result?.success) {
-                    } else {
-                    }
-                }).catch(error => {
-                });
-            } else {
-            }
-        } else {
+                // Call API to clear land on backend
+                if (landId) {
+                    GardenService.clearLand(landId).then(result => {
+                        if (result?.success) {
+                            // Success
+                        } else {
+                            console.error('Failed to clear land:', result?.message);
+                        }
+                    }).catch(error => {
+                        console.error('Failed to clear land:', error);
+                    });
+                }
+            });
         }
     }
 
@@ -3405,6 +3501,12 @@ export class FarmingGame extends Scene {
             existingPlant.destroy();
         }
 
+        // Remove existing shadow
+        const existingShadow = this.children.getByName(`plant-shadow-${x}-${y}`);
+        if (existingShadow) {
+            existingShadow.destroy();
+        }
+
         const cropDef = CROP_DEFINITIONS[cropType];
         let imageKey: string;
         let frameIndex: number | undefined; // For spritesheet-based plants
@@ -3422,7 +3524,7 @@ export class FarmingGame extends Scene {
                 imageKey = cropDef.spritesheet;
                 
                 if (cropDef.stageCount === 2) {
-                    // 2-stage plants (algae, mushroom): map 6 API stages to 2 visual frames
+                    // 2-stage plants (spritesheet): map 6 API stages to 2 visual frames
                     // DIGGING(0), SEED(1), SPROUT(2) -> frame 0 (seedling)
                     // GROWING(3), BLOOM(4) -> frame 2 (mature) - skip frame 1
                     frameIndex = stage <= PLANT_STAGES.SPROUT ? 0 : 2;
@@ -3440,18 +3542,41 @@ export class FarmingGame extends Scene {
                     }
                 }
             } else {
-                // Plants using individual images (tree): 3 visual stages
-                // DIGGING(0), SEED(1) -> image 0 (tree-plant-1)
-                // SPROUT(2), GROWING(3) -> image 1 (tree-plant-2)
-                // BLOOM(4) -> image 2 (tree-plant-3)
+                // Plants using individual images (tree, mushroom, algae)
+                // Tree (4 stages):
+                // DIGGING(0), SEED(1) -> image 0
+                // SPROUT(2) -> image 1
+                // GROWING(3) -> image 2
+                // BLOOM(4) -> image 3
+                
+                // Mushroom/Algae (3 stages):
+                // DIGGING(0), SEED(1) -> image 0
+                // SPROUT(2) -> image 1
+                // GROWING(3), BLOOM(4) -> image 2
+                
                 let imageIndex: number;
-                if (stage <= PLANT_STAGES.SEED) {
-                    imageIndex = 0;
-                } else if (stage <= PLANT_STAGES.GROWING) {
-                    imageIndex = 1;
+                
+                if (cropDef.stageCount === 4) {
+                     if (stage <= PLANT_STAGES.SEED) {
+                        imageIndex = 0;
+                    } else if (stage <= PLANT_STAGES.SPROUT) {
+                        imageIndex = 1;
+                    } else if (stage <= PLANT_STAGES.GROWING) {
+                        imageIndex = 2;
+                    } else {
+                        imageIndex = 3;
+                    }
                 } else {
-                    imageIndex = 2;
+                    // Default for 3 stages
+                    if (stage <= PLANT_STAGES.SEED) {
+                        imageIndex = 0;
+                    } else if (stage <= PLANT_STAGES.SPROUT) {
+                        imageIndex = 1;
+                    } else {
+                        imageIndex = 2;
+                    }
                 }
+                
                 imageIndex = Math.min(imageIndex, cropDef.growthImages.length - 1);
                 imageKey = cropDef.growthImages[imageIndex];
             }
@@ -3478,6 +3603,8 @@ export class FarmingGame extends Scene {
 
         // DEBUG: Log stage to image mapping
 
+        // Create dynamic shadow (before plant sprite)
+        // Don't create shadow for digging stage
         // Plant size (scale down from 157x153 to fit tile)
         const plantSize = 16;
 
@@ -3498,6 +3625,23 @@ export class FarmingGame extends Scene {
         plant.setOrigin(0.5, 0.5); // Center on tile
         plant.setDepth(y * this.TILE_SIZE + 5);
         plant.setName(`plant-${x}-${y}`);
+
+        // Create dynamic shadow (AFTER plant sprite)
+        // Don't create shadow for digging stage
+        if (stage > PLANT_STAGES.DIGGING) {
+            // Calculate offset based on plant size
+            // Plant is 16x16, origin 0.5,0.5. Bottom is at y+8.
+            // Shadow origin is 0.5,1. So we want shadow anchor at y+8.
+            const shadow = new DynamicShadow(this, plant, 0, 8);
+            shadow.setName(`plant-shadow-${x}-${y}`);
+            // Ensure shadow is below plant (DynamicShadow sets depth to 2 in preUpdate, which is fine)
+            // But if we want it to sort with plants, we might need to set it to plant.depth - 1
+            // However, DynamicShadow.preUpdate forces depth 2.
+            // If plants overlap, depth 2 is fine as long as all plants are > 2.
+            // Plants are y * 16 + 5. Min y=0 -> depth 5. So > 2. Correct.
+            
+            this.uiCamera.ignore(shadow);
+        }
 
         // Apply wilted tint (yellowish/brown)
         if (isWilted) {
@@ -3537,10 +3681,20 @@ export class FarmingGame extends Scene {
             plant.destroy();
         }
 
-        // Also remove health bar (border, bg, fill)
+        const shadow = this.children.getByName(`plant-shadow-${x}-${y}`);
+        if (shadow) {
+            shadow.destroy();
+        }
+
+        // Also remove health bar (border, bg, fill, text)
         const border = this.children.getByName(`healthbar-border-${x}-${y}`);
         if (border) {
             border.destroy();
+        }
+
+        const text = this.children.getByName(`healthbar-text-${x}-${y}`);
+        if (text) {
+            text.destroy();
         }
 
         const tileKey = `${x},${y}`;
@@ -3561,12 +3715,49 @@ export class FarmingGame extends Scene {
         const state = this.farmLandStates.get(tileKey);
         if (!state) return;
 
+        const depth = y * this.TILE_SIZE + 100;
+        const textX = x * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const textY = y * this.TILE_SIZE - 2;
+
+        // Case 1: Plant is DEAD
+        if (state.isDead) {
+             const deathText = this.add.text(textX, textY, 'DEATH', {
+                 fontSize: '10px',
+                 fontFamily: 'Arial',
+                 color: '#ef4444', // Red
+                 stroke: '#000000',
+                 strokeThickness: 2,
+                 fontStyle: 'bold'
+             });
+             deathText.setOrigin(0.5);
+             deathText.setDepth(depth + 2);
+             deathText.setName(`healthbar-text-${x}-${y}`);
+             this.uiCamera.ignore(deathText);
+             return;
+        }
+
+        // Case 2: Plant is MATURE (Harvestable)
+        if (state.plantStage === PLANT_STAGES.MATURE) {
+             const harvestText = this.add.text(textX, textY, 'HARVEST', {
+                 fontSize: '10px',
+                 fontFamily: 'Arial',
+                 color: '#facc15', // Yellow/Gold
+                 stroke: '#000000',
+                 strokeThickness: 2,
+                 fontStyle: 'bold'
+             });
+             harvestText.setOrigin(0.5);
+             harvestText.setDepth(depth + 2);
+             harvestText.setName(`healthbar-text-${x}-${y}`);
+             this.uiCamera.ignore(harvestText);
+             return;
+        }
+
         // Health bar dimensions - with thin border and rounded corners
         const barWidth = 12;
         const barHeight = 3;
         const barY = y * this.TILE_SIZE - 2; // Above the plant
         const barX = x * this.TILE_SIZE + this.TILE_SIZE / 2 - barWidth / 2;
-        const depth = y * this.TILE_SIZE + 100;
         const cornerRadius = 1;
 
         // Create graphics for background with border
@@ -3586,17 +3777,40 @@ export class FarmingGame extends Scene {
         state.healthBarBg = bgGraphics as unknown as Phaser.GameObjects.Rectangle;
 
         // Fill bar (green, will be resized based on health)
+        const currentWaterBalance = state.hydration?.waterBalance ?? 0;
+        const plantType = state.cropType || 'algae';
+        const maxWaterHours = getMaxWaterHours(plantType);
+        const healthPercent = Math.min(currentWaterBalance / maxWaterHours, 1);
+        
+        // Calculate initial width based on current health
+        const maxWidth = barWidth - 1;
+        const initialWidth = Math.max(maxWidth * healthPercent, 1);
+
         state.healthBarFill = this.add.rectangle(
-            barX + barWidth / 2,
+            barX + 0.5,
             barY,
-            barWidth - 1,
+            initialWidth, 
             barHeight - 1,
             0x4ade80,
             1
         );
+        
+        // Fix origin to 0, 0.5 so it grows/shrinks from left
+        state.healthBarFill.setOrigin(0, 0.5);
+        state.healthBarFill.setPosition(barX + 0.5, barY); // +0.5 for border offset
+        
         state.healthBarFill.setDepth(depth + 1);
         state.healthBarFill.setName(`healthbar-fill-${x}-${y}`);
         this.uiCamera.ignore(state.healthBarFill);
+        
+        // Set initial color
+        if (healthPercent > 0.6) {
+            state.healthBarFill.setFillStyle(0x4ade80, 1); // Green
+        } else if (healthPercent > 0.3) {
+            state.healthBarFill.setFillStyle(0xfbbf24, 1); // Yellow/Orange
+        } else {
+            state.healthBarFill.setFillStyle(0xef4444, 1); // Red
+        }
     }
 
     private updateHealthBar(tileKey: string) {
@@ -3653,11 +3867,9 @@ export class FarmingGame extends Scene {
         this.removePlant(x, y);
         this.showPlant(x, y, cropType, stage, isDead, isWilted);
 
-        // Recreate health bar if plant is alive
-        if (!isDead) {
-            const tileKey = `${x},${y}`;
-            this.createHealthBar(x, y, tileKey);
-        }
+        // Recreate health bar (or death/harvest text)
+        const tileKey = `${x},${y}`;
+        this.createHealthBar(x, y, tileKey);
     }
 
     private updateTimeDisplay() {
@@ -3706,7 +3918,7 @@ export class FarmingGame extends Scene {
     private onNewDay() {
     }
 
-    update() {
+    update(time: number, delta: number) {
         // Don't allow movement when any modal is open
         if (this.factoryModalOpen || this.chestOpen || this.seedSelectorOpen ||
             this.mailboxModalOpen || this.shopModalOpen || this.checkinModalOpen ||
@@ -3778,7 +3990,6 @@ export class FarmingGame extends Scene {
                     break;
                 }
             }
-
             if (!canMove) {
                 // Don't allow movement - would go into water
                 velocityX = 0;
@@ -3836,6 +4047,9 @@ export class FarmingGame extends Scene {
 
         // Update pet position
         this.petManager?.update();
+
+        // Update well manager (turtle dialogue)
+        this.wellManager?.update(time);
     }
 
     shutdown() {

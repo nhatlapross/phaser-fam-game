@@ -121,7 +121,6 @@ export class CheckinManager extends BaseManager {
         this.scene.cameras.main.ignore(overlay);
         this.addElement(overlay);
 
-        // Modal background
         const modalBg = this.scene.add.sprite(modalX, modalY, 'settings-panel', 1);
         modalBg.setDisplaySize(modalWidth, modalHeight);
         modalBg.setDepth(5301);
@@ -132,7 +131,6 @@ export class CheckinManager extends BaseManager {
         this.scene.cameras.main.ignore(modalBg);
         this.addElement(modalBg);
 
-        // Animate modal
         modalBg.setScale(0);
         this.scene.tweens.add({
             targets: modalBg,

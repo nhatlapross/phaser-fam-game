@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { DynamicShadow } from '../objects/DynamicShadow';
 import { BaseManager } from './BaseManager';
 import { ShopService } from '../ShopService';
 import { GameDataService } from '../GameDataService';
@@ -8,6 +9,8 @@ interface WellCallbacks {
     getWaterCount: () => number;
     addWater: (amount: number) => void;
     playSuccessSound: () => void;
+    getPlayer?: () => Phaser.Physics.Arcade.Sprite | null;
+    getUICamera?: () => Phaser.Cameras.Scene2D.Camera;
     // Note: UI refresh is now handled by GameDataService.refreshAndUpdateUI()
 }
 
@@ -18,6 +21,7 @@ interface WellCallbacks {
 export class WellManager extends BaseManager {
     private wellSprite!: Phaser.GameObjects.Sprite;
     private tutorSprite!: Phaser.GameObjects.Sprite;
+    private wellCollider?: Phaser.GameObjects.Rectangle;
     private notificationIcon!: Phaser.GameObjects.Image;
     private callbacks: WellCallbacks;
     private tileSize: number;
@@ -26,11 +30,144 @@ export class WellManager extends BaseManager {
     private isClaimingWater: boolean = false;
     private hasFetchedStatus: boolean = false; // Track if we've fetched from API
 
+    // Dialogue system
+    private speechBubble: Phaser.GameObjects.Container | null = null;
+    private bubbleText: Phaser.GameObjects.Text | null = null;
+    private bubbleTimer: Phaser.Time.TimerEvent | null = null;
+    private lastDialogueTime: number = 0;
+    private readonly DIALOGUE_COOLDOWN = 10000; // 10 seconds
+    private readonly BUBBLE_DURATION = 4000; // 4 seconds
+    private readonly INTERACTION_DISTANCE = 80;
+
+    private readonly DIALOGUES = [
+        "Slow and steady wins the race.",
+        "Don't forget to water your plants.",
+        "I've seen many harvests in my time.",
+        "The well water is magical.",
+        "Need some water? Help yourself.",
+        "Nature takes its time.",
+        "Patience is key to farming.",
+        "Respect the land, and it will provide."
+    ];
+
     constructor(scene: Phaser.Scene, callbacks: WellCallbacks, tileSize: number) {
         super(scene);
         this.callbacks = callbacks;
         this.tileSize = tileSize;
     }
+
+    public update(time: number): void {
+        this.checkPlayerProximity(time);
+    }
+
+    private checkPlayerProximity(time: number): void {
+        if (!this.callbacks.getPlayer || !this.tutorSprite) return;
+
+        const player = this.callbacks.getPlayer();
+        if (!player) return;
+
+        const distance = Phaser.Math.Distance.Between(
+            player.x, player.y,
+            this.tutorSprite.x, this.tutorSprite.y
+        );
+
+        if (distance < this.INTERACTION_DISTANCE) {
+            // Player is close
+            if (!this.speechBubble && time > this.lastDialogueTime + this.DIALOGUE_COOLDOWN) {
+                this.showRandomDialogue();
+                this.lastDialogueTime = time;
+            }
+        } else {
+            // Player moved away - verify if we should hide bubble immediately? 
+            // Currently letting it expire naturally or hide if very far
+            if (this.speechBubble && distance > this.INTERACTION_DISTANCE * 1.5) {
+                this.hideSpeechBubble();
+            }
+        }
+    }
+
+    private showRandomDialogue(): void {
+        const text = Phaser.Utils.Array.GetRandom(this.DIALOGUES);
+        this.showSpeechBubble(text);
+    }
+
+    private showSpeechBubble(text: string): void {
+        if (this.speechBubble) {
+            this.hideSpeechBubble();
+        }
+
+        // Measure text first
+        const tempText = this.scene.add.text(0, 0, text, {
+            fontSize: '6px',
+            fontFamily: 'PixelFont',
+            color: '#000000',
+            resolution: 2,
+            align: 'center'
+        });
+        const textWidth = tempText.width;
+        const textHeight = tempText.height;
+        tempText.destroy();
+        
+        const bubbleWidth = textWidth + 10;
+        const bubbleHeight = textHeight + 8;
+
+        this.speechBubble = this.scene.add.container(this.tutorSprite.x, this.tutorSprite.y - 40);
+        this.speechBubble.setDepth(this.tutorSprite.y + 100);
+
+        // Bubble graphics
+        const bubbleGraphics = this.scene.add.graphics();
+        bubbleGraphics.fillStyle(0xFFFFFF, 1);
+        bubbleGraphics.lineStyle(1, 0x555555, 1);
+        
+        // Main rounded rect
+        bubbleGraphics.fillRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+        bubbleGraphics.strokeRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+        
+        // Tail
+        bubbleGraphics.fillStyle(0xFFFFFF, 1);
+        bubbleGraphics.fillTriangle(-3, bubbleHeight / 2 - 1, 3, bubbleHeight / 2 - 1, 0, bubbleHeight / 2 + 4);
+        bubbleGraphics.lineStyle(1, 0x555555, 1);
+        bubbleGraphics.lineBetween(-3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+        bubbleGraphics.lineBetween(3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+
+        this.speechBubble.add(bubbleGraphics);
+
+        // Text
+        this.bubbleText = this.scene.add.text(0, 0, text, {
+            fontFamily: 'PixelFont',
+            fontSize: '6px',
+            color: '#000000',
+            resolution: 2,
+            align: 'center'
+        });
+        this.bubbleText.setOrigin(0.5);
+        this.speechBubble.add(this.bubbleText);
+
+        // Ignore by UI camera to prevent it from appearing on the UI layer
+        if (this.callbacks.getUICamera) {
+            const uiCamera = this.callbacks.getUICamera();
+            if (uiCamera) {
+                uiCamera.ignore(this.speechBubble);
+            }
+        }
+
+        // Auto hide
+        this.bubbleTimer = this.scene.time.delayedCall(this.BUBBLE_DURATION, () => {
+            this.hideSpeechBubble();
+        });
+    }
+
+    private hideSpeechBubble(): void {
+        if (this.speechBubble) {
+            this.speechBubble.destroy();
+            this.speechBubble = null;
+        }
+        if (this.bubbleTimer) {
+            this.bubbleTimer.remove();
+            this.bubbleTimer = null;
+        }
+    }
+
 
     /**
      * Create the well object on the map
@@ -60,6 +197,7 @@ export class WellManager extends BaseManager {
         // Create well sprite with larger size
         this.wellSprite = this.scene.add.sprite(wellX, wellY, 'well', 0);
         this.wellSprite.setDisplaySize(48, 48);
+        this.wellSprite.setOrigin(0.5);
         this.wellSprite.setDepth(wellY + 10);
         this.wellSprite.setInteractive({ useHandCursor: true });
 
@@ -73,6 +211,16 @@ export class WellManager extends BaseManager {
 
         // Setup hover effect with tint + shadow
         this.setupHoverEffect(this.wellSprite, 6);
+
+        // Create collider at the base of the well (center-origin sprite)
+        // Use bottom area of sprite to prevent walking through
+        const collisionWidth = this.wellSprite.displayWidth * 0.7 - 35;
+        const collisionHeight = this.wellSprite.displayHeight * 0.3 - 40;
+        const bottomY = wellY + this.wellSprite.displayHeight / 2 - 30;
+        const collisionY = bottomY - collisionHeight / 2 - 4;
+        this.wellCollider = this.scene.add.rectangle(wellX + 10, collisionY, collisionWidth, collisionHeight);
+        this.wellCollider.setVisible(false);
+        this.scene.physics.add.existing(this.wellCollider, true);
 
         // Create notification icon above the well (hidden by default)
         this.notificationIcon = this.scene.add.image(wellX, wellY - 28, 'icon-problem');
@@ -106,10 +254,13 @@ export class WellManager extends BaseManager {
         this.tutorSprite = this.scene.add.sprite(tutorX, tutorY, 'tutor', 0);
         this.tutorSprite.setDisplaySize(24, 30);
         // Set depth higher than well so turtle appears in front
-        this.tutorSprite.setDepth(wellY + 20);
+        this.tutorSprite.setOrigin(0.5);
+        this.tutorSprite.setDepth(wellY + 28);
 
         // Play idle animation
         this.tutorSprite.play('tutor-idle');
+
+        new DynamicShadow(this.scene, this.tutorSprite, 0, 2);
     }
 
     /**
@@ -124,6 +275,10 @@ export class WellManager extends BaseManager {
      */
     public getWellSprite(): Phaser.GameObjects.Sprite {
         return this.wellSprite;
+    }
+
+    public getWellCollider(): Phaser.GameObjects.Rectangle | undefined {
+        return this.wellCollider;
     }
 
     /**

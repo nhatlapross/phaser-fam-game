@@ -88,6 +88,12 @@ export class TownSquare extends Scene {
     }> = [];
     private readonly MERLIN_LABEL_DISTANCE = 80;
 
+    // DeFi Master NPC
+    private defiMaster: {
+        sprite: Phaser.GameObjects.Image;
+        label: Phaser.GameObjects.Container | null;
+    } | null = null;
+
     // Game house manager
     private gameHouseManager!: GameHouseManager;
 
@@ -481,6 +487,9 @@ export class TownSquare extends Scene {
 
         // Create Merlin NPCs in front of fountain
         this.createMerlinNPCs();
+
+        // Create DeFi Master
+        this.createDeFiMaster();
 
         // Add trees, lamps, and chairs based on reference layout
         this.createTrees();
@@ -947,6 +956,117 @@ export class TownSquare extends Scene {
         });
     }
 
+    private createDeFiMaster() {
+        // Position: Above Shop (42, 32) and Factory (42, 28), near center (30, 30)
+        // Let's place it at 38, 24
+        const x = 38 * this.TILE_SIZE;
+        const y = 24 * this.TILE_SIZE;
+
+        // Create NPC (Single static asset replacing board + npc)
+        const npc = this.add.image(x, y, 'defi-npc');
+        npc.setOrigin(0.5, 0.9);
+        npc.setScale(0.08); // Increased size
+        npc.setDepth(y);
+        
+        // Add shadow
+        new DynamicShadow(this, npc, 0, 0);
+
+        // Store reference
+        this.defiMaster = {
+            sprite: npc,
+            label: null
+        };
+    }
+
+    private updateDeFiLabel() {
+        if (!this.player || !this.defiMaster) return;
+
+        const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.defiMaster.sprite.x, this.defiMaster.sprite.y);
+        
+        if (distance < this.MERLIN_LABEL_DISTANCE) {
+            // Player is near - show label
+            if (!this.defiMaster.label) {
+                const name = "Come here and learn DeFi knowledge";
+                
+                // Create bubble style label
+                const container = this.add.container(this.defiMaster.sprite.x, this.defiMaster.sprite.y - 50); // Adjusted offset
+                
+                // Measure text first
+                const tempText = this.add.text(0, 0, name, {
+                    fontSize: '6px',
+                    fontFamily: 'PixelFont',
+                    color: '#000000',
+                    resolution: 2,
+                    align: 'center'
+                });
+                const textWidth = tempText.width;
+                const textHeight = tempText.height;
+                tempText.destroy();
+                
+                const bubbleWidth = textWidth + 10;
+                const bubbleHeight = textHeight + 8;
+                
+                // Draw bubble background
+                const bubbleGraphics = new Phaser.GameObjects.Graphics(this);
+                bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                bubbleGraphics.lineStyle(1, 0x555555, 1);
+                bubbleGraphics.fillRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                bubbleGraphics.strokeRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                
+                // Speech bubble tail
+                bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                bubbleGraphics.fillTriangle(-3, bubbleHeight / 2 - 1, 3, bubbleHeight / 2 - 1, 0, bubbleHeight / 2 + 4);
+                bubbleGraphics.lineStyle(1, 0x555555, 1);
+                bubbleGraphics.lineBetween(-3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                bubbleGraphics.lineBetween(3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                
+                // Text
+                const textObj = new Phaser.GameObjects.Text(this, 0, 0, name, {
+                    fontSize: '6px',
+                    fontFamily: 'PixelFont',
+                    color: '#000000',
+                    resolution: 2,
+                    align: 'center'
+                });
+                textObj.setOrigin(0.5);
+                
+                container.add([bubbleGraphics, textObj]);
+                container.setDepth(this.defiMaster.sprite.y + 100);
+                
+                // Ignore by UI camera
+                if (this.uiCamera) {
+                    this.uiCamera.ignore(container);
+                }
+                
+                this.defiMaster.label = container;
+                
+                // Fade in
+                container.setAlpha(0);
+                this.tweens.add({
+                    targets: container,
+                    alpha: 1,
+                    duration: 150,
+                    ease: 'Quad.easeOut'
+                });
+            }
+        } else {
+            // Player is far - hide label
+            if (this.defiMaster.label) {
+                const labelToRemove = this.defiMaster.label;
+                this.defiMaster.label = null;
+                
+                // Fade out and destroy
+                this.tweens.add({
+                    targets: labelToRemove,
+                    alpha: 0,
+                    duration: 150,
+                    ease: 'Quad.easeIn',
+                    onComplete: () => labelToRemove.destroy()
+                });
+            }
+        }
+    }
+
     private updateMerlinLabels() {
         if (!this.player) return;
 
@@ -1353,6 +1473,9 @@ export class TownSquare extends Scene {
         
         // Update Merlin proximity labels
         this.updateMerlinLabels();
+        
+        // Update DeFi Master proximity label
+        this.updateDeFiLabel();
     }
 
     private handlePlayerMovement() {
@@ -2199,6 +2322,22 @@ export class TownSquare extends Scene {
             const housePos = tileToMiniMap(pos.x, pos.y);
             const house = this.add.text(housePos.x, housePos.y, '🏠', houseStyle).setOrigin(0.5);
             this.miniMapContainer.add(house);
+        });
+
+        // NPCs (Merlins) - Mage emoji
+        // We can get their positions from the merlins array if they exist, or calculate them
+        // Since createMiniMap is called in create(), merlins might not be fully populated or we can just recalculate positions
+        // The merlins array is populated in createMerlinNPCs which is called in addDecorativeElements -> createTownSquareMap -> create()
+        // But createMiniMap is called AFTER createTownSquareMap in create().
+        // So this.merlins should be populated.
+        
+        this.merlins.forEach(merlin => {
+            const tileX = merlin.sprite.x / this.TILE_SIZE;
+            const tileY = merlin.sprite.y / this.TILE_SIZE;
+            const pos = tileToMiniMap(tileX, tileY);
+            
+            const npcIcon = this.add.text(pos.x, pos.y, '🧙‍♂️', emojiStyle).setOrigin(0.5);
+            this.miniMapContainer.add(npcIcon);
         });
 
         // Player avatar (use character avatar image)
