@@ -298,6 +298,11 @@ export class Preloader extends Scene
             frameWidth: 75,
             frameHeight: 75
         });
+
+        // DeFi Assets
+        // DeFi Master - Replaced with single static asset
+        // this.load.image('defi-board', 'objects/defi/board.png'); // Deprecated
+        this.load.image('defi-npc', 'objects/defi/defi-npc.png');
         this.load.spritesheet('pet-lion', 'pet/lion/lion.png', {
             frameWidth: 75,
             frameHeight: 75
