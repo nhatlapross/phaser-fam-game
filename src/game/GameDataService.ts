@@ -569,9 +569,53 @@ export class GameDataService {
         return goldShop;
     }
 
+    /**
+     * Update currency balances in all cached locations
+     * Ensures Single Source of Truth consistency across User, Currencies, and Shops
+     */
+    static updateCurrency(gold: number, gem: number): void {
+        if (!cachedGameData) return;
+
+        // 1. Update main currencies object
+        if (cachedGameData.currencies) {
+            cachedGameData.currencies.gold = gold;
+            cachedGameData.currencies.gem = gem;
+        } else {
+            cachedGameData.currencies = { gold, gem };
+        }
+
+        // 2. Update user profile
+        if (cachedGameData.user) {
+            cachedGameData.user.balanceGold = gold;
+            cachedGameData.user.balanceGem = gem;
+            cachedGameData.user.gold = gold; // Some parts might use this
+            cachedGameData.user.gem = gem;   // Some parts might use this
+        }
+
+        // 3. Update shop snapshots to prevent stale data in modals
+        if (cachedGameData.shop) {
+            if (cachedGameData.shop.gemShop?.user) {
+                cachedGameData.shop.gemShop.user.balanceGem = gem;
+            }
+            if (cachedGameData.shop.goldShop?.user) {
+                cachedGameData.shop.goldShop.user.balanceGold = gold;
+            }
+        }
+
+        // Persist to local storage
+        this.persistCache();
+        
+        // Notify UI listeners
+        this.notifyDataUpdated();
+    }
+
+    /**
+     * Refresh only the Gem Shop data
+     * Call this after a purchase to update availability
+     */
     static async refreshGemShop(): Promise<GemShopResponse | null> {
         const gemShop = await ShopService.getGemShop();
-        if (cachedGameData) {
+        if (cachedGameData && gemShop) {
             cachedGameData.shop.gemShop = gemShop;
         }
         return gemShop;
@@ -612,6 +656,9 @@ export class GameDataService {
 
     static async refreshStorage(): Promise<StorageResponse | null> {
         const storage = await InventoryService.getStorage();
+        if (storage && storage.storage) {
+            storage.storage = storage.storage.filter(item => !['GOLD', 'GEM', 'RUBY'].includes(item.itemType));
+        }
         if (cachedGameData) {
             cachedGameData.inventory.storage = storage;
         }
@@ -620,6 +667,9 @@ export class GameDataService {
 
     static async refreshBackpack(): Promise<BackpackResponse | null> {
         const backpack = await InventoryService.getBackpack();
+        if (backpack && backpack.backpack) {
+            backpack.backpack = backpack.backpack.filter(item => !['GOLD', 'GEM', 'RUBY'].includes(item.itemType));
+        }
         if (cachedGameData) {
             cachedGameData.inventory.backpack = backpack;
         }
@@ -631,6 +681,17 @@ export class GameDataService {
             InventoryService.getStorage(),
             InventoryService.getBackpack()
         ]);
+        
+        const IGNORED_ITEMS = ['GOLD', 'GEM', 'RUBY'];
+        
+        if (storage && storage.storage) {
+            storage.storage = storage.storage.filter(item => !IGNORED_ITEMS.includes(item.itemType));
+        }
+        
+        if (backpack && backpack.backpack) {
+            backpack.backpack = backpack.backpack.filter(item => !IGNORED_ITEMS.includes(item.itemType));
+        }
+
         const inventoryData: InventoryData = { storage, backpack };
         if (cachedGameData) {
             cachedGameData.inventory = inventoryData;
@@ -836,7 +897,8 @@ export class GameDataService {
             this.refreshCurrencies(),
             this.refreshSeeds(),
             this.refreshFertilizers(),
-            this.refreshFruits()
+            this.refreshFruits(),
+            this.refreshGemShop() // Refresh gem shop to update land availability
         ]);
         // Update localStorage cache with refreshed data
         if (cachedGameData) {
@@ -882,6 +944,14 @@ export class GameDataService {
      */
     static clearUIUpdateCallback(): void {
         this.uiUpdateCallback = null;
+    }
+
+    /**
+     * Public method to trigger UI update
+     * Call this when data has been modified externally (e.g. via WebSocket)
+     */
+    static notifyDataUpdated(): void {
+        this.triggerUIUpdate();
     }
 
     /**
@@ -945,9 +1015,13 @@ export class GameDataService {
         if (!cachedGameData?.inventory?.storage?.storage) return;
 
         const storage = cachedGameData.inventory.storage.storage;
+        const IGNORED_ITEMS = ['GOLD', 'GEM', 'RUBY'];
 
         // Update each item in the cache
         items.forEach(item => {
+            // Filter out currency items
+            if (IGNORED_ITEMS.includes(item.itemType)) return;
+
             // Only update STORAGE items (or items without location specified)
             if (item.location && item.location !== 'STORAGE') return;
 
@@ -981,6 +1055,8 @@ export class GameDataService {
             cachedGameData.inventory.storage.summary.totalItems = storage.reduce((sum, item) => sum + item.amount, 0);
             cachedGameData.inventory.storage.summary.totalTypes = storage.length;
         }
+
+        this.notifyDataUpdated();
     }
 
     /**
@@ -1004,9 +1080,13 @@ export class GameDataService {
         if (!cachedGameData?.inventory?.backpack?.backpack) return;
 
         const backpack = cachedGameData.inventory.backpack.backpack;
+        const IGNORED_ITEMS = ['GOLD', 'GEM', 'RUBY'];
 
         // Update each item in the cache
         items.forEach(item => {
+            // Filter out currency items
+            if (IGNORED_ITEMS.includes(item.itemType)) return;
+
             // Only update BACKPACK items (or items without location specified)
             if (item.location && item.location !== 'BACKPACK') return;
 
@@ -1042,5 +1122,7 @@ export class GameDataService {
             cachedGameData.inventory.backpack.capacity.used = totalUsed;
             cachedGameData.inventory.backpack.capacity.available = maxCapacity - totalUsed;
         }
+
+        this.notifyDataUpdated();
     }
 }

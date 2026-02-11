@@ -140,20 +140,23 @@ export class GardenService {
     static mapStageToGameStage(apiStage: string): number {
         switch (apiStage.toUpperCase()) {
             case 'DIGGING':
-                return 0; // DIGGING
+              return 1; // DIGGING -> Hạt (Seed) - Fix: User expects Stage 1 initially
             case 'SEED':
-                return 1; // SEED
+              return 1; // SEED
             case 'SPROUT':
-                return 2; // SPROUT
+              return 2; // SPROUT
             case 'GROWING':
-                return 3; // GROWING
+              return 3; // GROWING -> Cây Non (Sapling)
             case 'BLOOM':
-                return 4; // BLOOM
+            case 'FLOWER':
+              return 4; // BLOOM -> Quả (Fruit/Flower)
             case 'MATURE':
-                return 5; // MATURE - ready to harvest
+              return 5; // MATURE - ready to harvest
+            case 'NEW':
+              return 1; // NEW -> SEED
             default:
-                return 1; // Default to SEED for unknown stages
-        }
+              return 1; // Default to SEED for unknown stages
+          }
     }
 
     /**

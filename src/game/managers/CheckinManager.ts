@@ -4,6 +4,7 @@ import { CheckinData, GAME_CONSTANTS } from '../types/GameTypes';
 import { StreakService, StreakStatusResponse, StreakHistoryResponse } from '../StreakService';
 import { GameDataService } from '../GameDataService';
 import { useGameState } from '../hooks/useGameState';
+import { DynamicShadow } from '../objects/DynamicShadow';
 
 interface CheckinCallbacks {
     playSuccessSound: () => void;
@@ -15,7 +16,7 @@ interface CheckinCallbacks {
  * Handles check-in modal, streak tracking, and rewards
  */
 export class CheckinManager extends BaseManager {
-    private checkinSign!: Phaser.GameObjects.Image;
+    private checkinSign!: Phaser.GameObjects.Sprite;
     private notificationIcon!: Phaser.GameObjects.Image;
     private callbacks: CheckinCallbacks;
     private cachedStreakStatus: StreakStatusResponse | null = null;
@@ -47,10 +48,14 @@ export class CheckinManager extends BaseManager {
         const signX = (centerX - 2) * tileSize + tileSize / 2;
         const signY = (centerY - 4) * tileSize + tileSize / 2;
 
-        this.checkinSign = this.scene.add.image(signX, signY, 'icon-checkin');
+        // Use sprite instead of image to support DynamicShadow
+        this.checkinSign = this.scene.add.sprite(signX, signY, 'icon-checkin');
         this.checkinSign.setDisplaySize(16, 16);
         this.checkinSign.setDepth(signY);
         this.checkinSign.setInteractive({ useHandCursor: true });
+
+        // Add shadow
+        new DynamicShadow(this.scene, this.checkinSign as Phaser.GameObjects.Sprite, 0, 0);
 
         this.checkinSign.on('pointerdown', () => {
             this.open();
@@ -69,7 +74,7 @@ export class CheckinManager extends BaseManager {
     /**
      * Get the check-in sign sprite for camera ignore setup
      */
-    public getCheckinSign(): Phaser.GameObjects.Image {
+    public getCheckinSign(): Phaser.GameObjects.Sprite {
         return this.checkinSign;
     }
 
@@ -116,7 +121,6 @@ export class CheckinManager extends BaseManager {
         this.scene.cameras.main.ignore(overlay);
         this.addElement(overlay);
 
-        // Modal background
         const modalBg = this.scene.add.sprite(modalX, modalY, 'settings-panel', 1);
         modalBg.setDisplaySize(modalWidth, modalHeight);
         modalBg.setDepth(5301);
@@ -127,7 +131,6 @@ export class CheckinManager extends BaseManager {
         this.scene.cameras.main.ignore(modalBg);
         this.addElement(modalBg);
 
-        // Animate modal
         modalBg.setScale(0);
         this.scene.tweens.add({
             targets: modalBg,

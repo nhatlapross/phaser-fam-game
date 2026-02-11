@@ -168,7 +168,7 @@ export class PlantDetailManager extends BaseManager {
         } else if (stage >= PLANT_STAGES.DIGGING && stage <= PLANT_STAGES.BLOOM) {
             if (cropDef.spritesheet) {
                 if (cropDef.stageCount === 2) {
-                    // 2-stage plants (algae, mushroom)
+                    // 2-stage plants (spritesheet)
                     // Use frame 0 for early stages, frame 2 for later stages (skip frame 1)
                     const frameIndex = stage <= PLANT_STAGES.SPROUT ? 0 : 2;
                     return { key: cropDef.spritesheet, frame: frameIndex };
@@ -189,13 +189,29 @@ export class PlantDetailManager extends BaseManager {
             // Fallback to growth images (tree without spritesheet)
             if (cropDef.growthImages && cropDef.growthImages.length > 0) {
                 let imageIndex: number;
-                if (stage <= PLANT_STAGES.SEED) {
-                    imageIndex = 0;
-                } else if (stage <= PLANT_STAGES.GROWING) {
-                    imageIndex = 1;
+                
+                if (cropDef.stageCount === 4) {
+                    // 4-stage plants (tree)
+                    if (stage <= PLANT_STAGES.SEED) {
+                        imageIndex = 0;
+                    } else if (stage <= PLANT_STAGES.SPROUT) {
+                        imageIndex = 1;
+                    } else if (stage <= PLANT_STAGES.GROWING) {
+                        imageIndex = 2;
+                    } else {
+                        imageIndex = 3;
+                    }
                 } else {
-                    imageIndex = 2;
+                    // 3-stage plants
+                    if (stage <= PLANT_STAGES.SEED) {
+                        imageIndex = 0;
+                    } else if (stage <= PLANT_STAGES.SPROUT) {
+                        imageIndex = 1;
+                    } else {
+                        imageIndex = 2;
+                    }
                 }
+                
                 imageIndex = Math.min(imageIndex, cropDef.growthImages.length - 1);
                 return { key: cropDef.growthImages[imageIndex] };
             }
@@ -231,40 +247,78 @@ export class PlantDetailManager extends BaseManager {
         let stageName: string;
 
         if (cropDef.stageCount === 2) {
-            // 2-stage plants (algae, mushroom)
+            // 2-stage plants (spritesheet)
             // DIGGING(0), SEED(1), SPROUT(2) → visual 1 (Seedling)
-            // GROWING(3), BLOOM(4) → visual 2 (Mature)
-            // MATURE(5) → Harvest
-            totalVisualStages = 2;
+            // GROWING(3), BLOOM(4) → visual 2 (Growing)
+            // MATURE(5) → visual 3 (Harvest)
+            totalVisualStages = 3;
             if (stage === PLANT_STAGES.MATURE) {
-                visualStage = 2;
+                visualStage = 3;
                 stageName = 'Harvest';
             } else if (stage <= PLANT_STAGES.SPROUT) {
                 visualStage = 1;
                 stageName = 'Seedling';
             } else {
                 visualStage = 2;
-                stageName = 'Mature';
+                stageName = 'Growing';
+            }
+        } else if (cropDef.stageCount === 4) {
+            // 4-stage plants (tree)
+            totalVisualStages = 5;
+            if (stage === PLANT_STAGES.MATURE) {
+                visualStage = 5;
+                stageName = 'Harvest';
+            } else {
+                if (stage <= PLANT_STAGES.SEED) {
+                    visualStage = 1;
+                    stageName = 'Seedling';
+                } else if (stage <= PLANT_STAGES.SPROUT) {
+                    visualStage = 2;
+                    stageName = 'Sprout';
+                } else if (stage <= PLANT_STAGES.GROWING) {
+                    visualStage = 3;
+                    stageName = 'Growing';
+                } else {
+                    visualStage = 4;
+                    stageName = tileState.plantInfo?.stageName || 'Fruiting';
+                }
             }
         } else if (cropDef.stageCount === 3) {
-            // 3-stage plants (tree)
-            // DIGGING(0), SEED(1) → visual 1 (Seedling)
-            // SPROUT(2), GROWING(3) → visual 2 (Growing)
-            // BLOOM(4) → visual 3 (Mature)
-            // MATURE(5) → Harvest
-            totalVisualStages = 3;
+            // 3-stage plants (tree, mushroom)
+            totalVisualStages = 4;
             if (stage === PLANT_STAGES.MATURE) {
-                visualStage = 3;
+                visualStage = 4;
                 stageName = 'Harvest';
-            } else if (stage <= PLANT_STAGES.SEED) {
-                visualStage = 1;
-                stageName = 'Seedling';
-            } else if (stage <= PLANT_STAGES.GROWING) {
-                visualStage = 2;
-                stageName = 'Growing';
+            } else if (cropDef.spritesheet) {
+                // Tree (spritesheet) logic
+                // DIGGING(0), SEED(1) → visual 1
+                // SPROUT(2), GROWING(3) → visual 2
+                // BLOOM(4) → visual 3
+                if (stage <= PLANT_STAGES.SEED) {
+                    visualStage = 1;
+                    stageName = 'Seedling';
+                } else if (stage <= PLANT_STAGES.GROWING) {
+                    visualStage = 2;
+                    stageName = 'Growing';
+                } else {
+                    visualStage = 3;
+                    stageName = tileState.plantInfo?.stageName || 'Fruiting';
+                }
             } else {
-                visualStage = 3;
-                stageName = 'Mature';
+                // Individual images logic (mushroom, algae)
+                // DIGGING(0), SEED(1) → visual 1
+                // SPROUT(2) → visual 2
+                // GROWING(3), BLOOM(4) → visual 3
+                if (stage <= PLANT_STAGES.SEED) {
+                    visualStage = 1;
+                    stageName = 'Seedling';
+                } else if (stage <= PLANT_STAGES.SPROUT) {
+                    visualStage = 2;
+                    stageName = 'Growing';
+                } else {
+                    visualStage = 3;
+                    stageName = tileState.plantInfo?.stageName || 'Fruiting';
+                }
             }
         } else {
             // Fallback
