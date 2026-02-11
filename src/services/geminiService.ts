@@ -1,6 +1,5 @@
 /**
- * Gemini AI Service - Generate manga images using Google Gemini API
- * Tham khảo từ infinite-heroes project
+ * Gemini AI Service - Generate comic/manhwa/manhua images using Google Gemini API
  */
 
 import { GoogleGenAI } from '@google/genai';
@@ -8,7 +7,78 @@ import { GoogleGenAI } from '@google/genai';
 const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 const MODEL_IMAGE_GEN = 'gemini-3-pro-image-preview';
 
-export type MangaStyle = 'shounen' | 'shoujo' | 'chibi' | 'seinen' | 'classic';
+// Comic Format Types
+export type ComicFormat = 'comic' | 'manhwa' | 'manhua';
+
+// Genre/Style types for each format
+export type ComicGenre = 'superhero' | 'horror' | 'sci-fi' | 'fantasy' | 'noir' | 'comedy';
+export type ManhwaGenre = 'action' | 'romance' | 'fantasy' | 'murim' | 'regression' | 'slice-of-life';
+export type ManhuaGenre = 'cultivation' | 'martial-arts' | 'romance' | 'fantasy' | 'historical' | 'comedy';
+
+export type GenreType = ComicGenre | ManhwaGenre | ManhuaGenre;
+
+// Format info
+export interface ComicFormatInfo {
+    id: ComicFormat;
+    name: string;
+    description: string;
+    emoji: string;
+    origin: string;
+}
+
+export const COMIC_FORMATS: ComicFormatInfo[] = [
+    { id: 'comic', name: 'Comic Book', description: 'Western-style comics', emoji: '🦸', origin: 'Western' },
+    { id: 'manhwa', name: 'Manhwa', description: 'Korean webtoon style', emoji: '🇰🇷', origin: 'Korean' },
+    { id: 'manhua', name: 'Manhua', description: 'Chinese comic style', emoji: '🇨🇳', origin: 'Chinese' },
+];
+
+// Genre info
+export interface GenreInfo {
+    id: string;
+    name: string;
+    description: string;
+    emoji: string;
+}
+
+export const COMIC_GENRES: GenreInfo[] = [
+    { id: 'superhero', name: 'Superhero', description: 'Heroes with powers', emoji: '🦸' },
+    { id: 'horror', name: 'Horror', description: 'Dark and scary', emoji: '👻' },
+    { id: 'sci-fi', name: 'Sci-Fi', description: 'Futuristic technology', emoji: '🚀' },
+    { id: 'fantasy', name: 'Fantasy', description: 'Magic and mythical', emoji: '🧙' },
+    { id: 'noir', name: 'Noir', description: 'Crime and mystery', emoji: '🕵️' },
+    { id: 'comedy', name: 'Comedy', description: 'Funny and lighthearted', emoji: '😂' },
+];
+
+export const MANHWA_GENRES: GenreInfo[] = [
+    { id: 'action', name: 'Action', description: 'Fighting and adventure', emoji: '⚔️' },
+    { id: 'romance', name: 'Romance', description: 'Love stories', emoji: '💕' },
+    { id: 'fantasy', name: 'Fantasy', description: 'Magic worlds', emoji: '✨' },
+    { id: 'murim', name: 'Murim', description: 'Martial arts world', emoji: '🥋' },
+    { id: 'regression', name: 'Regression', description: 'Time travel/rebirth', emoji: '⏪' },
+    { id: 'slice-of-life', name: 'Slice of Life', description: 'Daily life stories', emoji: '🌸' },
+];
+
+export const MANHUA_GENRES: GenreInfo[] = [
+    { id: 'cultivation', name: 'Cultivation', description: 'Power leveling journey', emoji: '🧘' },
+    { id: 'martial-arts', name: 'Martial Arts', description: 'Kung fu and fighting', emoji: '🥊' },
+    { id: 'romance', name: 'Romance', description: 'Love and relationships', emoji: '💗' },
+    { id: 'fantasy', name: 'Fantasy', description: 'Magical adventures', emoji: '🐉' },
+    { id: 'historical', name: 'Historical', description: 'Ancient China setting', emoji: '🏯' },
+    { id: 'comedy', name: 'Comedy', description: 'Humor and fun', emoji: '🤣' },
+];
+
+// Get genres by format
+export function getGenresByFormat(format: ComicFormat): GenreInfo[] {
+    switch (format) {
+        case 'comic': return COMIC_GENRES;
+        case 'manhwa': return MANHWA_GENRES;
+        case 'manhua': return MANHUA_GENRES;
+        default: return COMIC_GENRES;
+    }
+}
+
+// Legacy support - map to new system
+export type MangaStyle = ComicGenre | ManhwaGenre | ManhuaGenre;
 
 export interface MangaStyleInfo {
     id: MangaStyle;
@@ -17,12 +87,13 @@ export interface MangaStyleInfo {
     emoji: string;
 }
 
+// Legacy MANGA_STYLES for backward compatibility
 export const MANGA_STYLES: MangaStyleInfo[] = [
-    { id: 'shounen', name: 'Shounen', description: 'Action-packed, dynamic poses', emoji: '⚔️' },
-    { id: 'shoujo', name: 'Shoujo', description: 'Romantic, sparkly effects', emoji: '✨' },
-    { id: 'chibi', name: 'Chibi', description: 'Cute, small characters', emoji: '🎀' },
-    { id: 'seinen', name: 'Seinen', description: 'Mature, detailed art', emoji: '🌙' },
-    { id: 'classic', name: 'Classic', description: 'Traditional manga style', emoji: '📖' },
+    { id: 'action', name: 'Action', description: 'Dynamic action scenes', emoji: '⚔️' },
+    { id: 'romance', name: 'Romance', description: 'Love stories', emoji: '💕' },
+    { id: 'fantasy', name: 'Fantasy', description: 'Magic and adventure', emoji: '✨' },
+    { id: 'comedy', name: 'Comedy', description: 'Funny moments', emoji: '😂' },
+    { id: 'horror', name: 'Horror', description: 'Dark and scary', emoji: '👻' },
 ];
 
 export interface MangaGenerationRequest {
@@ -30,6 +101,7 @@ export interface MangaGenerationRequest {
     characterDescription: string;
     storyContext: string;
     style: MangaStyle;
+    format?: ComicFormat;
     previousPages?: string[];
 }
 
@@ -44,25 +116,49 @@ export interface MangaStory {
     id: string;
     title: string;
     style: MangaStyle;
+    format?: ComicFormat;
     pages: MangaPage[];
     createdAt: number;
     updatedAt: number;
 }
 
-
-function buildMangaPrompt(request: MangaGenerationRequest, isFirstPage: boolean): string {
-    const styleDescriptions: Record<MangaStyle, string> = {
-        shounen: 'dynamic action shounen manga style with bold lines, speed effects, and dramatic angles',
-        shoujo: 'beautiful shoujo manga style with soft lines, flower effects, sparkles, and romantic atmosphere',
-        chibi: 'cute chibi manga style with small adorable characters, big eyes, and playful expressions',
-        seinen: 'detailed seinen manga style with realistic proportions, mature themes, and intricate backgrounds',
-        classic: 'classic black and white manga style with traditional panel layouts and screentones',
+function buildPrompt(request: MangaGenerationRequest, isFirstPage: boolean): string {
+    const format = request.format || 'manhwa';
+    
+    // Format-specific style descriptions
+    const formatStyles: Record<ComicFormat, string> = {
+        comic: 'Western comic book style with bold ink lines, halftone dots, dynamic panel layouts, vibrant colors, dramatic shadows',
+        manhwa: 'Korean manhwa webtoon style with clean digital art, soft shading, vertical scroll format, expressive eyes, detailed backgrounds',
+        manhua: 'Chinese manhua style with flowing ink brush strokes, elegant character designs, traditional Chinese aesthetics, dynamic action poses',
     };
 
-    const styleDesc = styleDescriptions[request.style];
+    // Genre-specific descriptions
+    const genreDescriptions: Record<string, string> = {
+        // Comic genres
+        superhero: 'superhero theme with powerful poses, capes, masks, city skylines, action effects',
+        horror: 'horror atmosphere with dark shadows, creepy details, unsettling imagery, tension',
+        'sci-fi': 'science fiction setting with futuristic technology, space elements, neon lights, cyberpunk vibes',
+        fantasy: 'fantasy world with magic effects, mythical creatures, enchanted environments',
+        noir: 'noir detective style with high contrast shadows, rain, urban settings, mysterious mood',
+        // Manhwa genres
+        action: 'intense action scenes with speed lines, impact effects, dynamic poses',
+        romance: 'romantic atmosphere with soft lighting, flower effects, emotional expressions, sparkles',
+        murim: 'martial arts world (murim) with traditional Korean elements, qi energy effects, sword techniques',
+        regression: 'regression/rebirth theme with time elements, memory flashbacks, determined protagonist',
+        'slice-of-life': 'slice of life with warm colors, everyday scenes, gentle expressions, cozy atmosphere',
+        // Manhua genres
+        cultivation: 'cultivation theme with qi/spiritual energy auras, meditation poses, breakthrough effects, heavenly tribulations',
+        'martial-arts': 'martial arts with kung fu poses, chi energy, traditional Chinese weapons, fighting stances',
+        historical: 'ancient Chinese historical setting with traditional architecture, period costumes, imperial aesthetics',
+        comedy: 'comedic style with exaggerated expressions, chibi moments, funny reactions',
+    };
+
+    const formatStyle = formatStyles[format];
+    const genreStyle = genreDescriptions[request.style] || genreDescriptions['action'];
     
-    let prompt = `STYLE: ${styleDesc} comic art, detailed ink. `;
-    prompt += `TYPE: Vertical manga panel. `;
+    let prompt = `STYLE: ${formatStyle}. `;
+    prompt += `GENRE: ${genreStyle}. `;
+    prompt += `TYPE: ${format === 'manhwa' ? 'Vertical webtoon panel' : 'Comic panel layout'}. `;
     
     if (request.characterDescription) {
         prompt += `MAIN CHARACTER: ${request.characterDescription}. `;
@@ -76,7 +172,7 @@ function buildMangaPrompt(request: MangaGenerationRequest, isFirstPage: boolean)
         prompt += 'Continue the story from the previous page. ';
     }
     
-    prompt += 'Include speech bubbles with dialogue in English. Use dramatic panel layouts.';
+    prompt += 'Include speech bubbles with dialogue. Use dramatic panel layouts with clear storytelling.';
     
     return prompt;
 }
@@ -99,7 +195,7 @@ function sleep(ms: number): Promise<void> {
 export async function generateMangaPage(request: MangaGenerationRequest, maxRetries = 3): Promise<string> {
     const ai = getAI();
     const isFirstPage = !request.previousPages || request.previousPages.length === 0;
-    const promptText = buildMangaPrompt(request, isFirstPage);
+    const promptText = buildPrompt(request, isFirstPage);
 
     const contents: any[] = [];
 
@@ -127,7 +223,7 @@ export async function generateMangaPage(request: MangaGenerationRequest, maxRetr
                 model: MODEL_IMAGE_GEN,
                 contents: contents,
                 config: {
-                    imageConfig: { aspectRatio: '2:3' }
+                    imageConfig: { aspectRatio: request.format === 'manhwa' ? '2:3' : '3:4' }
                 }
             });
 
@@ -167,18 +263,16 @@ export async function generateMangaPage(request: MangaGenerationRequest, maxRetr
     throw lastError;
 }
 
-
-export async function generateCharacterImage(description: string, style: MangaStyle = 'shounen'): Promise<string> {
+export async function generateCharacterImage(description: string, format: ComicFormat = 'manhwa', genre: string = 'action'): Promise<string> {
     const ai = getAI();
-    const styleDescriptions: Record<MangaStyle, string> = {
-        shounen: 'dynamic action shounen manga',
-        shoujo: 'beautiful shoujo manga with soft lines',
-        chibi: 'cute chibi manga',
-        seinen: 'detailed seinen manga',
-        classic: 'classic black and white manga',
+    
+    const formatStyles: Record<ComicFormat, string> = {
+        comic: 'Western comic book character art',
+        manhwa: 'Korean manhwa webtoon character art',
+        manhua: 'Chinese manhua character art',
     };
 
-    const prompt = `STYLE: Masterpiece ${styleDescriptions[style]} character sheet, detailed ink, neutral background. FULL BODY. Character: ${description}`;
+    const prompt = `STYLE: Masterpiece ${formatStyles[format]}, detailed, neutral background. FULL BODY character sheet. Character: ${description}`;
 
     const res = await ai.models.generateContent({
         model: MODEL_IMAGE_GEN,
@@ -195,5 +289,3 @@ export async function generateCharacterImage(description: string, style: MangaSt
     }
     throw new Error('Failed to generate character image');
 }
-
-// localStorage functions removed - using Shelby for storage instead

@@ -11,6 +11,7 @@ import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacte
 import { DynamicShadow } from '../objects/DynamicShadow';
 import { HoroscopeModal } from '../ui/HoroscopeModal';
 import { TarotModal } from '../ui/TarotModal';
+import { DefiMasterModal } from '../ui/DefiMasterModal';
 
 /**
  * Town Square Scene - A larger public space for social interactions
@@ -22,6 +23,7 @@ export class TownSquare extends Scene {
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private horoscopeModal!: HoroscopeModal;
     private tarotModal!: TarotModal;
+    private defiMasterModal!: DefiMasterModal;
 
 
     // World configuration
@@ -86,7 +88,7 @@ export class TownSquare extends Scene {
         label: Phaser.GameObjects.Container | null;
         id: string;
     }> = [];
-    private readonly MERLIN_LABEL_DISTANCE = 80;
+    private readonly MERLIN_LABEL_DISTANCE = 70;
 
     // DeFi Master NPC
     private defiMaster: {
@@ -624,7 +626,7 @@ export class TownSquare extends Scene {
         // House names
         const houseNames: Record<number, string> = {
             1: '🎮 Arcade',
-            2: '🎨 Manga Studio',
+            2: '🎨 Comic Studio',
             3: 'Dog House',
             4: 'Bird House',
             5: 'Fish House',
@@ -854,6 +856,9 @@ export class TownSquare extends Scene {
             }
         };
 
+        // Initialize DeFi Master Modal
+        this.defiMasterModal = new DefiMasterModal(this);
+
         // Listen for currency updates from HoroscopeModal
         EventBus.on('currency-updated', (data: { gold: number }) => {
             const gameState = useGameState(this);
@@ -967,6 +972,23 @@ export class TownSquare extends Scene {
         npc.setOrigin(0.5, 0.9);
         npc.setScale(0.08); // Increased size
         npc.setDepth(y);
+        
+        // Make interactive
+        npc.setInteractive({ useHandCursor: true });
+        npc.on('pointerdown', () => {
+            // Check if player is close enough
+            if (this.player) {
+                const dist = Phaser.Math.Distance.Between(
+                    this.player.x, this.player.y,
+                    npc.x, npc.y
+                );
+                if (dist < this.HOUSE_LABEL_DISTANCE * 1.5) {
+                    this.defiMasterModal.show();
+                } else {
+                    this.showToastMessage('Hãy đến gần DeFi Master hơn!', 0xFFD700);
+                }
+            }
+        });
         
         // Add shadow
         new DynamicShadow(this, npc, 0, 0);
