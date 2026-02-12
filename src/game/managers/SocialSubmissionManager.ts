@@ -186,6 +186,11 @@ export class SocialSubmissionManager {
         this.submitBtnBg.on('pointerout', () => {
             if (!this.isSubmitting) this.submitBtnBg?.clearTint();
         });
+
+        // Focus the input if it exists
+        if (this.socialLinkInput) {
+            this.socialLinkInput.focus();
+        }
     }
 
     /**
@@ -246,7 +251,42 @@ export class SocialSubmissionManager {
             box-sizing: border-box;
         `;
         document.body.appendChild(this.socialLinkInput);
-        this.socialLinkInput.focus();
+        
+        // Add focus/blur listeners to handle keyboard and UI state
+        // Prevent Phaser from capturing keys
+        this.socialLinkInput.addEventListener('keydown', (e) => e.stopPropagation());
+        this.socialLinkInput.addEventListener('keyup', (e) => e.stopPropagation());
+        this.socialLinkInput.addEventListener('keypress', (e) => e.stopPropagation());
+
+        this.socialLinkInput.addEventListener('focus', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = false;
+            }
+            
+            // Disable submit button while typing if requested
+            if (this.submitBtnBg) {
+                this.submitBtnBg.setInteractive(false);
+                this.submitBtnBg.setTint(0xcccccc);
+            }
+            if (this.submitText) {
+                this.submitText.setColor('#9E9E9E');
+            }
+        });
+
+        this.socialLinkInput.addEventListener('blur', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = true;
+            }
+            
+            // Re-enable submit button
+            if (this.submitBtnBg && !this.isSubmitting) {
+                this.submitBtnBg.setInteractive({ useHandCursor: true });
+                this.submitBtnBg.clearTint();
+            }
+            if (this.submitText) {
+                this.submitText.setColor('#FFFFFF');
+            }
+        });
 
         return container;
     }
@@ -504,6 +544,11 @@ export class SocialSubmissionManager {
      * Cleanup and destroy
      */
     public destroy(): void {
+        // Re-enable keyboard input
+        if (this.scene.input.keyboard) {
+            this.scene.input.keyboard.enabled = true;
+        }
+
         // Cleanup HTML inputs
         if (this.socialLinkInput && this.socialLinkInput.parentNode) {
             this.socialLinkInput.parentNode.removeChild(this.socialLinkInput);

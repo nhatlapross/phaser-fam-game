@@ -607,6 +607,10 @@ export class EventModalManager extends BaseManager {
         }
         this.eventCheckInInput = null;
         
+        if (this.scene.input.keyboard) {
+            this.scene.input.keyboard.enabled = true;
+        }
+        
         this.eventDetailElements.forEach(el => {
             if (el && el.destroy) el.destroy();
         });
@@ -756,7 +760,7 @@ export class EventModalManager extends BaseManager {
             box-sizing: border-box;
         `;
         document.body.appendChild(this.eventCheckInInput);
-        this.eventCheckInInput.focus();
+        // Focus will be called after listeners are set up
 
         const checkInInput = this.eventCheckInInput;
 
@@ -779,6 +783,34 @@ export class EventModalManager extends BaseManager {
         submitText.setStroke('#5D4037', 1);
         this.scene.cameras.main.ignore(submitText);
         this.eventDetailElements.push(submitText);
+
+        if (this.eventCheckInInput) {
+            // Prevent Phaser from capturing keys
+            this.eventCheckInInput.addEventListener('keydown', (e) => e.stopPropagation());
+            this.eventCheckInInput.addEventListener('keyup', (e) => e.stopPropagation());
+            this.eventCheckInInput.addEventListener('keypress', (e) => e.stopPropagation());
+
+            this.eventCheckInInput.addEventListener('focus', () => {
+                if (this.scene.input.keyboard) {
+                    this.scene.input.keyboard.enabled = false;
+                }
+                submitBtn.setInteractive(false);
+                submitBtn.setTint(0xcccccc);
+                submitText.setColor('#9E9E9E');
+            });
+
+            this.eventCheckInInput.addEventListener('blur', () => {
+                if (this.scene.input.keyboard) {
+                    this.scene.input.keyboard.enabled = true;
+                }
+                submitBtn.setInteractive({ useHandCursor: true });
+                submitBtn.clearTint();
+                submitText.setColor('#FFFFFF');
+            });
+            
+            // Set initial focus
+            this.eventCheckInInput.focus();
+        }
 
         submitBtn.on('pointerdown', async () => {
             const code = checkInInput.value.trim();

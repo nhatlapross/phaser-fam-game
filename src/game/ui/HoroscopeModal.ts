@@ -64,6 +64,9 @@ export class HoroscopeModal {
         dateInput.style.border = '1px solid #4a4a6a';
         dateInput.style.color = '#fff';
         dateInput.style.borderRadius = '4px';
+        dateInput.addEventListener('keydown', (e) => e.stopPropagation());
+        dateInput.addEventListener('keyup', (e) => e.stopPropagation());
+        dateInput.addEventListener('keypress', (e) => e.stopPropagation());
         dateGroup.appendChild(dateInput);
         formContainer.appendChild(dateGroup);
 
@@ -81,6 +84,9 @@ export class HoroscopeModal {
         timeInput.style.border = '1px solid #4a4a6a';
         timeInput.style.color = '#fff';
         timeInput.style.borderRadius = '4px';
+        timeInput.addEventListener('keydown', (e) => e.stopPropagation());
+        timeInput.addEventListener('keyup', (e) => e.stopPropagation());
+        timeInput.addEventListener('keypress', (e) => e.stopPropagation());
         timeGroup.appendChild(timeInput);
         formContainer.appendChild(timeGroup);
 
@@ -94,6 +100,9 @@ export class HoroscopeModal {
         topicSelect.style.border = '1px solid #4a4a6a';
         topicSelect.style.color = '#fff';
         topicSelect.style.borderRadius = '4px';
+        topicSelect.addEventListener('keydown', (e) => e.stopPropagation());
+        topicSelect.addEventListener('keyup', (e) => e.stopPropagation());
+        topicSelect.addEventListener('keypress', (e) => e.stopPropagation());
 
         const topics = [
             { value: 'daily', label: 'Tử vi hàng ngày' },

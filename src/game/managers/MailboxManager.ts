@@ -224,6 +224,11 @@ export class MailboxManager extends BaseManager {
             this.redeemInput.parentNode.removeChild(this.redeemInput);
         }
         this.redeemInput = null;
+        
+        // Re-enable keyboard input
+        if (this.scene.input.keyboard) {
+            this.scene.input.keyboard.enabled = true;
+        }
     }
 
     private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
@@ -726,7 +731,8 @@ export class MailboxManager extends BaseManager {
                 box-sizing: border-box;
             `;
             document.body.appendChild(this.redeemInput);
-            this.redeemInput.focus();
+            
+            // Focus is handled after listeners setup below
 
             // QR button - responsive positioning
             const qrBtnX = modalX + modalWidth / 2 - 60; // Position near right edge of modal
@@ -788,6 +794,32 @@ export class MailboxManager extends BaseManager {
             });
             redeemBtnBg.on('pointerover', () => redeemBtnBg.setTint(0xcccccc));
             redeemBtnBg.on('pointerout', () => redeemBtnBg.clearTint());
+
+            // Add focus/blur listeners to input (defined here to access redeemBtnBg)
+            if (this.redeemInput) {
+                // Prevent Phaser from capturing keys
+                this.redeemInput.addEventListener('keydown', (e) => e.stopPropagation());
+                this.redeemInput.addEventListener('keyup', (e) => e.stopPropagation());
+                this.redeemInput.addEventListener('keypress', (e) => e.stopPropagation());
+
+                this.redeemInput.addEventListener('focus', () => {
+                    if (this.scene.input.keyboard) {
+                        this.scene.input.keyboard.enabled = false;
+                    }
+                    redeemBtnBg.setInteractive(false);
+                    redeemBtnBg.setTint(0xcccccc);
+                });
+
+                this.redeemInput.addEventListener('blur', () => {
+                    if (this.scene.input.keyboard) {
+                        this.scene.input.keyboard.enabled = true;
+                    }
+                    redeemBtnBg.setInteractive({ useHandCursor: true });
+                    redeemBtnBg.clearTint();
+                });
+
+                this.redeemInput.focus();
+            }
         };
 
         // Tab handlers
@@ -1491,6 +1523,12 @@ export class MailboxManager extends BaseManager {
             box-sizing: border-box;
         `;
         document.body.appendChild(this.socialLinkInput);
+
+        // Prevent Phaser from capturing keys
+        this.socialLinkInput.addEventListener('keydown', (e) => e.stopPropagation());
+        this.socialLinkInput.addEventListener('keyup', (e) => e.stopPropagation());
+        this.socialLinkInput.addEventListener('keypress', (e) => e.stopPropagation());
+
         this.socialLinkInput.focus();
 
         return container;

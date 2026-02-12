@@ -1535,20 +1535,6 @@ export class ProfileManager extends BaseManager {
         `;
         document.body.appendChild(this.proofInput);
 
-        this.proofInput.addEventListener('keydown', async (e) => {
-            if (e.key === 'Enter') {
-                await this.submitBadgeProof(badge);
-                e.preventDefault();
-            } else if (e.key === 'Escape') {
-                this.closeBadgeClaimForm();
-                e.preventDefault();
-            }
-            e.stopPropagation();
-        });
-        this.proofInput.addEventListener('keyup', (e) => e.stopPropagation());
-        this.proofInput.addEventListener('keypress', (e) => e.stopPropagation());
-        this.proofInput.focus();
-
         // Buttons
         const btnY = formY + 50;
 
@@ -1593,6 +1579,44 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(cancelText);
         this.claimFormElements.push(cancelText);
 
+        // Input Listeners
+        this.proofInput.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                await this.submitBadgeProof(badge, submitBtnBg, submitText);
+                e.preventDefault();
+            } else if (e.key === 'Escape') {
+                this.closeBadgeClaimForm();
+                e.preventDefault();
+            }
+            e.stopPropagation();
+        });
+        this.proofInput.addEventListener('keyup', (e) => e.stopPropagation());
+        this.proofInput.addEventListener('keypress', (e) => e.stopPropagation());
+
+        // Focus/Blur listeners for keyboard management
+        this.proofInput.addEventListener('focus', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = false;
+            }
+            // Disable submit button while typing
+            submitBtnBg.setInteractive(false);
+            submitBtnBg.setTint(0xcccccc);
+            submitText.setColor('#9E9E9E');
+        });
+
+        this.proofInput.addEventListener('blur', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = true;
+            }
+            // Re-enable submit button
+            submitBtnBg.setInteractive({ useHandCursor: true });
+            submitBtnBg.setTint(0x4ade80);
+            submitText.setColor('#FFFFFF');
+        });
+
+        this.proofInput.focus();
+
+        // Button Listeners
         submitBtnBg.on('pointerdown', () => {
             // Disable button and show loading state
             submitBtnBg.disableInteractive();
@@ -2277,6 +2301,9 @@ export class ProfileManager extends BaseManager {
         `;
         document.body.appendChild(this.editInput);
 
+        // Buttons
+        const { saveBtn, saveText } = this.createEditFormButtons(formX, formY + 40, fieldName, currentValue);
+
         this.editInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 const newValue = this.editInput?.value.trim();
@@ -2293,13 +2320,35 @@ export class ProfileManager extends BaseManager {
         });
         this.editInput.addEventListener('keyup', (e) => e.stopPropagation());
         this.editInput.addEventListener('keypress', (e) => e.stopPropagation());
-        this.editInput.focus();
 
-        // Buttons
-        this.createEditFormButtons(formX, formY + 40, fieldName, currentValue);
+        // Focus/Blur listeners for keyboard management
+        this.editInput.addEventListener('focus', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = false;
+            }
+            // Disable save button while typing
+            saveBtn.setInteractive(false);
+            saveBtn.setTint(0xcccccc);
+            saveText.setColor('#9E9E9E');
+        });
+
+        this.editInput.addEventListener('blur', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = true;
+            }
+            // Re-enable save button
+            saveBtn.setInteractive({ useHandCursor: true });
+            saveBtn.clearTint();
+            saveText.setColor('#FFFFFF');
+        });
+
+        this.editInput.focus();
     }
 
     private createAvatarEditForm(formX: number, formY: number, currentValue: string): void {
+        // Create buttons first to get references
+        const { saveBtn, saveText } = this.createEditFormButtons(formX, formY + 80, 'avatar', currentValue);
+
         // URL label
         const urlLabel = this.scene.add.text(formX, formY - 35, 'Enter Image URL:', {
             fontSize: '10px',
@@ -2356,6 +2405,28 @@ export class ProfileManager extends BaseManager {
         });
         this.editInput.addEventListener('keyup', (e) => e.stopPropagation());
         this.editInput.addEventListener('keypress', (e) => e.stopPropagation());
+
+        // Focus/Blur listeners for keyboard management
+        this.editInput.addEventListener('focus', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = false;
+            }
+            // Disable save button while typing
+            saveBtn.setInteractive(false);
+            saveBtn.setTint(0xcccccc);
+            saveText.setColor('#9E9E9E');
+        });
+
+        this.editInput.addEventListener('blur', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = true;
+            }
+            // Re-enable save button
+            saveBtn.setInteractive({ useHandCursor: true });
+            saveBtn.clearTint();
+            saveText.setColor('#FFFFFF');
+        });
+
         this.editInput.focus();
 
         // Or label
@@ -2444,12 +2515,9 @@ export class ProfileManager extends BaseManager {
                 }
             }
         });
-
-        // Buttons
-        this.createEditFormButtons(formX, formY + 80, 'avatar', currentValue);
     }
 
-    private createEditFormButtons(formX: number, formY: number, fieldName: string, currentValue: string): void {
+    private createEditFormButtons(formX: number, formY: number, fieldName: string, currentValue: string): { saveBtn: Phaser.GameObjects.Sprite, saveText: Phaser.GameObjects.Text } {
         const saveBtnBg = this.scene.add.sprite(formX - 50, formY, 'square-buttons', 6);
         saveBtnBg.setDisplaySize(80, 32);
         saveBtnBg.setDepth(5202);
@@ -2511,6 +2579,8 @@ export class ProfileManager extends BaseManager {
         cancelBtnBg.on('pointerdown', () => this.closeEditForm());
         cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
         cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
+
+        return { saveBtn: saveBtnBg, saveText };
     }
 
     private closeEditForm(): void {
