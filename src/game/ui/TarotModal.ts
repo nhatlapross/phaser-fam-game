@@ -467,6 +467,9 @@ export class TarotModal {
         textarea.oninput = (e) => {
             this.question = (e.target as HTMLTextAreaElement).value;
         };
+        textarea.addEventListener('keydown', (e) => e.stopPropagation());
+        textarea.addEventListener('keyup', (e) => e.stopPropagation());
+        textarea.addEventListener('keypress', (e) => e.stopPropagation());
         content.appendChild(textarea);
 
         // Continue button

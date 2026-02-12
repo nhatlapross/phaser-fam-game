@@ -841,6 +841,9 @@ export class TownSquare extends Scene {
         // Initialize Horoscope Modal
         this.horoscopeModal = new HoroscopeModal(this);
         this.horoscopeModal.onClose = () => {
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
             const merlin1 = this.merlins.find(m => m.id === 'merlin1')?.sprite;
             if (merlin1) {
                 merlin1.play('merlin1-idle');
@@ -850,6 +853,9 @@ export class TownSquare extends Scene {
         // Initialize Tarot Modal
         this.tarotModal = new TarotModal(this);
         this.tarotModal.onClose = () => {
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
             const merlin2 = this.merlins.find(m => m.id === 'merlin2')?.sprite;
             if (merlin2) {
                 merlin2.play('merlin2-idle');
@@ -858,6 +864,11 @@ export class TownSquare extends Scene {
 
         // Initialize DeFi Master Modal
         this.defiMasterModal = new DefiMasterModal(this);
+        this.defiMasterModal.onClose = () => {
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
+        };
 
         // Listen for currency updates from HoroscopeModal
         EventBus.on('currency-updated', (data: { gold: number }) => {
@@ -922,6 +933,9 @@ export class TownSquare extends Scene {
             this.showToastMessage('Đang thỉnh giáo Thầy Đồ...', 0x9C27B0);
             
             // Open Horoscope Modal
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = false;
+            }
             this.horoscopeModal.show();
         });
 
@@ -949,6 +963,9 @@ export class TownSquare extends Scene {
             this.showToastMessage('Đang xem bài Tarot...', 0xE91E63);
             
             // Open Tarot Modal
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = false;
+            }
             this.tarotModal.show();
         });
 
@@ -982,7 +999,10 @@ export class TownSquare extends Scene {
                     this.player.x, this.player.y,
                     npc.x, npc.y
                 );
-                if (dist < this.HOUSE_LABEL_DISTANCE * 1.5) {
+                if (dist < this.HOUSE_LABEL_DISTANCE * 1.5) {   
+                    if (this.input.keyboard) {
+                        this.input.keyboard.enabled = false;
+                    }
                     this.defiMasterModal.show();
                 } else {
                     this.showToastMessage('Hãy đến gần DeFi Master hơn!', 0xFFD700);
@@ -1359,7 +1379,8 @@ export class TownSquare extends Scene {
             const enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
             enterKey.on('down', () => {
                 // Only open chat if not already open and not typing in input
-                if (!this.chatModalOpen && document.activeElement?.tagName !== 'INPUT') {
+                const tag = document.activeElement?.tagName;
+                if (!this.chatModalOpen && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
                     this.openChatModal();
                 }
             });
@@ -2663,7 +2684,10 @@ export class TownSquare extends Scene {
             } else if (e.key === 'Escape') {
                 this.closeChatModal();
             }
+            e.stopPropagation();
         });
+        this.chatInputElement.addEventListener('keyup', (e) => e.stopPropagation());
+        this.chatInputElement.addEventListener('keypress', (e) => e.stopPropagation());
 
         // Add to DOM
         document.body.appendChild(this.chatInputElement);
