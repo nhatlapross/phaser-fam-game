@@ -283,8 +283,8 @@ export class RedeemCodeManager extends BaseManager {
         this.showRedeemResultModal(true, 'Validating code...', undefined, true);
 
         try {
-            // Use offline-check-in API directly
-            const result = await RedeemService.offlineCheckIn(code);
+            // Use redemption/claim API
+            const result = await RedeemService.claimRedemptionCode(code);
             this.handleRedeemResult(result);
         } catch {
             this.showRedeemResultModal(false, 'Error validating code. Please try again.');
@@ -609,8 +609,8 @@ export class RedeemCodeManager extends BaseManager {
         this.showRedeemResultModal(true, 'Validating code...', undefined, true);
 
         try {
-            // Use offline-check-in API (eventId not needed for this API)
-            const result = await RedeemService.offlineCheckIn(code);
+            // Use redemption/claim API (eventId not needed for this API)
+            const result = await RedeemService.claimRedemptionCode(code);
             this.handleRedeemResult(result);
         } catch {
             this.showRedeemResultModal(false, 'Error validating code. Please try again.');
