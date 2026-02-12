@@ -8,6 +8,7 @@ import { NFTVoucherManager, SAMPLE_VOUCHERS } from './NFTVoucherManager';
 import { BadgeService, Badge, SoulboundToken, ApiBadge } from '../BadgeService';
 import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 import { QuickActionsManager } from './QuickActionsManager';
+import { FloatingButtonsManager } from './FloatingButtonsManager';
 import { SoundManager } from './SoundManager';
 
 interface ProfileCallbacks {
@@ -52,6 +53,9 @@ export class ProfileManager extends BaseManager {
 
     // Quick actions manager (mission button, etc.)
     private quickActionsManager: QuickActionsManager | null = null;
+    
+    // Floating buttons manager (redeem, etc.)
+    private floatingButtonsManager: FloatingButtonsManager | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: ProfileCallbacks) {
         super(scene);
@@ -242,6 +246,22 @@ export class ProfileManager extends BaseManager {
         
         // Add quick action button elements to profile elements for camera ignore
         this.quickActionsManager.getButtonElements().forEach(el => {
+            this.profileElements.push(el);
+        });
+
+        // Create floating buttons (redeem, etc.) below quick actions
+        if (!this.floatingButtonsManager) {
+            this.floatingButtonsManager = new FloatingButtonsManager(this.scene, {
+                showToastMessage: this.callbacks.showToastMessage
+            });
+        }
+        // Position floating buttons below quick actions (4 buttons * 32px spacing + some padding)
+        const floatingBtnY = panelY + panelHeight / 2 + 20 + (3 * 32) + 40;
+        const floatingBtnX = panelX + 25 + (panelWidth - 10) / 2 - 18;
+        this.floatingButtonsManager.createButtons(floatingBtnX, floatingBtnY);
+        
+        // Add floating button elements to profile elements for camera ignore
+        this.floatingButtonsManager.getButtonElements().forEach(el => {
             this.profileElements.push(el);
         });
     }
@@ -2727,6 +2747,10 @@ export class ProfileManager extends BaseManager {
         if (this.quickActionsManager) {
             this.quickActionsManager.destroy();
             this.quickActionsManager = null;
+        }
+        if (this.floatingButtonsManager) {
+            this.floatingButtonsManager.destroy();
+            this.floatingButtonsManager = null;
         }
         this.destroyProfileElements();
         super.destroy();
