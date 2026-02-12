@@ -1872,15 +1872,25 @@ export class MailboxManager extends BaseManager {
     }
 
     private handleRedeemResult(result: any): void {
-        if (result.success && result.reward) {
+        if (result.success) {
             let rewardMessage = '';
-            if (result.event) {
-                rewardMessage += `Event: ${result.event.name}\n`;
+            
+            // Handle new API response format: { success, type, reward: { amount }, data }
+            if (result.type && result.reward) {
+                rewardMessage = `Reward: ${result.reward.amount} ${result.type}`;
             }
-            if (result.reward.message) {
-                rewardMessage += result.reward.message + '\n';
+            // Handle old API response format
+            else if (result.reward) {
+                if (result.event) {
+                    rewardMessage += `Event: ${result.event.name}\n`;
+                }
+                if (result.reward.message) {
+                    rewardMessage += result.reward.message + '\n';
+                }
+                rewardMessage += `Reward: ${result.reward.itemType}\nAmount: ${result.reward.amount}`;
+            } else {
+                rewardMessage = result.message || 'Code redeemed successfully!';
             }
-            rewardMessage += `Reward: ${result.reward.itemType}\nAmount: ${result.reward.amount}`;
 
             // Play success sound for successful redeem
             this.callbacks.playSuccessSound();
