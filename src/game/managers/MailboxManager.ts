@@ -7,7 +7,6 @@ import { GameDataService } from '../GameDataService';
 import { getMissionSocketService, MissionUpdatedPayload } from '../MissionSocketService';
 import { EventBus } from '../EventBus';
 import { SocialSubmissionManager } from './SocialSubmissionManager';
-import { getSocketService } from '../SocketService';
 import { DynamicShadow } from '../objects/DynamicShadow';
 
 interface MailboxCallbacks {
@@ -33,6 +32,7 @@ export class MailboxManager extends BaseManager {
     private cachedMissions: Mission[] | null = null;
     private missionsCacheTime: number = 0;
     private redeemResultElements: Phaser.GameObjects.GameObject[] = [];
+    private redeemResultDelayedCall: Phaser.Time.TimerEvent | null = null;
     private missionDetailElements: Phaser.GameObjects.GameObject[] = [];
     private qrScannerContainer: HTMLDivElement | null = null;
     private redeemInput: HTMLInputElement | null = null;
@@ -1851,69 +1851,20 @@ export class MailboxManager extends BaseManager {
         this.showRedeemResultModal(true, 'Validating code...', undefined, true);
 
         try {
-            // Try WebSocket first if connected
-            const socketService = getSocketService();
-            let useWebSocket = false;
-            
-            if (socketService.isConnected()) {
-                // Use WebSocket for real-time response
-                const success = socketService.claimGift(code);
-                if (success) {
-                    useWebSocket = true;
-                    // Response will come via socket events in FarmingGame
-                    // Setup one-time listeners for this specific claim
-                    const successHandler = (data: any) => {
-                        EventBus.off('event:claim_gift_websocket_success', successHandler);
-                        EventBus.off('event:claim_gift_websocket_error', errorHandler);
-                        
-                        let rewardMessage = '';
-                        if (data.eventName) {
-                            rewardMessage += `Event: ${data.eventName}\n`;
-                        }
-                        if (data.message) {
-                            rewardMessage += data.message + '\n';
-                        }
-                        if (data.reward) {
-                            rewardMessage += `Reward: ${data.reward.itemName || data.reward.itemType}\nAmount: ${data.reward.amount}`;
-                        }
-
-                        this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
-
-                        this.scene.time.delayedCall(3000, () => {
-                            this.closeRedeemResultModal();
-                            this.close();
-                        });
-                    };
-                    
-                    const errorHandler = (data: any) => {
-                        EventBus.off('event:claim_gift_websocket_success', successHandler);
-                        EventBus.off('event:claim_gift_websocket_error', errorHandler);
-                        
-                        this.showRedeemResultModal(false, data.message || 'Invalid or expired code');
-                    };
-                    
-                    EventBus.on('event:claim_gift_websocket_success', successHandler);
-                    EventBus.on('event:claim_gift_websocket_error', errorHandler);
-                    
-                    return; // Exit early, response handled by socket events
-                }
-            }
-            
-            // Fallback to REST API if WebSocket not available or failed
-            if (!useWebSocket) {
-                const result = await RedeemService.redeemCode(code);
-                this.handleRedeemResult(result);
-            }
+            // Use redemption/claim API
+            const result = await RedeemService.claimRedemptionCode(code);
+            this.handleRedeemResult(result);
         } catch {
             this.showRedeemResultModal(false, 'Error validating code. Please try again.');
         }
     }
 
-    private async processRedeemCodeWithEventId(code: string, eventId: string): Promise<void> {
+    private async processRedeemCodeWithEventId(code: string, _eventId: string): Promise<void> {
         this.showRedeemResultModal(true, 'Validating code...', undefined, true);
 
         try {
-            const result = await RedeemService.redeemCode(code, eventId);
+            // Use redemption/claim API (eventId not needed for this API)
+            const result = await RedeemService.claimRedemptionCode(code);
             this.handleRedeemResult(result);
         } catch {
             this.showRedeemResultModal(false, 'Error validating code. Please try again.');
@@ -1991,7 +1942,14 @@ export class MailboxManager extends BaseManager {
             ease: 'Back.easeOut'
         });
 
-        this.scene.time.delayedCall(100, () => {
+        // Cancel any pending delayed call from previous modal
+        if (this.redeemResultDelayedCall) {
+            this.redeemResultDelayedCall.destroy();
+            this.redeemResultDelayedCall = null;
+        }
+
+        this.redeemResultDelayedCall = this.scene.time.delayedCall(100, () => {
+            this.redeemResultDelayedCall = null;
             const titleText = isLoading ? 'Loading...' : (success ? 'Success!' : 'Failed');
             const strokeColor = isLoading ? '#4a90e2' : (success ? '#2d7a3d' : '#8b1a1a');
 
@@ -2073,8 +2031,18 @@ export class MailboxManager extends BaseManager {
     }
 
     private closeRedeemResultModal(): void {
+        // Cancel any pending delayed call
+        if (this.redeemResultDelayedCall) {
+            this.redeemResultDelayedCall.destroy();
+            this.redeemResultDelayedCall = null;
+        }
+
+        // Stop all tweens on result elements before destroying
         this.redeemResultElements.forEach(el => {
-            if (el && el.destroy) el.destroy();
+            if (el) {
+                this.scene.tweens.killTweensOf(el);
+                if (el.destroy) el.destroy();
+            }
         });
         this.redeemResultElements = [];
 
