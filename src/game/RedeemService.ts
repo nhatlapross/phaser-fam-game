@@ -128,12 +128,13 @@ export class RedeemService {
 
             if (response.ok) {
                 const data = await response.json();
+                // API returns: { success, type, reward: { amount }, data }
                 return {
                     success: data.success !== false,
-                    event: data.event,
+                    type: data.type,
                     reward: data.reward,
-                    message: data.reward?.message || data.message || 'Code redeemed successfully!'
-                };
+                    message: data.message || 'Code redeemed successfully!'
+                } as any;
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 return {
