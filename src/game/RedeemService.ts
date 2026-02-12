@@ -88,6 +88,73 @@ export class RedeemService {
     }
 
     /**
+     * Claim a redemption code
+     * @param code The redemption code (e.g., "TESTCODE123")
+     * @returns A Promise that resolves to the redeem response
+     */
+    static async claimRedemptionCode(code: string): Promise<RedeemResponse> {
+        const token = RedeemService.getAccessToken();
+        if (!token) {
+            return {
+                success: false,
+                message: 'Not authenticated'
+            };
+        }
+
+        // Get userId from token or localStorage
+        const userId = RedeemService.getUserId();
+        if (!userId) {
+            return {
+                success: false,
+                message: 'User not found'
+            };
+        }
+
+        try {
+            const response = await fetch(
+                `${RedeemService.API_BASE_URL}/redemption/claim`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ userId, code })
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                return {
+                    success: data.success !== false,
+                    event: data.event,
+                    reward: data.reward,
+                    message: data.reward?.message || data.message || 'Code redeemed successfully!'
+                };
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                return {
+                    success: false,
+                    message: errorData.message || 'Invalid or expired code'
+                };
+            }
+        } catch (error) {
+            return {
+                success: false,
+                message: 'Network error. Please try again.'
+            };
+        }
+    }
+
+    /**
+     * Gets the stored user ID from localStorage
+     */
+    private static getUserId(): string | null {
+        if (typeof window === 'undefined') return null;
+        return localStorage.getItem('fam_game_user_id');
+    }
+
+    /**
      * Offline check-in with a simple code (for manual input, not QR scan)
      * @param code The check-in code (e.g., "BANGKOK2025")
      * @returns A Promise that resolves to the redeem response
