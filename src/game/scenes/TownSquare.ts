@@ -999,7 +999,7 @@ export class TownSquare extends Scene {
                     this.player.x, this.player.y,
                     npc.x, npc.y
                 );
-                if (dist < this.HOUSE_LABEL_DISTANCE * 1.5) {
+                if (dist < this.HOUSE_LABEL_DISTANCE * 1.5) {   
                     if (this.input.keyboard) {
                         this.input.keyboard.enabled = false;
                     }
