@@ -1,5 +1,8 @@
 // src/game/RedeemService.ts
 
+import { UserService } from './UserService';
+import { GameDataService } from './GameDataService';
+
 export interface RedeemResponse {
     success: boolean;
     event?: {
@@ -147,11 +150,18 @@ export class RedeemService {
     }
 
     /**
-     * Gets the stored user ID from localStorage
+     * Gets the stored user ID from cached data or UserService
      */
     private static getUserId(): string | null {
-        if (typeof window === 'undefined') return null;
-        return localStorage.getItem('fam_game_user_id');
+        // Try GameDataService first (cached data)
+        const cachedData = GameDataService.getCachedData();
+        if (cachedData?.user?.id) {
+            return cachedData.user.id;
+        }
+        
+        // Fallback to UserService
+        const user = UserService.getStoredUser();
+        return user?.id || null;
     }
 
     /**
