@@ -610,6 +610,76 @@ export class GameDataService {
     }
 
     /**
+     * Update seed inventory in cache (optimistic update)
+     * @param type The seed type (e.g. 'ALGAE', 'MUSHROOM', 'TREE')
+     * @param amount The amount to add (can be negative)
+     */
+    static updateSeed(type: string, amount: number): void {
+        if (!cachedGameData) return;
+
+        // Ensure seeds array exists
+        if (!cachedGameData.seeds) cachedGameData.seeds = [];
+
+        // Find existing seed
+        const existingIndex = cachedGameData.seeds.findIndex(s => s.type === type);
+        
+        if (existingIndex >= 0) {
+            cachedGameData.seeds[existingIndex].quantity += amount;
+            // Prevent negative quantity
+            if (cachedGameData.seeds[existingIndex].quantity < 0) {
+                cachedGameData.seeds[existingIndex].quantity = 0;
+            }
+        } else if (amount > 0) {
+            // Add new seed item
+            cachedGameData.seeds.push({
+                type: type as any,
+                quantity: amount,
+                id: `temp_${Date.now()}`,
+                userId: cachedGameData.user?.id || '',
+                rarity: 'COMMON', // Default, will be corrected on next fetch
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+        }
+
+        this.persistCache();
+        this.notifyDataUpdated();
+    }
+
+    /**
+     * Update fertilizer inventory in cache (optimistic update)
+     * @param type The fertilizer type (e.g. 'FERTILIZER_COMMON')
+     * @param amount The amount to add (can be negative)
+     */
+    static updateFertilizer(type: string, amount: number): void {
+        if (!cachedGameData) return;
+
+        if (!cachedGameData.fertilizers) {
+            cachedGameData.fertilizers = { fertilizers: [], total: 0 };
+        }
+        
+        const existingIndex = cachedGameData.fertilizers.fertilizers.findIndex(f => f.type === type);
+        
+        if (existingIndex >= 0) {
+            cachedGameData.fertilizers.fertilizers[existingIndex].amount += amount;
+            // Prevent negative amount
+            if (cachedGameData.fertilizers.fertilizers[existingIndex].amount < 0) {
+                cachedGameData.fertilizers.fertilizers[existingIndex].amount = 0;
+            }
+        } else if (amount > 0) {
+            // Add new fertilizer item
+            cachedGameData.fertilizers.fertilizers.push({
+                type: type as any,
+                amount: amount,
+                rarity: type.replace('FERTILIZER_', '') as any // Best guess mapping
+            });
+        }
+        
+        this.persistCache();
+        this.notifyDataUpdated();
+    }
+
+    /**
      * Refresh only the Gem Shop data
      * Call this after a purchase to update availability
      */

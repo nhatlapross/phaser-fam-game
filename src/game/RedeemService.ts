@@ -5,6 +5,7 @@ import { GameDataService } from './GameDataService';
 
 export interface RedeemResponse {
     success: boolean;
+    type?: string; // Type of redemption (e.g. 'GOLD', 'ITEM', 'EVENT')
     event?: {
         id?: string;
         name: string;
@@ -73,6 +74,7 @@ export class RedeemService {
                     success: data.success !== false,
                     event: data.event,
                     reward: data.reward,
+                    type: data.type, // Pass the type field from backend response
                     message: data.reward?.message || data.message || 'Code redeemed successfully!'
                 };
             } else {
@@ -132,6 +134,7 @@ export class RedeemService {
                     success: data.success !== false,
                     event: data.event,
                     reward: data.reward,
+                    type: data.type, // Pass the type field from backend response
                     message: data.reward?.message || data.message || 'Code redeemed successfully!'
                 };
             } else {
@@ -197,6 +200,7 @@ export class RedeemService {
                     success: data.success !== false,
                     event: data.event,
                     reward: data.reward,
+                    type: data.type, // Pass the type field from backend response
                     message: data.reward?.message || data.message || 'Check-in successful!'
                 };
             } else {

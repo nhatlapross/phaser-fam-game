@@ -2735,7 +2735,7 @@ export class TownSquare extends Scene {
                 width: ${screenWidth}px;
                 height: ${screenHeight}px;
                 padding: 4px 8px;
-                font-family: 'PixelFont', Arial, sans-serif;
+                font-family: 'Arial', sans-serif;
                 font-size: ${12 * scaleY}px;
                 background: #1A1A1A;
                 color: #FFFFFF;
@@ -2766,7 +2766,7 @@ export class TownSquare extends Scene {
                 width: ${screenWidth}px;
                 height: ${screenHeight}px;
                 padding: 4px 8px;
-                font-family: 'PixelFont', Arial, sans-serif;
+                font-family: 'Arial', sans-serif;
                 font-size: ${12 * scaleY}px;
                 background: #1A1A1A;
                 color: #FFFFFF;
