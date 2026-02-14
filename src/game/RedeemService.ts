@@ -135,7 +135,6 @@ export class RedeemService {
                     success: data.success !== false,
                     type: data.type,
                     reward: data.reward,
-                    type: data.type, // Pass the type field from backend response
                     message: data.reward?.message || data.message || 'Code redeemed successfully!'
                 };
             } else {
