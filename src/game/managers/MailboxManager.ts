@@ -2010,17 +2010,21 @@ export class MailboxManager extends BaseManager {
                 if (itemType === 'GOLD') {
                     const currentGold = parseInt(String(cachedData.user.balanceGold || 0), 10);
                     const currentGem = parseInt(String(cachedData.user.balanceGem || 0), 10);
-                    GameDataService.updateCurrency(currentGold + amount, currentGem);
-
-                    // Update GameState directly for immediate UI feedback
+                    
+                    // Update GameState directly for immediate UI feedback BEFORE notifying UI listeners
                     useGameState(this.scene).setCurrency(currentGold + amount, currentGem);
+                    
+                    // Update cache and notify listeners
+                    GameDataService.updateCurrency(currentGold + amount, currentGem);
                 } else if (itemType === 'GEM') {
                     const currentGold = parseInt(String(cachedData.user.balanceGold || 0), 10);
                     const currentGem = parseInt(String(cachedData.user.balanceGem || 0), 10);
-                    GameDataService.updateCurrency(currentGold, currentGem + amount);
-
-                    // Update GameState directly for immediate UI feedback
+                    
+                    // Update GameState directly for immediate UI feedback BEFORE notifying UI listeners
                     useGameState(this.scene).setCurrency(currentGold, currentGem + amount);
+                    
+                    // Update cache and notify listeners
+                    GameDataService.updateCurrency(currentGold, currentGem + amount);
                 } else if (['ALGAE', 'MUSHROOM', 'TREE'].includes(itemType)) {
                     GameDataService.updateSeed(itemType, amount);
                 } else if (itemType.startsWith('FERTILIZER_')) {
