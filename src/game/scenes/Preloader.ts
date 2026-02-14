@@ -210,15 +210,15 @@ export class Preloader extends Scene
         this.load.image('algae-plant-death', 'objects/plant/algae/algae_death.png');
         this.load.image('algae-fruit', 'objects/plant/algae/algae-fruit.png');
 
-        // Branded Plant
-        this.load.image('branded-seed', 'objects/plant/branded_plant/Branded_Seed.png');
-        this.load.image('branded-plant-1', 'objects/plant/branded_plant/Branded_plant_1.png');
-        this.load.image('branded-plant-2', 'objects/plant/branded_plant/Branded_plant_2.png');
-        this.load.image('branded-plant-3', 'objects/plant/branded_plant/Branded_plant_3.png');
-        this.load.image('branded-plant-4', 'objects/plant/branded_plant/Branded_plant_4.png');
-        this.load.image('branded-plant-5', 'objects/plant/branded_plant/Branded_plant_5.png');
-        this.load.image('branded-plant-death', 'objects/plant/branded_plant/Branded_plant_death.png');
-        this.load.image('branded-fruit', 'objects/plant/branded_plant/branded-fruit.png');
+        // Branded Plant (Temporarily disabled due to missing assets)
+        // this.load.image('branded-seed', 'objects/plant/branded_plant/Branded_Seed.png');
+        // this.load.image('branded-plant-1', 'objects/plant/branded_plant/Branded_plant_1.png');
+        // this.load.image('branded-plant-2', 'objects/plant/branded_plant/Branded_plant_2.png');
+        // this.load.image('branded-plant-3', 'objects/plant/branded_plant/Branded_plant_3.png');
+        // this.load.image('branded-plant-4', 'objects/plant/branded_plant/Branded_plant_4.png');
+        // this.load.image('branded-plant-5', 'objects/plant/branded_plant/Branded_plant_5.png');
+        // this.load.image('branded-plant-death', 'objects/plant/branded_plant/Branded_plant_death.png');
+        // this.load.image('branded-fruit', 'objects/plant/branded_plant/branded-fruit.png');
 
         // Mushroom Plant
         this.load.image('mushroom-seed', 'objects/plant/mushroom/mush_seed.png');

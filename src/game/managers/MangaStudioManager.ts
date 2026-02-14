@@ -38,8 +38,11 @@ export class MangaStudioManager {
 
         this.modalOpen = true;
 
-        // Pause the game scene
+        // Pause the game scene and disable keyboard input
         this.scene.scene.pause();
+        if (this.scene.input.keyboard) {
+            this.scene.input.keyboard.enabled = false;
+        }
 
         // Hide any chat input from TownSquare
         const chatInput = document.querySelector('input[placeholder="Type your message..."]') as HTMLInputElement;
@@ -63,7 +66,7 @@ export class MangaStudioManager {
             align-items: center;
             justify-content: center;
             z-index: 10000;
-            font-family: 'PixelFont', Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
             touch-action: manipulation;
         `;
 
@@ -148,8 +151,11 @@ export class MangaStudioManager {
             chatInput.style.display = '';
         }
 
-        // Resume the game scene
+        // Resume the game scene and re-enable keyboard
         this.scene.scene.resume();
+        if (this.scene.input.keyboard) {
+            this.scene.input.keyboard.enabled = true;
+        }
     }
 
     /**

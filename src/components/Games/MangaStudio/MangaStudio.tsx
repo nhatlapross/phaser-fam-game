@@ -14,6 +14,14 @@ import { uploadToShelby, listShelbyImages, ShelbyBlob } from '@/services/shelbyS
 
 type View = 'home' | 'select-format' | 'create' | 'gallery' | 'viewer';
 
+// Helper to stop key propagation to Phaser
+const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.nativeEvent && typeof e.nativeEvent.stopImmediatePropagation === 'function') {
+        e.nativeEvent.stopImmediatePropagation();
+    }
+};
+
 // Separate MangaViewer component
 interface MangaViewerProps {
     story: MangaStory;
@@ -224,6 +232,7 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
                                 type="text"
                                 value={uploadFilename}
                                 onChange={(e) => setUploadFilename(e.target.value)}
+                                onKeyDown={handleInputKeyDown}
                                 placeholder="my-comic-page"
                                 style={inputStyle}
                             />
@@ -517,6 +526,7 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
                             type="text"
                             value={characterDesc}
                             onChange={(e) => setCharacterDesc(e.target.value)}
+                            onKeyDown={handleInputKeyDown}
                             placeholder="e.g., A young warrior with long black hair..."
                             style={inputStyle}
                         />
@@ -553,6 +563,7 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
                     <textarea
                         value={storyContext}
                         onChange={(e) => setStoryContext(e.target.value)}
+                        onKeyDown={handleInputKeyDown}
                         placeholder={currentStory 
                             ? "Describe what happens in the next page..."
                             : "e.g., The hero discovers a hidden power within..."
@@ -877,11 +888,14 @@ const inputStyle: React.CSSProperties = {
     borderRadius: '6px',
     padding: '10px',
     color: 'white',
-    fontFamily: 'PixelFont, Arial, sans-serif',
+    fontFamily: 'Arial, sans-serif',
     fontSize: '12px',
     outline: 'none',
     width: '100%',
     boxSizing: 'border-box',
+    textTransform: 'none', // Ensure mixed case
+    userSelect: 'text', // Allow text selection
+    WebkitUserSelect: 'text',
 };
 
 export default MangaStudio;

@@ -5,6 +5,7 @@ import { MissionService, Mission } from '../MissionService';
 import { RedeemService } from '../RedeemService';
 import { GameDataService } from '../GameDataService';
 import { getMissionSocketService, MissionUpdatedPayload } from '../MissionSocketService';
+import { useGameState } from '../hooks/useGameState';
 import { EventBus } from '../EventBus';
 import { SocialSubmissionManager } from './SocialSubmissionManager';
 import { DynamicShadow } from '../objects/DynamicShadow';
@@ -43,11 +44,102 @@ export class MailboxManager extends BaseManager {
     private shouldCloseMailbox: boolean = false;
     private tileSize: number;
     private socialSubmissionManager: SocialSubmissionManager | null = null;
+    private resizeListener: (() => void) | null = null;
+    private redeemInputGameCoordinates: { x: number, y: number, width: number, height: number } | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: MailboxCallbacks, tileSize: number) {
         super(scene);
         this.callbacks = callbacks;
         this.tileSize = tileSize;
+    }
+
+    private isPortraitMode(): boolean {
+        return window.innerHeight > window.innerWidth;
+    }
+
+    private updateRedeemInputPosition(): void {
+        if (!this.redeemInput || !this.redeemInputGameCoordinates) return;
+
+        const gameWidth = this.scene.scale.width;
+        const gameHeight = this.scene.scale.height;
+        
+        // Target dimensions in game units
+        const inputWidthGame = this.redeemInputGameCoordinates.width;
+        const inputHeightGame = this.redeemInputGameCoordinates.height;
+        
+        // Input center in game coordinates
+        const inputCenterX = this.redeemInputGameCoordinates.x;
+        const inputCenterY = this.redeemInputGameCoordinates.y;
+
+        const isPortrait = this.isPortraitMode();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        if (isPortrait) {
+            // In portrait mode, the game is rotated 90deg clockwise via CSS
+            // Game X -> Screen Y, Game Y -> Screen X (inverted)
+            const scaleX = viewportHeight / gameWidth;
+            const scaleY = viewportWidth / gameHeight;
+
+            // Transform game coordinates to screen coordinates
+            // Screen X corresponds to Game Y (inverted)
+            // Screen Y corresponds to Game X
+            const screenX = viewportWidth - (inputCenterY / gameHeight) * viewportWidth;
+            const screenY = (inputCenterX / gameWidth) * viewportHeight;
+
+            const screenWidth = inputWidthGame * scaleX;
+            const screenHeight = inputHeightGame * scaleY;
+
+            this.redeemInput.style.cssText = `
+                position: fixed;
+                left: ${screenX}px;
+                top: ${screenY}px;
+                width: ${screenWidth}px;
+                height: ${screenHeight}px;
+                transform: translate(-50%, -50%) rotate(90deg);
+                padding: 4px 8px;
+                font-size: ${12 * Math.min(scaleX, scaleY)}px;
+                font-family: 'Arial', sans-serif;
+                border: 2px solid #5D4037;
+                border-radius: 5px;
+                background-color: #FFF8E1;
+                color: #5D4037;
+                outline: none;
+                text-align: center;
+                z-index: 10001;
+                box-sizing: border-box;
+            `;
+        } else {
+            // Landscape
+            const scaleX = viewportWidth / gameWidth;
+            const scaleY = viewportHeight / gameHeight;
+
+            const screenX = inputCenterX * scaleX;
+            const screenY = inputCenterY * scaleY;
+
+            const screenWidth = inputWidthGame * scaleX;
+            const screenHeight = inputHeightGame * scaleY;
+
+            this.redeemInput.style.cssText = `
+                position: fixed;
+                left: ${screenX}px;
+                top: ${screenY}px;
+                width: ${screenWidth}px;
+                height: ${screenHeight}px;
+                transform: translate(-50%, -50%);
+                padding: 4px 8px;
+                font-size: ${12 * Math.min(scaleX, scaleY)}px;
+                font-family: 'Arial', sans-serif;
+                border: 2px solid #5D4037;
+                border-radius: 5px;
+                background-color: #FFF8E1;
+                color: #5D4037;
+                outline: none;
+                text-align: center;
+                z-index: 10001;
+                box-sizing: border-box;
+            `;
+        }
     }
 
     /**
@@ -224,6 +316,12 @@ export class MailboxManager extends BaseManager {
             this.redeemInput.parentNode.removeChild(this.redeemInput);
         }
         this.redeemInput = null;
+        this.redeemInputGameCoordinates = null;
+
+        if (this.resizeListener) {
+            window.removeEventListener('resize', this.resizeListener);
+            this.resizeListener = null;
+        }
         
         // Re-enable keyboard input
         if (this.scene.input.keyboard) {
@@ -698,29 +796,34 @@ export class MailboxManager extends BaseManager {
             this.redeemInput.placeholder = 'Enter code here...';
             this.redeemInput.maxLength = 150;
 
-            // Get game canvas position for accurate placement
-            const canvas = this.scene.game.canvas;
-            const canvasRect = canvas.getBoundingClientRect();
-            const scaleX = canvasRect.width / this.scene.scale.width;
-            const scaleY = canvasRect.height / this.scene.scale.height;
+            // Calculate dynamic layout
+            const margin = 25;
+            const qrSize = 36;
+            const gap = 2;
+            const inputHeight = 28;
+            
+            // Calculate input width to fill available space
+            const contentWidth = modalWidth - (margin * 2);
+            const inputWidth = contentWidth - qrSize - gap - 10;
+            
+            // Calculate center positions
+            const startX = modalX - (modalWidth / 2) + margin + 15;
+            const inputCenterX = startX + (inputWidth / 2);
+            const qrCenterX = startX + inputWidth + gap + (qrSize / 2);
 
-            // Calculate input size based on modal width (not canvas)
-            const scaledModalWidth = modalWidth * scaleX;
-            const inputWidth = Math.min(180, scaledModalWidth * 2);
-
-            // Position at modal center
-            const inputLeft = canvasRect.left + (modalX * scaleX);
-            const inputTop = canvasRect.top + ((contentY - 20) * scaleY);
+            // Store game coordinates for resize updates
+            this.redeemInputGameCoordinates = {
+                x: inputCenterX,
+                y: contentY - 5,
+                width: inputWidth,
+                height: inputHeight
+            };
 
             this.redeemInput.style.cssText = `
                 position: fixed;
-                left: ${inputLeft}px;
-                top: ${inputTop}px;
-                transform: translateX(-55%);
-                width: ${inputWidth}px;
                 padding: 5px 8px;
                 font-size: 10px;
-                font-family: 'PixelFont', monospace;
+                font-family: 'Arial', sans-serif;
                 border: 2px solid #5D4037;
                 border-radius: 5px;
                 background-color: #FFF8E1;
@@ -730,13 +833,22 @@ export class MailboxManager extends BaseManager {
                 z-index: 10001;
                 box-sizing: border-box;
             `;
+
+            // Add resize listener if not already added
+            if (!this.resizeListener) {
+                this.resizeListener = () => this.updateRedeemInputPosition();
+                window.addEventListener('resize', this.resizeListener);
+            }
+
+            // Calculate initial position
+            this.updateRedeemInputPosition();
             document.body.appendChild(this.redeemInput);
             
             // Focus is handled after listeners setup below
 
             // QR button - responsive positioning
-            const qrBtnX = modalX + modalWidth / 2 - 60; // Position near right edge of modal
-            const qrBtnY = contentY - 15;
+            const qrBtnX = qrCenterX;
+            const qrBtnY = contentY - 5;
             const qrBtnBg = this.scene.add.sprite(qrBtnX, qrBtnY, 'square-buttons', 6);
             qrBtnBg.setDisplaySize(36, 28);
             qrBtnBg.setDepth(5302);
@@ -1872,31 +1984,58 @@ export class MailboxManager extends BaseManager {
     }
 
     private handleRedeemResult(result: any): void {
-        if (result.success) {
+        if (result.success && result.reward) {
+            let itemType = result.reward.itemType || result.reward.type;
+            if (!itemType && result.type === 'GOLD') {
+                itemType = 'GOLD';
+            }
+
             let rewardMessage = '';
-            
-            // Handle new API response format: { success, type, reward: { amount }, data }
-            if (result.type && result.reward) {
-                rewardMessage = `Reward: ${result.reward.amount} ${result.type}`;
+            if (result.event) {
+                rewardMessage += `Event: ${result.event.name}\n`;
             }
-            // Handle old API response format
-            else if (result.reward) {
-                if (result.event) {
-                    rewardMessage += `Event: ${result.event.name}\n`;
-                }
-                if (result.reward.message) {
-                    rewardMessage += result.reward.message + '\n';
-                }
-                rewardMessage += `Reward: ${result.reward.itemType}\nAmount: ${result.reward.amount}`;
-            } else {
-                rewardMessage = result.message || 'Code redeemed successfully!';
+            if (result.reward.message) {
+                rewardMessage += result.reward.message + '\n';
             }
+            rewardMessage += `Reward: ${itemType}\nAmount: ${result.reward.amount || 1}`;
 
             // Play success sound for successful redeem
             this.callbacks.playSuccessSound();
 
-            // Refresh inventory to update player's items after redeem
-            GameDataService.refreshAndUpdateUI();
+            // Optimistic update to prevent lag and ensure immediate feedback
+            const cachedData = GameDataService.getCachedData();
+            if (cachedData && cachedData.user && result.reward) {
+                const amount = parseInt(String(result.reward.amount || 1), 10);
+
+                if (itemType === 'GOLD') {
+                    const currentGold = parseInt(String(cachedData.user.balanceGold || 0), 10);
+                    const currentGem = parseInt(String(cachedData.user.balanceGem || 0), 10);
+                    
+                    // Update GameState directly for immediate UI feedback BEFORE notifying UI listeners
+                    useGameState(this.scene).setCurrency(currentGold + amount, currentGem);
+                    
+                    // Update cache and notify listeners
+                    GameDataService.updateCurrency(currentGold + amount, currentGem);
+                } else if (itemType === 'GEM') {
+                    const currentGold = parseInt(String(cachedData.user.balanceGold || 0), 10);
+                    const currentGem = parseInt(String(cachedData.user.balanceGem || 0), 10);
+                    
+                    // Update GameState directly for immediate UI feedback BEFORE notifying UI listeners
+                    useGameState(this.scene).setCurrency(currentGold, currentGem + amount);
+                    
+                    // Update cache and notify listeners
+                    GameDataService.updateCurrency(currentGold, currentGem + amount);
+                } else if (['ALGAE', 'MUSHROOM', 'TREE'].includes(itemType)) {
+                    GameDataService.updateSeed(itemType, amount);
+                } else if (itemType.startsWith('FERTILIZER_')) {
+                    GameDataService.updateFertilizer(itemType, amount);
+                } else {
+                    // Fallback for unknown items
+                    GameDataService.refreshAndUpdateUI();
+                }
+            } else {
+                GameDataService.refreshAndUpdateUI();
+            }
 
             this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
 
@@ -2000,12 +2139,13 @@ export class MailboxManager extends BaseManager {
                 this.redeemResultElements.push(failIcon);
             }
 
-            const msgText = this.scene.add.text(modalX, modalY + 30, message, {
+            const msgText = this.scene.add.text(modalX + 10, modalY + 30, message, {
                 fontSize: '10px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
                 resolution: 2,
-                align: 'center'
+                align: 'center',
+                wordWrap: { width: 160 }
             });
             msgText.setOrigin(0.5);
             msgText.setDepth(5502);
