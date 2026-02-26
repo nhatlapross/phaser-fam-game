@@ -335,12 +335,28 @@ export class FarmingGame extends Scene {
         // Listen for game state changes to auto-update UI
         // Use a flag to prevent infinite loops when refreshAllUI syncs state
         let isRefreshingUI = false;
+        let lastToolbarHash = '';
+
         this.gameState.on('change', () => {
             if (isRefreshingUI) return; // Prevent recursive calls
             isRefreshingUI = true;
             // Only update UI displays, don't sync state again
             this.createUserProfileUI();
-            this.updateToolbar();
+            
+            // Check if toolbar needs update (ignore currency changes)
+            // This prevents toolbar reloading/flickering when only gold/gem changes
+            const currentHash = JSON.stringify({
+                items: this.toolbarItems,
+                seeds: this.seedCounts,
+                fertilizers: this.fertilizerCounts,
+                chest: this.chestInventory
+            });
+            
+            if (currentHash !== lastToolbarHash) {
+                lastToolbarHash = currentHash;
+                this.updateToolbar();
+            }
+
             isRefreshingUI = false;
         });
 
@@ -2749,6 +2765,34 @@ export class FarmingGame extends Scene {
                         }
                     }
                 }
+            }
+
+            // Sync seed counts from cached data
+            if (cachedData.seeds) {
+                // Reset counts first to ensure accurate state
+                this.seedCounts = { algae: 0, mushroom: 0, tree: 0 };
+                cachedData.seeds.forEach(item => {
+                    if (item.type) {
+                        const type = item.type.toLowerCase() as PlantType;
+                        if (this.seedCounts[type] !== undefined) {
+                            this.seedCounts[type] = item.quantity;
+                        }
+                    }
+                });
+            }
+
+            // Sync fertilizer counts from cached data
+            if (cachedData.fertilizers && cachedData.fertilizers.fertilizers) {
+                // Reset counts first
+                this.fertilizerCounts = { common: 0, rare: 0, epic: 0, legendary: 0 };
+                cachedData.fertilizers.fertilizers.forEach(item => {
+                    if (item.type) {
+                        const type = item.type.replace('FERTILIZER_', '').toLowerCase() as 'common' | 'rare' | 'epic' | 'legendary';
+                        if (this.fertilizerCounts[type] !== undefined) {
+                            this.fertilizerCounts[type] = item.amount;
+                        }
+                    }
+                });
             }
 
             // Sync water count from API (no cache for tools)
