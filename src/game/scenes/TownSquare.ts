@@ -629,7 +629,7 @@ export class TownSquare extends Scene {
             2: '🎨 Comic Studio',
             3: 'Dog House',
             4: 'Bird House',
-            5: 'Fish House',
+            5: '🏫 Class Room',
             6: 'Rabbit House',
             7: 'Hamster House',
             8: 'Turtle House',
@@ -692,7 +692,7 @@ export class TownSquare extends Scene {
             });
         });
 
-        // Click handler - house #1 (Mouse House) opens game modal, house #2 (Cat House) opens manga studio
+        // Click handler
         house.on('pointerdown', () => {
             if (houseId === 1) {
                 // House #1 - Arcade: Mini Games
@@ -700,6 +700,13 @@ export class TownSquare extends Scene {
             } else if (houseId === 2) {
                 // House #2 - Manga Studio
                 this.mangaStudioManager.openModal();
+            } else if (houseId === 5) {
+                // House #5 - Class Room
+                this.soundManager?.destroy();
+                this.cameras.main.fadeOut(500, 0, 0, 0);
+                this.time.delayedCall(500, () => {
+                    this.scene.start('ClassRoom');
+                });
             } else {
                 // Other houses: Coming soon
                 this.showToastMessage(`Coming soon...`, 0xf59e0b);
@@ -1206,11 +1213,15 @@ export class TownSquare extends Scene {
         let startX: number;
         let startY: number;
 
-        // Spawn at station if coming from travel, otherwise spawn at center
+        // Spawn position based on origin
         if (this.navigationData?.spawnAt === 'station') {
             // Spawn near station (offset to the right so player doesn't overlap station)
             startX = (this.STATION_X + 3) * this.TILE_SIZE;
             startY = this.STATION_Y * this.TILE_SIZE;
+        } else if (this.navigationData?.spawnAt === 'classroom') {
+            // Spawn in front of house #5 (ClassRoom) at tile (12, 24)
+            startX = 14 * this.TILE_SIZE;
+            startY = 26 * this.TILE_SIZE;
         } else {
             // Default spawn at center
             startX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
