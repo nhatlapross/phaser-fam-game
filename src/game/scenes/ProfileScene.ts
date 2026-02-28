@@ -1404,40 +1404,57 @@ export class ProfileScene extends Scene {
     }
 
     private createNavigationButtons(centerX: number, y: number) {
-        const buttonWidth = 115;
-        const buttonHeight = 45;
-        const spacing = 10;
+            const buttonWidth = 75;
+            const buttonHeight = 45;
+            const spacing = 8;
+            const totalWidth = buttonWidth * 3 + spacing * 2;
+            const startX = centerX - totalWidth / 2 + buttonWidth / 2;
 
-        // Garden destination button (like Travel style)
-        this.createDestinationButton(
-            centerX - buttonWidth / 2 - spacing / 2,
-            y,
-            buttonWidth,
-            buttonHeight,
-            {
-                name: 'GARDEN',
-                nameVi: 'Vườn',
-                description: 'Grow your plants',
-                bgImage: 'place-farm',
-                onClick: () => this.goToGarden()
-            }
-        );
+            // Garden destination button
+            this.createDestinationButton(
+                startX,
+                y,
+                buttonWidth,
+                buttonHeight,
+                {
+                    name: 'GARDEN',
+                    nameVi: 'Vườn',
+                    description: 'Grow your plants',
+                    bgImage: 'place-farm',
+                    onClick: () => this.goToGarden()
+                }
+            );
 
-        // Town Square destination button
-        this.createDestinationButton(
-            centerX + buttonWidth / 2 + spacing / 2,
-            y,
-            buttonWidth,
-            buttonHeight,
-            {
-                name: 'SQUARE',
-                nameVi: 'Quảng trường',
-                description: 'Meet other farmers',
-                bgImage: 'place-townsquare',
-                onClick: () => this.goToTownSquare()
-            }
-        );
-    }
+            // Town Square destination button
+            this.createDestinationButton(
+                startX + buttonWidth + spacing,
+                y,
+                buttonWidth,
+                buttonHeight,
+                {
+                    name: 'SQUARE',
+                    nameVi: 'Quảng trường',
+                    description: 'Meet other farmers',
+                    bgImage: 'place-townsquare',
+                    onClick: () => this.goToTownSquare()
+                }
+            );
+
+            // Pet Farm destination button
+            this.createDestinationButton(
+                startX + (buttonWidth + spacing) * 2,
+                y,
+                buttonWidth,
+                buttonHeight,
+                {
+                    name: 'PET FARM',
+                    nameVi: 'Thú cưng',
+                    description: 'Raise your pets',
+                    bgImage: 'place-pethome',
+                    onClick: () => this.goToPetFarm()
+                }
+            );
+        }
 
     private createDestinationButton(
         x: number,
@@ -1543,6 +1560,12 @@ export class ProfileScene extends Scene {
         this.cameras.main.fadeOut(500, 0, 0, 0);
         this.cameras.main.once('camerafadeoutcomplete', () => {
             this.scene.start('TownSquare');
+        });
+    }
+    private goToPetFarm() {
+        this.cameras.main.fadeOut(500, 0, 0, 0);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+            this.scene.start('PetFarm');
         });
     }
 

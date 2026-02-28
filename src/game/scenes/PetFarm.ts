@@ -62,6 +62,9 @@ export class PetFarm extends Scene {
     // Station manager for travel
     private stationManager!: StationManager;
 
+    // Collision walls group
+    private walls!: Phaser.Physics.Arcade.StaticGroup;
+
     constructor() {
         super("PetFarm");
     }
@@ -183,7 +186,66 @@ export class PetFarm extends Scene {
 
         // Set texture to use nearest neighbor filtering for sharp pixels
         bg.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+
+        // Create collision boundaries for room furniture/walls
+        this.createCollisionBounds();
     }
+
+    /**
+     * Create invisible collision walls for room boundaries.
+     * These prevent the player from walking over furniture and walls.
+     * Coordinates are based on the 800x560 world (50x35 tiles at 16px).
+     */
+    private createCollisionBounds() {
+            this.walls = this.physics.add.staticGroup();
+
+            // Helper: addWall(centerX, centerY, width, height)
+            // To convert 4 corner points: center = avg of corners, size = diff of corners
+            const addWall = (x: number, y: number, w: number, h: number) => {
+                const wall = this.add.rectangle(x, y, w, h, 0xff0000, 0);
+                this.physics.add.existing(wall, true);
+                this.walls.add(wall);
+            };
+
+            // Wall 1: Left bookshelf - points: (25,0), (240,0), (240,360), (25,360)
+            addWall(132, 180, 215, 360);
+
+            // Wall 2: Left bookshelf edge - points: (240,0), (300,0), (300,375), (240,375)
+            addWall(270, 188, 60, 375);
+
+            // Wall 3: Wardrobe diagonal edge - staircase approximation
+            // Diagonal line from (315,345) to (360,290), block left side
+            addWall(308, 338, 16, 18);  // step 1 (bottom)
+            addWall(319, 324, 16, 18);  // step 2
+            addWall(330, 310, 16, 18);  // step 3
+            addWall(341, 296, 16, 18);  // step 4 (top)
+
+            // Wall 4: Wardrobe top section - points: (360,0), (455,0), (455,290), (360,290)
+            addWall(407, 145, 95, 290);
+
+            // Wall 5: Center upper furniture - points: (460,0), (630,0), (630,350), (460,350)
+            addWall(545, 175, 170, 350);
+
+            // Wall 6: Right-center column - points: (630,0), (690,0), (690,325), (630,325)
+            addWall(660, 162, 60, 325);
+
+            // Wall 7: Desk diagonal edge - staircase approximation
+            // Diagonal line from (690,325) to (730,445), block right side
+            addWall(698, 340, 16, 30);  // step 1 (top)
+            addWall(708, 370, 16, 30);  // step 2
+            addWall(718, 400, 16, 30);  // step 3
+            addWall(728, 430, 16, 30);  // step 4 (bottom)
+
+            // Wall 8: Desk lower diagonal - from (730,445) to (740,495), block right side
+            addWall(733, 458, 14, 25);  // step 1 (top)
+            addWall(738, 483, 14, 25);  // step 2 (bottom)
+
+            // Wall 9: Bottom-right furniture - points: (695,495), (800,495), (800,555), (695,555)
+            addWall(747, 525, 105, 60);
+
+            // Wall 10: Left edge boundary - x: 0 to 25, full height
+            addWall(12, 280, 25, 560);
+        }
 
     private createPlayer() {
         const startX = (this.MAP_WIDTH * this.TILE_SIZE) / 2; // Center X (400)
@@ -216,6 +278,18 @@ export class PetFarm extends Scene {
         );
         this.player.setScale(0.6); // Increased from default for better visibility
         this.player.setDepth(this.player.y);
+
+        // Set smaller physics body at feet for natural collision
+        const bodyW = 24;
+        const bodyH = 16;
+        this.player.body!.setSize(bodyW, bodyH);
+        this.player.body!.setOffset(
+            (this.player.width - bodyW) / 2,
+            this.player.height * GAME_CONSTANTS.CHARACTER_ORIGIN_Y - bodyH,
+        );
+
+        // Add collision with room walls/furniture
+        this.physics.add.collider(this.player, this.walls);
 
         this.playerShadow = new DynamicShadow(this, this.player, 0, 2);
 
@@ -436,14 +510,14 @@ export class PetFarm extends Scene {
     }
 
     private createPetShopNPC() {
-        // Position NPC at center of map
-        const centerX = (this.MAP_WIDTH * this.TILE_SIZE) / 2; // 400
-        const centerY = (this.MAP_HEIGHT * this.TILE_SIZE) / 2; // 280
+        // Position NPC in walkable floor area
+        const npcX = 500;
+        const npcY = 420;
 
         // Create NPC sprite (Nobita - pet shop keeper)
-        const npc = this.add.sprite(centerX, centerY, "nobita", 0);
+        const npc = this.add.sprite(npcX, npcY, "nobita", 0);
         npc.setScale(0.35); // Similar size to player
-        npc.setDepth(centerY);
+        npc.setDepth(npcY);
         npc.setOrigin(0.5, 0.8); // Bottom-center origin for proper depth sorting
 
         // Create animations for Nobita if not exists
@@ -457,7 +531,7 @@ export class PetFarm extends Scene {
 
         // Add name label above NPC (no background, no icon)
         const nameLabel = this.add
-            .text(centerX, centerY - 50, "Nobita", {
+            .text(npcX, npcY - 50, "Nobita", {
                 fontSize: "14px",
                 color: "#fff",
                 stroke: "#000",
@@ -468,9 +542,9 @@ export class PetFarm extends Scene {
 
         // Make NPC interactive
         const hitArea = this.add
-            .circle(centerX, centerY, 30, 0x000000, 0)
+            .circle(npcX, npcY, 30, 0x000000, 0)
             .setInteractive({ useHandCursor: true })
-            .setDepth(centerY - 1);
+            .setDepth(npcY - 1);
 
         // Hover effect
         hitArea.on("pointerover", () => {
@@ -502,11 +576,9 @@ export class PetFarm extends Scene {
             return;
         }
 
-        // Position Maid Cat at a different location (offset from Nobita)
-        const centerX = (this.MAP_WIDTH * this.TILE_SIZE) / 2; // 400
-        const centerY = (this.MAP_HEIGHT * this.TILE_SIZE) / 2; // 280
-        const maidCatX = centerX + 80; // Right side of Nobita
-        const maidCatY = centerY + 40; // Slightly below
+        // Position Maid Cat in walkable floor area
+        const maidCatX = 580;
+        const maidCatY = 440;
 
         // Create Maid Cat sprite
         this.maidCatSprite = this.add.sprite(
@@ -579,11 +651,9 @@ export class PetFarm extends Scene {
             return;
         }
 
-        // Position Pet Cat at a different location (left side of Nobita)
-        const centerX = (this.MAP_WIDTH * this.TILE_SIZE) / 2; // 400
-        const centerY = (this.MAP_HEIGHT * this.TILE_SIZE) / 2; // 280
-        const petCatX = centerX - 80; // Left side of Nobita
-        const petCatY = centerY + 40; // Slightly below
+        // Position Pet Cat in walkable floor area
+        const petCatX = 420;
+        const petCatY = 460;
 
         // Create Pet Cat sprite (using pet-cat spritesheet)
         this.maidCatSprite = this.add.sprite(petCatX, petCatY, "pet-cat", 0);
@@ -643,6 +713,9 @@ export class PetFarm extends Scene {
             this.maidCatHitArea,
             "center",
         );
+
+        // Make UI camera ignore these game world objects
+        this.uiCamera.ignore([this.maidCatSprite, this.maidCatShadow!, this.maidCatLabel, this.maidCatHitArea]);
     }
 
     private createPetCatAnimations() {
@@ -840,11 +913,11 @@ export class PetFarm extends Scene {
         const movementBounds =
             movementArea === "center"
                 ? {
-                      // Center area (around middle of map with 150px radius)
-                      minX: centerX - 150,
-                      maxX: centerX + 150,
-                      minY: centerY - 100,
-                      maxY: centerY + 100,
+                      // Walkable floor area (between collision walls)
+                      minX: 310,
+                      maxX: 680,
+                      minY: 360,
+                      maxY: 490,
                   }
                 : {
                       // Window area (top-left, kept for compatibility)
@@ -1704,17 +1777,27 @@ export class PetFarm extends Scene {
     }
 
     private setupDebugHelpers() {
-        // Debug helpers removed - coordinate display disabled
-        // Can be re-enabled for debugging by uncommenting below:
-        /*
-        // Click anywhere to see world coordinates in console
-        this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-            const worldX = Math.round(pointer.worldX);
-            const worldY = Math.round(pointer.worldY);
-            console.log(`🎯 Clicked at: x=${worldX}, y=${worldY}`);
-        });
-        */
-    }
+            // Press D to toggle collision debug visualization
+            this.input.keyboard?.on("keydown-D", () => {
+                if (this.physics.world.drawDebug) {
+                    this.physics.world.drawDebug = false;
+                    this.physics.world.debugGraphic?.destroy();
+                    this.physics.world.debugGraphic = this.add.graphics().setDepth(999999);
+                } else {
+                    this.physics.world.drawDebug = true;
+                    this.physics.world.debugGraphic = this.add.graphics().setDepth(999999);
+                }
+            });
+
+            // Click anywhere to see world coordinates in console (useful for adjusting walls)
+            this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+                if (this.physics.world.drawDebug) {
+                    const worldX = Math.round(pointer.worldX);
+                    const worldY = Math.round(pointer.worldY);
+                    console.log(`🎯 Clicked at: x=${worldX}, y=${worldY}`);
+                }
+            });
+        }
 
     update() {
         const speed = 100;

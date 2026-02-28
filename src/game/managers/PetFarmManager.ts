@@ -46,11 +46,12 @@ export class PetFarmManager {
     private readonly HAPPINESS_DECAY_RATE = 0.3; // -0.3 happiness per minute
 
     private readonly XP_TO_LEVEL_UP = 100;
-    private readonly LEVEL_TO_EVOLVE = {
+    private readonly LEVEL_TO_EVOLVE: Record<PetStats["stage"], number> = {
         egg: 1, // Egg → Baby at level 1
         baby: 5, // Baby → Teen at level 5
         teen: 10, // Teen → Adult at level 10
         adult: 20, // Adult → Legendary at level 20
+        legendary: Infinity, // Max stage, no further evolution
     };
 
     constructor(scene: Phaser.Scene, callbacks: PetFarmCallbacks) {
