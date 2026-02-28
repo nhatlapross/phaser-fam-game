@@ -61,7 +61,7 @@ interface StationConfig {
 // Data passed when navigating to a new scene
 export interface NavigationData {
     fromLocation: string;  // ID of origin location
-    spawnAt: 'station';    // Where to spawn in destination
+    spawnAt: 'station' | 'classroom';  // Where to spawn in destination
 }
 
 interface StationCallbacks {
