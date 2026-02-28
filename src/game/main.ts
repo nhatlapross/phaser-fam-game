@@ -1,63 +1,74 @@
-import { Boot } from './scenes/Boot';
-import { GameOver } from './scenes/GameOver';
-import { Game as MainGame } from './scenes/Game';
-import { MainMenu } from './scenes/MainMenu';
-import { AUTO, Game, Scale } from 'phaser';
-import { Preloader } from './scenes/Preloader';
-import { HomeGarden } from './scenes/HomeGarden';
-import { EventCheckIn } from './scenes/EventCheckIn';
-import { Networking } from './scenes/Networking';
-import { FarmingGame } from './scenes/FarmingGame';
-import { TownSquare } from './scenes/TownSquare';
-import { TilesetDebug } from './scenes/TilesetDebug';
-import { Login } from './scenes/Login';
-import { GameLoader } from './scenes/GameLoader';
-import { SetupProfile } from './scenes/SetupProfile';
-import { Transformation } from './scenes/Transformation';
-import { ProfileScene } from './scenes/ProfileScene';
-import InputTextPlugin from 'phaser3-rex-plugins/plugins/inputtext-plugin.js';
-import UIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin.js';
+import { Boot } from "./scenes/Boot";
+import { GameOver } from "./scenes/GameOver";
+import { Game as MainGame } from "./scenes/Game";
+import { MainMenu } from "./scenes/MainMenu";
+import { AUTO, Game, Scale } from "phaser";
+import { Preloader } from "./scenes/Preloader";
+import { HomeGarden } from "./scenes/HomeGarden";
+import { EventCheckIn } from "./scenes/EventCheckIn";
+import { Networking } from "./scenes/Networking";
+import { FarmingGame } from "./scenes/FarmingGame";
+import { TownSquare } from "./scenes/TownSquare";
+import { TilesetDebug } from "./scenes/TilesetDebug";
+import { Login } from "./scenes/Login";
+import { GameLoader } from "./scenes/GameLoader";
+import { SetupProfile } from "./scenes/SetupProfile";
+import { Transformation } from "./scenes/Transformation";
+import { ProfileScene } from "./scenes/ProfileScene";
+import { PetFarm } from "./scenes/PetFarm";
+import { MapSelection } from "./scenes/MapSelection";
+import InputTextPlugin from "phaser3-rex-plugins/plugins/inputtext-plugin.js";
+import UIPlugin from "phaser3-rex-plugins/templates/ui/ui-plugin.js";
 
 //  Find out more information about the Game Config at:
 //  https://newdocs.phaser.io/docs/3.70.0/Phaser.Types.Core.GameConfig
 const config: Phaser.Types.Core.GameConfig = {
     type: AUTO,
-    parent: 'game-container',
-    backgroundColor: '#87CEEB',
+    parent: "game-container",
+    backgroundColor: "#87CEEB",
     scale: {
         mode: Scale.FIT,
         width: 960,
         height: 540,
         autoCenter: Scale.CENTER_BOTH,
-        fullscreenTarget: 'game-container',
-        expandParent: true
+        fullscreenTarget: "game-container",
+        expandParent: true,
+    },
+    render: {
+        pixelArt: true, // Enable pixel-perfect rendering for sharp images
+        antialias: false, // Disable antialiasing for crisp pixels
+        roundPixels: true, // Round pixel positions to prevent blurring
     },
     physics: {
-        default: 'arcade',
+        default: "arcade",
         arcade: {
             gravity: { x: 0, y: 0 },
-            debug: false
-        }
+            debug: false,
+        },
     },
     input: {
         touch: {
-            capture: true
-        }
+            capture: true,
+        },
     },
     dom: {
-        createContainer: true
+        createContainer: true,
     },
     plugins: {
-        global: [{
-            key: 'rexInputTextPlugin',
-            plugin: InputTextPlugin,
-            start: true
-        }],
-        scene: [{
-            key: 'rexUI',
-            plugin: UIPlugin,
-            mapping: 'rexUI'
-        }]
+        global: [
+            {
+                key: "rexInputTextPlugin",
+                plugin: InputTextPlugin,
+                start: true,
+            },
+        ],
+        scene: [
+            {
+                key: "rexUI",
+                plugin: UIPlugin,
+                mapping: "rexUI",
+            },
+        ],
     },
     scene: [
         Boot,
@@ -66,23 +77,24 @@ const config: Phaser.Types.Core.GameConfig = {
         SetupProfile,
         Transformation,
         ProfileScene,
+        MapSelection,
         GameLoader,
         TilesetDebug,
         FarmingGame,
         TownSquare,
+        PetFarm,
         HomeGarden,
         EventCheckIn,
         Networking,
         MainMenu,
         MainGame,
-        GameOver
-    ]
+        GameOver,
+    ],
 };
 
 const StartGame = (parent: string) => {
-
     return new Game({ ...config, parent });
-
-}
+};
 
 export default StartGame;
+

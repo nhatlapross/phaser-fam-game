@@ -38,3 +38,51 @@ next-env.d.ts
 .env
 
 /docs
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
+
+# Codacy (code quality tool - not needed in repo)
+.codacy/
+
+# Living Context System (AI assistant context - not needed in repo)
+.context/
+
+# Cursor AI rules (IDE specific)
+.cursorrules
+
+# Security - Never commit these
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+.env
+.env.local
+.env.production
+.env.development
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# User data / scraped content
+/scraped_data/
+/user_uploads/
+/temp_data/
+
+# Agent logs (can be large)
+/logs/
+*.log
+
+# Python (if we add Python agents)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# Blockchain private keys
+wallet.json
+keystore/

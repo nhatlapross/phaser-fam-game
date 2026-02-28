@@ -13,10 +13,10 @@
  */
 
 export interface CharacterDefinition {
-    key: string;           // Unique key for the character (also folder/file name)
-    displayName: string;   // Display name shown to user
-    frameWidth: number;    // Width of each frame
-    frameHeight: number;   // Height of each frame
+    key: string; // Unique key for the character (also folder/file name)
+    displayName: string; // Display name shown to user
+    frameWidth: number; // Width of each frame
+    frameHeight: number; // Height of each frame
 }
 
 /**
@@ -24,30 +24,39 @@ export interface CharacterDefinition {
  * Generated from: public/assets/characters/
  */
 export const PLAYABLE_CHARACTERS: CharacterDefinition[] = [
-    { key: 'Alice', displayName: 'Alice', frameWidth: 125, frameHeight: 125 },
-    { key: 'Jane', displayName: 'Jane', frameWidth: 125, frameHeight: 125 },
-    { key: 'Marry', displayName: 'Marry', frameWidth: 125, frameHeight: 125 },
-    { key: 'Peter', displayName: 'Peter', frameWidth: 125, frameHeight: 125 },
-    { key: 'RED', displayName: 'RED', frameWidth: 125, frameHeight: 125 },
-    { key: 'Shin', displayName: 'Shin', frameWidth: 125, frameHeight: 125 },
-    { key: 'Willi', displayName: 'Willi', frameWidth: 125, frameHeight: 125 }
+    { key: "Alice", displayName: "Alice", frameWidth: 125, frameHeight: 125 },
+    { key: "Jane", displayName: "Jane", frameWidth: 125, frameHeight: 125 },
+    { key: "Marry", displayName: "Marry", frameWidth: 125, frameHeight: 125 },
+    { key: "Peter", displayName: "Peter", frameWidth: 125, frameHeight: 125 },
+    { key: "RED", displayName: "RED", frameWidth: 125, frameHeight: 125 },
+    { key: "Shin", displayName: "Shin", frameWidth: 125, frameHeight: 125 },
+    { key: "Willi", displayName: "Willi", frameWidth: 125, frameHeight: 125 },
 ];
+
+// NPCs (not playable characters)
+// - nobita: Pet shop keeper NPC in Pet Farm
+// - npc-maidcat: Maid Cat pet from Lucky Box
+// - maid-cow: Maid Cow NPC (if used)
 
 /**
  * Get character keys as readonly array
  */
-export const CHARACTER_KEYS = PLAYABLE_CHARACTERS.map(c => c.key) as readonly string[];
+export const CHARACTER_KEYS = PLAYABLE_CHARACTERS.map(
+    (c) => c.key,
+) as readonly string[];
 
 /**
  * Default character key (first in list)
  */
-export const DEFAULT_CHARACTER = PLAYABLE_CHARACTERS[0]?.key || 'lion';
+export const DEFAULT_CHARACTER = PLAYABLE_CHARACTERS[0]?.key || "lion";
 
 /**
  * Get character definition by key
  */
-export function getCharacterByKey(key: string): CharacterDefinition | undefined {
-    return PLAYABLE_CHARACTERS.find(c => c.key === key);
+export function getCharacterByKey(
+    key: string,
+): CharacterDefinition | undefined {
+    return PLAYABLE_CHARACTERS.find((c) => c.key === key);
 }
 
 /**
@@ -58,3 +67,4 @@ export function getNextCharacterKey(currentKey: string): string {
     const nextIndex = (currentIndex + 1) % CHARACTER_KEYS.length;
     return CHARACTER_KEYS[nextIndex];
 }
+
