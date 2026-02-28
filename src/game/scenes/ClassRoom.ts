@@ -438,70 +438,212 @@ export class ClassRoom extends Scene {
         this.showStudyingOverlay();
     }
 
-    /** Shows a computer-screen style "Studying" overlay in screen space. */
+    /** Shows a large CRT-style 2-screen lesson viewer in screen space. */
     private showStudyingOverlay() {
-        const W = this.scale.width;
-        const H = this.scale.height;
+        const W = this.scale.width;   // 960
+        const H = this.scale.height;  // 540
+        let currentScreen = 1;
+        const TOTAL_SCREENS = 2;
 
         const container = this.add.container(0, 0);
         container.setDepth(5300);
         this.cameras.main.ignore(container);
 
-        // Dim backdrop
-        const backdrop = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.55);
-        backdrop.setInteractive(); // block clicks behind
+        // Dark backdrop
+        const backdrop = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.88);
+        backdrop.setInteractive();
         container.add(backdrop);
 
-        // Monitor frame
-        const monW = 320, monH = 220;
-        const monX = W / 2, monY = H / 2 - 10;
-        const frame = this.add.rectangle(monX, monY, monW, monH, 0x2c2c2c);
-        frame.setStrokeStyle(3, 0x555555);
-        container.add(frame);
+        // ── Monitor dimensions ──
+        const monW = 560, monH = 380;
+        const monX = W / 2, monY = H / 2 - 15;
 
-        // Screen area (inner)
-        const screen = this.add.rectangle(monX, monY - 12, monW - 20, monH - 50, 0x0a1628);
-        screen.setStrokeStyle(2, 0x1a3a6a);
-        container.add(screen);
+        // Bezel (outer monitor frame)
+        const bezel = this.add.graphics();
+        bezel.fillStyle(0x1a1a1a, 1);
+        bezel.fillRoundedRect(monX - monW / 2, monY - monH / 2, monW, monH, 10);
+        bezel.lineStyle(2, 0x3c3c3c, 1);
+        bezel.strokeRoundedRect(monX - monW / 2, monY - monH / 2, monW, monH, 10);
+        container.add(bezel);
 
-        // Blinking cursor line at top of screen
-        const cursor = this.add.text(monX - (monW - 20) / 2 + 10, monY - 12 - (monH - 50) / 2 + 8, '>', {
-            fontSize: '10px', fontFamily: 'monospace', color: '#00ff88', resolution: 2
+        // Inner bezel edge
+        const bezelInner = this.add.graphics();
+        bezelInner.lineStyle(1, 0x2a2a2a, 1);
+        bezelInner.strokeRoundedRect(monX - monW / 2 + 3, monY - monH / 2 + 3, monW - 6, monH - 6, 8);
+        container.add(bezelInner);
+
+        // ── Screen glass ──
+        const pad = 18;
+        const sX = monX - monW / 2 + pad;
+        const sY = monY - monH / 2 + pad + 4;
+        const sW = monW - pad * 2;         // 524
+        const sH = monH - pad * 2 - 50;   // 294
+        const sCX = sX + sW / 2;
+        const sCY = sY + sH / 2;
+
+        const screenBg = this.add.graphics();
+        screenBg.fillStyle(0x000000, 1);
+        screenBg.fillRect(sX, sY, sW, sH);
+        screenBg.lineStyle(1, 0x002211, 1);
+        screenBg.strokeRect(sX, sY, sW, sH);
+        container.add(screenBg);
+
+        // ── Screen 1: Text content ──
+        const rawText = (this.cache.text.get('lesson1-text') as string) || '(No lesson content)';
+        const screen1 = this.add.container(0, 0);
+
+        // Terminal prompt header
+        const prompt1 = this.add.text(sX + 10, sY + 8, '> lesson1.md', {
+            fontSize: '9px', fontFamily: 'monospace', color: '#006622', resolution: 2,
         });
-        container.add(cursor);
-        this.tweens.add({ targets: cursor, alpha: 0, duration: 600, yoyo: true, repeat: -1 });
+        screen1.add(prompt1);
 
-        // Main studying text
-        const studyText = this.add.text(monX, monY - 18, '📚 Studying...', {
-            fontSize: '18px', fontFamily: 'PixelFont', color: '#00ff88',
-            resolution: 2, align: 'center'
+        const sep1 = this.add.graphics();
+        sep1.lineStyle(1, 0x003311, 1);
+        sep1.lineBetween(sX + 8, sY + 22, sX + sW - 8, sY + 22);
+        screen1.add(sep1);
+
+        // Lesson body text
+        const lessonTxt = this.add.text(sX + 10, sY + 28, rawText, {
+            fontSize: '13px',
+            fontFamily: 'monospace',
+            color: '#33ff33',
+            resolution: 2,
+            wordWrap: { width: sW - 20 },
+            lineSpacing: 7,
+        });
+        screen1.add(lessonTxt);
+
+        // Blinking block cursor
+        const cursor = this.add.text(sX + 10, sY + 28 + lessonTxt.height + 6, '█', {
+            fontSize: '13px', fontFamily: 'monospace', color: '#33ff33', resolution: 2,
+        });
+        screen1.add(cursor);
+        this.tweens.add({ targets: cursor, alpha: 0, duration: 500, yoyo: true, repeat: -1 });
+
+        // Scanlines on screen 1
+        const scanlines1 = this.add.graphics();
+        scanlines1.fillStyle(0x000000, 0.08);
+        for (let ly = sY; ly < sY + sH; ly += 4) {
+            scanlines1.fillRect(sX, ly, sW, 2);
+        }
+        screen1.add(scanlines1);
+
+        container.add(screen1);
+
+        // ── Screen 2: Image ──
+        const screen2 = this.add.container(0, 0);
+        screen2.setVisible(false);
+
+        const prompt2 = this.add.text(sX + 10, sY + 8, '> lesson1.jpg', {
+            fontSize: '9px', fontFamily: 'monospace', color: '#006622', resolution: 2,
+        });
+        screen2.add(prompt2);
+
+        const sep2 = this.add.graphics();
+        sep2.lineStyle(1, 0x003311, 1);
+        sep2.lineBetween(sX + 8, sY + 22, sX + sW - 8, sY + 22);
+        screen2.add(sep2);
+
+        if (this.textures.exists('lesson1-img')) {
+            const img = this.add.image(sCX, sCY + 12, 'lesson1-img');
+            const scale = Math.min((sW - 16) / img.width, (sH - 44) / img.height);
+            img.setScale(scale);
+            screen2.add(img);
+        } else {
+            screen2.add(this.add.text(sCX, sCY, '(Image not available)', {
+                fontSize: '10px', fontFamily: 'monospace', color: '#444444', resolution: 2,
+            }).setOrigin(0.5));
+        }
+
+        container.add(screen2);
+
+        // ── Navigation bar (inside bezel, below screen) ──
+        const navCY = (sY + sH + (monY + monH / 2)) / 2;
+
+        // Prev button
+        const prevBg = this.add.rectangle(monX - 130, navCY, 100, 24, 0x252525)
+            .setStrokeStyle(1, 0x3a3a3a)
+            .setInteractive({ useHandCursor: true });
+        container.add(prevBg);
+        const prevTxt = this.add.text(monX - 130, navCY, '◀  PREV', {
+            fontSize: '9px', fontFamily: 'monospace', color: '#888888', resolution: 2,
         }).setOrigin(0.5);
-        container.add(studyText);
+        container.add(prevTxt);
 
-        // Sub-text
-        const subText = this.add.text(monX, monY + 14, 'Keep learning & growing!', {
-            fontSize: '10px', fontFamily: 'PixelFont', color: '#4fc3f7',
-            resolution: 2, align: 'center'
+        // Page indicator
+        const pageTxt = this.add.text(monX, navCY, `1 / ${TOTAL_SCREENS}`, {
+            fontSize: '10px', fontFamily: 'monospace', color: '#444444', resolution: 2,
         }).setOrigin(0.5);
-        container.add(subText);
+        container.add(pageTxt);
 
-        // Monitor stand
-        const stand = this.add.rectangle(monX, monY + monH / 2 + 8, 14, 16, 0x3a3a3a);
-        container.add(stand);
-        const base = this.add.rectangle(monX, monY + monH / 2 + 18, 50, 6, 0x3a3a3a);
-        container.add(base);
+        // Next button
+        const nextBg = this.add.rectangle(monX + 130, navCY, 100, 24, 0x252525)
+            .setStrokeStyle(1, 0x3a3a3a)
+            .setInteractive({ useHandCursor: true });
+        container.add(nextBg);
+        const nextTxt = this.add.text(monX + 130, navCY, 'NEXT  ▶', {
+            fontSize: '9px', fontFamily: 'monospace', color: '#888888', resolution: 2,
+        }).setOrigin(0.5);
+        container.add(nextTxt);
 
-        // Stand up button
-        const btnY = monY + monH / 2 + 36;
-        const btnBg = this.add.rectangle(monX, btnY, 130, 28, 0x5D4037);
-        btnBg.setStrokeStyle(2, 0x3E2723);
-        btnBg.setInteractive({ useHandCursor: true });
+        const updateNav = () => {
+            pageTxt.setText(`${currentScreen} / ${TOTAL_SCREENS}`);
+            prevBg.setFillStyle(currentScreen > 1 ? 0x252525 : 0x111111);
+            prevTxt.setColor(currentScreen > 1 ? '#888888' : '#333333');
+            nextBg.setFillStyle(currentScreen < TOTAL_SCREENS ? 0x252525 : 0x111111);
+            nextTxt.setColor(currentScreen < TOTAL_SCREENS ? '#888888' : '#333333');
+        };
+
+        prevBg.on('pointerover', () => { if (currentScreen > 1) prevBg.setFillStyle(0x333333); });
+        prevBg.on('pointerout',  () => updateNav());
+        prevBg.on('pointerdown', () => {
+            if (currentScreen > 1) {
+                currentScreen--;
+                screen1.setVisible(currentScreen === 1);
+                screen2.setVisible(currentScreen === 2);
+                updateNav();
+            }
+        });
+
+        nextBg.on('pointerover', () => { if (currentScreen < TOTAL_SCREENS) nextBg.setFillStyle(0x333333); });
+        nextBg.on('pointerout',  () => updateNav());
+        nextBg.on('pointerdown', () => {
+            if (currentScreen < TOTAL_SCREENS) {
+                currentScreen++;
+                screen1.setVisible(currentScreen === 1);
+                screen2.setVisible(currentScreen === 2);
+                updateNav();
+            }
+        });
+        updateNav();
+
+        // Brand text at bottom of bezel
+        const brandTxt = this.add.text(monX, monY + monH / 2 - 5, 'OVERGUILD PC  ◉', {
+            fontSize: '7px', fontFamily: 'monospace', color: '#2e2e2e', resolution: 2,
+        }).setOrigin(0.5, 1);
+        container.add(brandTxt);
+
+        // ── Monitor stand ──
+        const standTopY = monY + monH / 2;
+        const standG = this.add.graphics();
+        standG.fillStyle(0x1a1a1a, 1);
+        standG.fillRect(monX - 8, standTopY, 16, 20);
+        standG.fillRect(monX - 36, standTopY + 20, 72, 7);
+        standG.lineStyle(1, 0x3c3c3c, 1);
+        standG.strokeRect(monX - 36, standTopY + 20, 72, 7);
+        container.add(standG);
+
+        // ── Stand Up button ──
+        const btnCY = standTopY + 42;
+        const btnBg = this.add.rectangle(monX, btnCY, 140, 30, 0x5D4037)
+            .setStrokeStyle(2, 0x3E2723)
+            .setInteractive({ useHandCursor: true });
         container.add(btnBg);
-
-        const btnText = this.add.text(monX, btnY, '🚶 Stand Up', {
-            fontSize: '11px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2
+        const btnTxt = this.add.text(monX, btnCY, '🚶 Stand Up', {
+            fontSize: '11px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5);
-        container.add(btnText);
+        container.add(btnTxt);
 
         btnBg.on('pointerover',  () => btnBg.setFillStyle(0x795548));
         btnBg.on('pointerout',   () => btnBg.setFillStyle(0x5D4037));

@@ -257,6 +257,11 @@ export class Preloader extends Scene
         this.load.image('classroom-board', `objects/class-room/board.png${this.ASSET_VERSION}`);
         this.load.spritesheet('teacher1', `objects/class-room/teacher1.png${this.ASSET_VERSION}`, { frameWidth: 125, frameHeight: 125 });
         this.load.spritesheet('teacher2', `objects/class-room/teacher2.png${this.ASSET_VERSION}`, { frameWidth: 125, frameHeight: 125 });
+        // Lesson files are in public/lesson/ (not under assets/)
+        this.load.setPath('');
+        this.load.text('lesson1-text', 'lesson/lesson1/text.md');
+        this.load.image('lesson1-img', 'lesson/lesson1/lesson1.jpg');
+        this.load.setPath('assets');
 
         // Check-in icon
         this.load.image('icon-checkin', 'icons/checkin.png');
