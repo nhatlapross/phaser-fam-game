@@ -34,6 +34,7 @@
         "@aptos-labs/ts-sdk": "^5.2.1",
         "@google/genai": "^1.38.0",
         "@imtbl/sdk": "^2.12.3",
+        "@privy-io/react-auth": "^3.15.0",
         "@reown/appkit": "^1.8.14",
         "@reown/appkit-adapter-wagmi": "^1.8.14",
         "@shelby-protocol/react": "^0.0.4",
