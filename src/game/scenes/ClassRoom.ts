@@ -16,6 +16,8 @@ import { UserService } from '../UserService';
 import { useGameState } from '../hooks/useGameState';
 import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacterKey } from '../config/CharacterConfig';
 import { DynamicShadow } from '../objects/DynamicShadow';
+import { ClassroomChatService, LessonResponse } from '../ClassroomChatService';
+import { marked } from 'marked';
 
 /**
  * ClassRoom Scene - An indoor classroom space
@@ -75,6 +77,20 @@ export class ClassRoom extends Scene {
         'Well done! 👏', 'Focus please!', 'Great work!',
         'Keep it up! 💪', 'Raise your hand!', 'Listen up!',
     ];
+
+    // Teacher Chat Dialog
+    private chatDialogOpen: boolean = false;
+    private chatDialogContainer: Phaser.GameObjects.Container | null = null;
+    private chatDialogOverlay: Phaser.GameObjects.Rectangle | null = null;
+    private chatInputElement: HTMLInputElement | null = null;
+    private chatHistoryElement: HTMLDivElement | null = null;
+    private chatHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+    private chatScrollY: number = 0;
+    private chatIsLoading: boolean = false;
+    private chatService: ClassroomChatService = ClassroomChatService.getInstance();
+    private activeNpcKey: string = '';
+    private readonly NPC_INTERACTION_DISTANCE = 40;
+    private lessonContentElement: HTMLDivElement | null = null;
 
     // Managers
     private soundManager!: SoundManager;
@@ -440,225 +456,400 @@ export class ClassRoom extends Scene {
 
     /** Shows a large CRT-style 2-screen lesson viewer in screen space. */
     private showStudyingOverlay() {
-        const W = this.scale.width;   // 960
-        const H = this.scale.height;  // 540
-        let currentScreen = 1;
-        const TOTAL_SCREENS = 2;
+            const W = this.scale.width;
+            const H = this.scale.height;
+            let currentScreen = 1;
+            const TOTAL_SCREENS = 2;
 
-        const container = this.add.container(0, 0);
-        container.setDepth(5300);
-        this.cameras.main.ignore(container);
+            const container = this.add.container(0, 0);
+            container.setDepth(5300);
+            this.cameras.main.ignore(container);
 
-        // Dark backdrop
-        const backdrop = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.88);
-        backdrop.setInteractive();
-        container.add(backdrop);
+            // Dark backdrop
+            const backdrop = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.88);
+            backdrop.setInteractive();
+            container.add(backdrop);
 
-        // ── Monitor dimensions ──
-        const monW = 560, monH = 380;
-        const monX = W / 2, monY = H / 2 - 15;
+            // Monitor dimensions
+            const monW = 560, monH = 380;
+            const monX = W / 2, monY = H / 2 - 15;
 
-        // Bezel (outer monitor frame)
-        const bezel = this.add.graphics();
-        bezel.fillStyle(0x1a1a1a, 1);
-        bezel.fillRoundedRect(monX - monW / 2, monY - monH / 2, monW, monH, 10);
-        bezel.lineStyle(2, 0x3c3c3c, 1);
-        bezel.strokeRoundedRect(monX - monW / 2, monY - monH / 2, monW, monH, 10);
-        container.add(bezel);
+            // Bezel
+            const bezel = this.add.graphics();
+            bezel.fillStyle(0x1a1a1a, 1);
+            bezel.fillRoundedRect(monX - monW / 2, monY - monH / 2, monW, monH, 10);
+            bezel.lineStyle(2, 0x3c3c3c, 1);
+            bezel.strokeRoundedRect(monX - monW / 2, monY - monH / 2, monW, monH, 10);
+            container.add(bezel);
 
-        // Inner bezel edge
-        const bezelInner = this.add.graphics();
-        bezelInner.lineStyle(1, 0x2a2a2a, 1);
-        bezelInner.strokeRoundedRect(monX - monW / 2 + 3, monY - monH / 2 + 3, monW - 6, monH - 6, 8);
-        container.add(bezelInner);
+            const bezelInner = this.add.graphics();
+            bezelInner.lineStyle(1, 0x2a2a2a, 1);
+            bezelInner.strokeRoundedRect(monX - monW / 2 + 3, monY - monH / 2 + 3, monW - 6, monH - 6, 8);
+            container.add(bezelInner);
 
-        // ── Screen glass ──
-        const pad = 18;
-        const sX = monX - monW / 2 + pad;
-        const sY = monY - monH / 2 + pad + 4;
-        const sW = monW - pad * 2;         // 524
-        const sH = monH - pad * 2 - 50;   // 294
-        const sCX = sX + sW / 2;
-        const sCY = sY + sH / 2;
+            // Screen glass area
+            const pad = 18;
+            const sX = monX - monW / 2 + pad;
+            const sY = monY - monH / 2 + pad + 4;
+            const sW = monW - pad * 2;
+            const sH = monH - pad * 2 - 50;
 
-        const screenBg = this.add.graphics();
-        screenBg.fillStyle(0x000000, 1);
-        screenBg.fillRect(sX, sY, sW, sH);
-        screenBg.lineStyle(1, 0x002211, 1);
-        screenBg.strokeRect(sX, sY, sW, sH);
-        container.add(screenBg);
+            const screenBg = this.add.graphics();
+            screenBg.fillStyle(0x000000, 1);
+            screenBg.fillRect(sX, sY, sW, sH);
+            screenBg.lineStyle(1, 0x002211, 1);
+            screenBg.strokeRect(sX, sY, sW, sH);
+            container.add(screenBg);
 
-        // ── Screen 1: Text content ──
-        const rawText = (this.cache.text.get('lesson1-text') as string) || '(No lesson content)';
-        const screen1 = this.add.container(0, 0);
+            // Screen 1: TOC with typewriter effect (Phaser text)
+            const screen1 = this.add.container(0, 0);
+            const prompt1 = this.add.text(sX + 10, sY + 8, '> loading...', {
+                fontSize: '9px', fontFamily: 'monospace', color: '#006622', resolution: 2,
+            });
+            screen1.add(prompt1);
 
-        // Terminal prompt header
-        const prompt1 = this.add.text(sX + 10, sY + 8, '> lesson1.md', {
-            fontSize: '9px', fontFamily: 'monospace', color: '#006622', resolution: 2,
-        });
-        screen1.add(prompt1);
+            const sep1 = this.add.graphics();
+            sep1.lineStyle(1, 0x003311, 1);
+            sep1.lineBetween(sX + 8, sY + 22, sX + sW - 8, sY + 22);
+            screen1.add(sep1);
 
-        const sep1 = this.add.graphics();
-        sep1.lineStyle(1, 0x003311, 1);
-        sep1.lineBetween(sX + 8, sY + 22, sX + sW - 8, sY + 22);
-        screen1.add(sep1);
+            // Scrollable content sub-container for title + TOC + cursor
+            const scrollContent = this.add.container(0, 0);
+            let tocScrollY = 0;
+            const contentTopY = sY + 26; // below prompt+separator
+            const scrollableH = sH - 26; // visible scroll area height
 
-        // Lesson body text
-        const lessonTxt = this.add.text(sX + 10, sY + 28, rawText, {
-            fontSize: '13px',
-            fontFamily: 'monospace',
-            color: '#33ff33',
-            resolution: 2,
-            wordWrap: { width: sW - 20 },
-            lineSpacing: 7,
-        });
-        screen1.add(lessonTxt);
+            // Title text (centered, bold) — populated after API call
+            const titleText = this.add.text(sX + sW / 2, sY + 38, '', {
+                fontSize: '15px', fontFamily: 'monospace', color: '#66ff66',
+                resolution: 2, fontStyle: 'bold', wordWrap: { width: sW - 30 },
+                align: 'center',
+            }).setOrigin(0.5, 0);
+            scrollContent.add(titleText);
 
-        // Blinking block cursor
-        const cursor = this.add.text(sX + 10, sY + 28 + lessonTxt.height + 6, '█', {
-            fontSize: '13px', fontFamily: 'monospace', color: '#33ff33', resolution: 2,
-        });
-        screen1.add(cursor);
-        this.tweens.add({ targets: cursor, alpha: 0, duration: 500, yoyo: true, repeat: -1 });
+            // TOC items — starts below title, populated after API call
+            const tocText = this.add.text(sX + 10, sY + 68, '', {
+                fontSize: '13px', fontFamily: 'monospace', color: '#33ff33',
+                resolution: 2, wordWrap: { width: sW - 20 }, lineSpacing: 7,
+            });
+            scrollContent.add(tocText);
 
-        // Scanlines on screen 1
-        const scanlines1 = this.add.graphics();
-        scanlines1.fillStyle(0x000000, 0.08);
-        for (let ly = sY; ly < sY + sH; ly += 4) {
-            scanlines1.fillRect(sX, ly, sW, 2);
-        }
-        screen1.add(scanlines1);
+            // Blinking cursor
+            const cursor = this.add.text(sX + 10, sY + 68, '█', {
+                fontSize: '13px', fontFamily: 'monospace', color: '#33ff33', resolution: 2,
+            });
+            scrollContent.add(cursor);
+            this.tweens.add({ targets: cursor, alpha: 0, duration: 500, yoyo: true, repeat: -1 });
 
-        container.add(screen1);
+            screen1.add(scrollContent);
 
-        // ── Screen 2: Image ──
-        const screen2 = this.add.container(0, 0);
-        screen2.setVisible(false);
+            // Geometry mask for scrollable content (clips to area below prompt+separator)
+            const scrollMask = this.add.graphics();
+            scrollMask.fillStyle(0xffffff);
+            scrollMask.fillRect(sX, contentTopY, sW, scrollableH);
+            scrollMask.setVisible(false);
+            this.cameras.main.ignore(scrollMask);
+            scrollContent.setMask(new Phaser.Display.Masks.GeometryMask(this, scrollMask));
+            container.setData('scrollMask', scrollMask);
 
-        const prompt2 = this.add.text(sX + 10, sY + 8, '> lesson1.jpg', {
-            fontSize: '9px', fontFamily: 'monospace', color: '#006622', resolution: 2,
-        });
-        screen2.add(prompt2);
+            // Black header cover + re-add prompt/separator on top so scroll content can't bleed up
+            const headerCover = this.add.graphics();
+            headerCover.fillStyle(0x000000, 1);
+            headerCover.fillRect(sX, sY, sW, 26);
+            screen1.add(headerCover);
+            screen1.add(prompt1);
+            screen1.add(sep1);
 
-        const sep2 = this.add.graphics();
-        sep2.lineStyle(1, 0x003311, 1);
-        sep2.lineBetween(sX + 8, sY + 22, sX + sW - 8, sY + 22);
-        screen2.add(sep2);
+            // Mouse wheel scroll for screen1
+            const scrollScreen1 = (dy: number) => {
+                if (!screen1.visible) return;
+                // Total content height = bottom of tocText + cursor relative to contentTopY
+                const contentBottom = (tocText.y + tocText.height + 20) - contentTopY;
+                const maxScroll = Math.max(0, contentBottom - scrollableH);
+                tocScrollY = Phaser.Math.Clamp(tocScrollY + dy * 20, 0, maxScroll);
+                scrollContent.setY(-tocScrollY);
+            };
+            this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gos: any[], _dx: number, dy: number) => {
+                if (this.isSitting && screen1.visible) scrollScreen1(dy > 0 ? 1 : -1);
+            });
 
-        if (this.textures.exists('lesson1-img')) {
-            const img = this.add.image(sCX, sCY + 12, 'lesson1-img');
-            const scale = Math.min((sW - 16) / img.width, (sH - 44) / img.height);
-            img.setScale(scale);
-            screen2.add(img);
-        } else {
-            screen2.add(this.add.text(sCX, sCY, '(Image not available)', {
+            // Scanlines (not scrollable — stays fixed over screen)
+            const scanlines1 = this.add.graphics();
+            scanlines1.fillStyle(0x000000, 0.08);
+            for (let ly = sY; ly < sY + sH; ly += 4) {
+                scanlines1.fillRect(sX, ly, sW, 2);
+            }
+            screen1.add(scanlines1);
+
+            container.add(screen1);
+
+            // Screen 2: Markdown content (HTML overlay) — hidden initially
+            const screen2 = this.add.container(0, 0);
+            screen2.setVisible(false);
+
+            const prompt2 = this.add.text(sX + 10, sY + 8, '> content.md', {
+                fontSize: '9px', fontFamily: 'monospace', color: '#006622', resolution: 2,
+            });
+            screen2.add(prompt2);
+
+            const sep2 = this.add.graphics();
+            sep2.lineStyle(1, 0x003311, 1);
+            sep2.lineBetween(sX + 8, sY + 22, sX + sW - 8, sY + 22);
+            screen2.add(sep2);
+
+            // Scanlines for screen 2
+            const scanlines2 = this.add.graphics();
+            scanlines2.fillStyle(0x000000, 0.06);
+            for (let ly = sY; ly < sY + sH; ly += 4) {
+                scanlines2.fillRect(sX, ly, sW, 2);
+            }
+            screen2.add(scanlines2);
+            container.add(screen2);
+
+            // Navigation bar
+            const navCY = (sY + sH + (monY + monH / 2)) / 2;
+
+            const prevBg = this.add.rectangle(monX - 130, navCY, 100, 24, 0x252525)
+                .setStrokeStyle(1, 0x3a3a3a).setInteractive({ useHandCursor: true });
+            container.add(prevBg);
+            const prevTxt = this.add.text(monX - 130, navCY, '◀  PREV', {
+                fontSize: '9px', fontFamily: 'monospace', color: '#888888', resolution: 2,
+            }).setOrigin(0.5);
+            container.add(prevTxt);
+
+            const pageTxt = this.add.text(monX, navCY, `1 / ${TOTAL_SCREENS}`, {
                 fontSize: '10px', fontFamily: 'monospace', color: '#444444', resolution: 2,
-            }).setOrigin(0.5));
+            }).setOrigin(0.5);
+            container.add(pageTxt);
+
+            const nextBg = this.add.rectangle(monX + 130, navCY, 100, 24, 0x252525)
+                .setStrokeStyle(1, 0x3a3a3a).setInteractive({ useHandCursor: true });
+            container.add(nextBg);
+            const nextTxt = this.add.text(monX + 130, navCY, 'NEXT  ▶', {
+                fontSize: '9px', fontFamily: 'monospace', color: '#888888', resolution: 2,
+            }).setOrigin(0.5);
+            container.add(nextTxt);
+
+            // Create HTML div for screen 2 content (positioned over the screen area)
+            const canvas = this.game.canvas;
+            const canvasRect = canvas.getBoundingClientRect();
+            const scaleXR = canvasRect.width / W;
+            const scaleYR = canvasRect.height / H;
+            const contentTop = sY + 26;
+            const contentH = sH - 28;
+
+            this.lessonContentElement = document.createElement('div');
+            this.lessonContentElement.style.cssText = `
+                position: fixed;
+                left: ${canvasRect.left + sX * scaleXR}px;
+                top: ${canvasRect.top + contentTop * scaleYR}px;
+                width: ${sW * scaleXR}px;
+                height: ${contentH * scaleYR}px;
+                overflow-y: auto;
+                padding: 8px 12px;
+                box-sizing: border-box;
+                z-index: 10000;
+                font-family: monospace;
+                font-size: ${Math.max(11, 13 * scaleYR)}px;
+                line-height: 1.55;
+                color: #33ff33;
+                background: transparent;
+                display: none;
+                scrollbar-width: thin;
+                scrollbar-color: #006622 transparent;
+            `;
+
+            // Inject markdown styles for lesson content
+            const lessonStyle = document.createElement('style');
+            lessonStyle.textContent = `
+                .lesson-md h1, .lesson-md h2, .lesson-md h3 {
+                    color: #66ff66; margin: 8px 0 4px; font-weight: 600;
+                }
+                .lesson-md h1 { font-size: 1.2em; }
+                .lesson-md h2 { font-size: 1.08em; color: #44dd44; }
+                .lesson-md h3 { font-size: 1em; color: #33cc33; }
+                .lesson-md p { margin: 3px 0; }
+                .lesson-md strong { color: #88ff88; }
+                .lesson-md em { color: #55dd55; font-style: italic; }
+                .lesson-md code {
+                    background: #0a1a0a; color: #66ff66; padding: 1px 4px;
+                    border-radius: 3px; font-family: monospace; font-size: 0.92em;
+                }
+                .lesson-md pre {
+                    background: #050f05; border: 1px solid #003311; border-radius: 4px;
+                    padding: 6px 8px; overflow-x: auto; margin: 4px 0;
+                }
+                .lesson-md pre code { background: none; padding: 0; }
+                .lesson-md ul, .lesson-md ol { padding-left: 18px; margin: 3px 0; }
+                .lesson-md li { margin: 2px 0; }
+                .lesson-md hr { border: none; border-top: 1px solid #003311; margin: 6px 0; }
+                .lesson-md a { color: #44cc44; text-decoration: underline; }
+                .lesson-md blockquote {
+                    border-left: 3px solid #006622; padding-left: 8px; margin: 4px 0;
+                    color: #44aa44;
+                }
+                .lesson-md table { border-collapse: collapse; margin: 4px 0; width: 100%; }
+                .lesson-md th, .lesson-md td {
+                    border: 1px solid #003311; padding: 3px 6px; font-size: 0.9em;
+                }
+                .lesson-md th { background: #0a1a0a; color: #66ff66; }
+            `;
+            this.lessonContentElement.appendChild(lessonStyle);
+            document.body.appendChild(this.lessonContentElement);
+
+            const showScreen = (num: number) => {
+                screen1.setVisible(num === 1);
+                screen2.setVisible(num === 2);
+                if (this.lessonContentElement) {
+                    this.lessonContentElement.style.display = num === 2 ? 'block' : 'none';
+                }
+            };
+
+            const updateNav = () => {
+                pageTxt.setText(`${currentScreen} / ${TOTAL_SCREENS}`);
+                prevBg.setFillStyle(currentScreen > 1 ? 0x252525 : 0x111111);
+                prevTxt.setColor(currentScreen > 1 ? '#888888' : '#333333');
+                nextBg.setFillStyle(currentScreen < TOTAL_SCREENS ? 0x252525 : 0x111111);
+                nextTxt.setColor(currentScreen < TOTAL_SCREENS ? '#888888' : '#333333');
+            };
+
+            prevBg.on('pointerover', () => { if (currentScreen > 1) prevBg.setFillStyle(0x333333); });
+            prevBg.on('pointerout', () => updateNav());
+            prevBg.on('pointerdown', () => {
+                if (currentScreen > 1) { currentScreen--; showScreen(currentScreen); updateNav(); }
+            });
+
+            nextBg.on('pointerover', () => { if (currentScreen < TOTAL_SCREENS) nextBg.setFillStyle(0x333333); });
+            nextBg.on('pointerout', () => updateNav());
+            nextBg.on('pointerdown', () => {
+                if (currentScreen < TOTAL_SCREENS) { currentScreen++; showScreen(currentScreen); updateNav(); }
+            });
+            updateNav();
+
+            // Brand text
+            const brandTxt = this.add.text(monX, monY + monH / 2 - 5, 'OVERGUILD PC  ◉', {
+                fontSize: '7px', fontFamily: 'monospace', color: '#2e2e2e', resolution: 2,
+            }).setOrigin(0.5, 1);
+            container.add(brandTxt);
+
+            // Monitor stand
+            const standTopY = monY + monH / 2;
+            const standG = this.add.graphics();
+            standG.fillStyle(0x1a1a1a, 1);
+            standG.fillRect(monX - 8, standTopY, 16, 20);
+            standG.fillRect(monX - 36, standTopY + 20, 72, 7);
+            standG.lineStyle(1, 0x3c3c3c, 1);
+            standG.strokeRect(monX - 36, standTopY + 20, 72, 7);
+            container.add(standG);
+
+            // Stand Up button
+            const btnCY = standTopY + 42;
+            const btnBg = this.add.rectangle(monX, btnCY, 140, 30, 0x5D4037)
+                .setStrokeStyle(2, 0x3E2723).setInteractive({ useHandCursor: true });
+            container.add(btnBg);
+            const btnTxt = this.add.text(monX, btnCY, '🚶 Stand Up', {
+                fontSize: '11px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2,
+            }).setOrigin(0.5);
+            container.add(btnTxt);
+
+            btnBg.on('pointerover', () => btnBg.setFillStyle(0x795548));
+            btnBg.on('pointerout', () => btnBg.setFillStyle(0x5D4037));
+            btnBg.on('pointerdown', () => this.stopStudying());
+
+            this.studyingOverlay = container;
+
+            // Fetch lesson from API and populate screens
+            this.chatService.getLatestLesson().then((lesson: LessonResponse) => {
+                if (!this.isSitting) return; // user already stood up
+
+                if (lesson.success && lesson.toc && lesson.content) {
+                    const fileName = `${lesson.slug || 'lesson'}.md`;
+                    prompt1.setText(`> ${fileName}`);
+                    prompt2.setText(`> ${fileName}`);
+
+                    // Set title (centered, bold — no typewriter)
+                    titleText.setText(lesson.title || 'Lesson');
+
+                    // Build TOC text for typewriter (items only)
+                    const tocLines = lesson.toc.map((item) => `• ${item}`);
+                    const fullTocText = tocLines.join('\n');
+
+                    // Typewriter effect on page 1
+                    // Cursor leads text: cursor moves first, then character appears behind it
+                    const measureText = this.add.text(-9999, -9999, '', {
+                        fontSize: '13px', fontFamily: 'monospace', resolution: 2,
+                    }).setVisible(false);
+                    this.cameras.main.ignore(measureText);
+
+                    let charIndex = 0;
+                    // Two-phase per character: phase 0 = move cursor, phase 1 = reveal char
+                    let phase = 0;
+                    const typeTimer = this.time.addEvent({
+                        delay: 15,
+                        repeat: fullTocText.length * 2 - 1,
+                        callback: () => {
+                            if (phase === 0) {
+                                // Phase 0: move cursor to where next char will appear
+                                const nextText = fullTocText.substring(0, charIndex + 1);
+                                const nextLines = nextText.split('\n');
+                                const nextLastLine = nextLines[nextLines.length - 1];
+                                measureText.setText(nextLastLine);
+                                const nextLineW = measureText.width;
+
+                                // If next char is newline, cursor goes to start of new line
+                                const isNewline = fullTocText[charIndex] === '\n';
+                                const currentText = fullTocText.substring(0, charIndex);
+                                const currentLines = currentText.split('\n');
+                                const lineCount = isNewline ? currentLines.length + 1 : nextLines.length;
+
+                                // Calculate Y based on current tocText height per line
+                                const tempLineCount = Math.max(currentLines.length, 1);
+                                const lineH = charIndex > 0 ? tocText.height / tempLineCount : 20;
+                                const cursorY = tocText.y + (lineCount - 1) * lineH;
+                                const cursorX = isNewline ? 0 : nextLineW;
+                                cursor.setPosition(sX + 10 + cursorX, cursorY);
+
+                                phase = 1;
+                            } else {
+                                // Phase 1: reveal the character
+                                charIndex++;
+                                tocText.setText(fullTocText.substring(0, charIndex));
+                                phase = 0;
+                            }
+                        },
+                    });
+                    // Clean up measure text after typewriter finishes
+                    this.time.delayedCall(15 * fullTocText.length * 2 + 200, () => measureText.destroy());
+
+                    // Populate screen 2 HTML with full markdown content
+                    if (this.lessonContentElement) {
+                        const styleTag = this.lessonContentElement.querySelector('style');
+                        const styleHTML = styleTag ? styleTag.outerHTML : '';
+                        const contentHTML = marked.parse(lesson.content, { async: false, breaks: true }) as string;
+                        this.lessonContentElement.innerHTML = styleHTML + `<div class="lesson-md">${contentHTML}</div>`;
+                    }
+                } else {
+                    prompt1.setText('> error');
+                    tocText.setText(lesson.error || 'No lessons found.');
+                    cursor.setPosition(sX + 10, sY + 28 + tocText.height + 6);
+                }
+            });
         }
-
-        container.add(screen2);
-
-        // ── Navigation bar (inside bezel, below screen) ──
-        const navCY = (sY + sH + (monY + monH / 2)) / 2;
-
-        // Prev button
-        const prevBg = this.add.rectangle(monX - 130, navCY, 100, 24, 0x252525)
-            .setStrokeStyle(1, 0x3a3a3a)
-            .setInteractive({ useHandCursor: true });
-        container.add(prevBg);
-        const prevTxt = this.add.text(monX - 130, navCY, '◀  PREV', {
-            fontSize: '9px', fontFamily: 'monospace', color: '#888888', resolution: 2,
-        }).setOrigin(0.5);
-        container.add(prevTxt);
-
-        // Page indicator
-        const pageTxt = this.add.text(monX, navCY, `1 / ${TOTAL_SCREENS}`, {
-            fontSize: '10px', fontFamily: 'monospace', color: '#444444', resolution: 2,
-        }).setOrigin(0.5);
-        container.add(pageTxt);
-
-        // Next button
-        const nextBg = this.add.rectangle(monX + 130, navCY, 100, 24, 0x252525)
-            .setStrokeStyle(1, 0x3a3a3a)
-            .setInteractive({ useHandCursor: true });
-        container.add(nextBg);
-        const nextTxt = this.add.text(monX + 130, navCY, 'NEXT  ▶', {
-            fontSize: '9px', fontFamily: 'monospace', color: '#888888', resolution: 2,
-        }).setOrigin(0.5);
-        container.add(nextTxt);
-
-        const updateNav = () => {
-            pageTxt.setText(`${currentScreen} / ${TOTAL_SCREENS}`);
-            prevBg.setFillStyle(currentScreen > 1 ? 0x252525 : 0x111111);
-            prevTxt.setColor(currentScreen > 1 ? '#888888' : '#333333');
-            nextBg.setFillStyle(currentScreen < TOTAL_SCREENS ? 0x252525 : 0x111111);
-            nextTxt.setColor(currentScreen < TOTAL_SCREENS ? '#888888' : '#333333');
-        };
-
-        prevBg.on('pointerover', () => { if (currentScreen > 1) prevBg.setFillStyle(0x333333); });
-        prevBg.on('pointerout',  () => updateNav());
-        prevBg.on('pointerdown', () => {
-            if (currentScreen > 1) {
-                currentScreen--;
-                screen1.setVisible(currentScreen === 1);
-                screen2.setVisible(currentScreen === 2);
-                updateNav();
-            }
-        });
-
-        nextBg.on('pointerover', () => { if (currentScreen < TOTAL_SCREENS) nextBg.setFillStyle(0x333333); });
-        nextBg.on('pointerout',  () => updateNav());
-        nextBg.on('pointerdown', () => {
-            if (currentScreen < TOTAL_SCREENS) {
-                currentScreen++;
-                screen1.setVisible(currentScreen === 1);
-                screen2.setVisible(currentScreen === 2);
-                updateNav();
-            }
-        });
-        updateNav();
-
-        // Brand text at bottom of bezel
-        const brandTxt = this.add.text(monX, monY + monH / 2 - 5, 'OVERGUILD PC  ◉', {
-            fontSize: '7px', fontFamily: 'monospace', color: '#2e2e2e', resolution: 2,
-        }).setOrigin(0.5, 1);
-        container.add(brandTxt);
-
-        // ── Monitor stand ──
-        const standTopY = monY + monH / 2;
-        const standG = this.add.graphics();
-        standG.fillStyle(0x1a1a1a, 1);
-        standG.fillRect(monX - 8, standTopY, 16, 20);
-        standG.fillRect(monX - 36, standTopY + 20, 72, 7);
-        standG.lineStyle(1, 0x3c3c3c, 1);
-        standG.strokeRect(monX - 36, standTopY + 20, 72, 7);
-        container.add(standG);
-
-        // ── Stand Up button ──
-        const btnCY = standTopY + 42;
-        const btnBg = this.add.rectangle(monX, btnCY, 140, 30, 0x5D4037)
-            .setStrokeStyle(2, 0x3E2723)
-            .setInteractive({ useHandCursor: true });
-        container.add(btnBg);
-        const btnTxt = this.add.text(monX, btnCY, '🚶 Stand Up', {
-            fontSize: '11px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2,
-        }).setOrigin(0.5);
-        container.add(btnTxt);
-
-        btnBg.on('pointerover',  () => btnBg.setFillStyle(0x795548));
-        btnBg.on('pointerout',   () => btnBg.setFillStyle(0x5D4037));
-        btnBg.on('pointerdown',  () => this.stopStudying());
-
-        this.studyingOverlay = container;
-    }
 
     /** Removes the studying overlay and restores player movement. */
     private stopStudying() {
-        if (!this.isSitting) return;
-        this.studyingOverlay?.destroy();
-        this.studyingOverlay = null;
-        this.isSitting = false;
-    }
+            if (!this.isSitting) return;
+            // Clean up scroll mask
+            const scrollMask = this.studyingOverlay?.getData('scrollMask') as Phaser.GameObjects.Graphics | undefined;
+            if (scrollMask) scrollMask.destroy();
+            this.studyingOverlay?.destroy();
+            this.studyingOverlay = null;
+            if (this.lessonContentElement) {
+                this.lessonContentElement.remove();
+                this.lessonContentElement = null;
+            }
+            this.isSitting = false;
+        }
 
     /**
      * Creates the exit door at the bottom-center of the classroom.
@@ -1115,6 +1306,19 @@ export class ClassRoom extends Scene {
                 chatTimeLeft: 0,
                 nextChatIn:   Phaser.Math.Between(2000, 5000),
             });
+
+            // Make NPC clickable to open chat dialog
+            sprite.setInteractive({ useHandCursor: true });
+            sprite.on('pointerdown', () => {
+                const dx = this.player.x - sprite.x;
+                const dy = this.player.y - sprite.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist <= this.NPC_INTERACTION_DISTANCE) {
+                    this.openTeacherChatDialog(cfg.key);
+                } else {
+                    this.showToastMessage('Move closer to talk!', 0xFF9800);
+                }
+            });
         }
     }
 
@@ -1261,13 +1465,406 @@ export class ClassRoom extends Scene {
         });
     }
 
+    // ─── Teacher Chat Dialog ──────────────────────────────────────────────────
+
+    private openTeacherChatDialog(npcKey: string) {
+            if (this.chatDialogOpen || this.isSitting) return;
+            this.chatDialogOpen = true;
+            this.activeNpcKey = npcKey;
+            this.chatHistory = [];
+            this.chatScrollY = 0;
+
+            // Disable Phaser keyboard for HTML input
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = false;
+            }
+
+            const W = this.scale.width;
+            const H = this.scale.height;
+            const modalW = 320;
+            const modalH = 300;
+            const modalX = W / 2;
+            const modalY = H / 2;
+
+            // Dark overlay
+            this.chatDialogOverlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.55);
+            this.chatDialogOverlay.setDepth(6000);
+            this.chatDialogOverlay.setInteractive();
+            this.chatDialogOverlay.on('pointerdown', () => this.closeTeacherChatDialog());
+            this.cameras.main?.ignore(this.chatDialogOverlay);
+
+            this.chatDialogContainer = this.add.container(modalX, modalY);
+            this.chatDialogContainer.setDepth(6100);
+
+            // Modal background
+            const bg = this.add.rectangle(0, 0, modalW, modalH, 0x1a1a2e, 0.97);
+            bg.setStrokeStyle(2, 0x3949ab);
+            bg.setInteractive();
+
+            // Header bar
+            const npcName = npcKey === 'teacher1' ? 'Teacher' : 'Mentor';
+            const npcIcon = npcKey === 'teacher1' ? '📚' : '🧑‍🏫';
+            const headerBg = this.add.rectangle(0, -modalH / 2 + 22, modalW, 44, 0x283593, 0.95);
+
+            const statusDot = this.add.circle(-modalW / 2 + 20, -modalH / 2 + 22, 4, 0x4caf50);
+            const headerText = this.add.text(-modalW / 2 + 30, -modalH / 2 + 22, `${npcIcon} ${npcName}`, {
+                fontSize: '12px', fontFamily: 'PixelFont', color: '#c5cae9', resolution: 2,
+            }).setOrigin(0, 0.5);
+
+            // Close button
+            const closeBtn = this.add.text(modalW / 2 - 20, -modalH / 2 + 22, '✕', {
+                fontSize: '14px', color: '#ef5350', resolution: 2,
+            }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            closeBtn.on('pointerdown', () => this.closeTeacherChatDialog());
+            closeBtn.on('pointerover', () => closeBtn.setColor('#ff8a80'));
+            closeBtn.on('pointerout', () => closeBtn.setColor('#ef5350'));
+
+            // Chat history area (Phaser bg only — content rendered in HTML div)
+            const historyH = 180;
+            const historyY = 10;
+            const historyBg = this.add.rectangle(0, historyY, modalW - 14, historyH, 0x0d0d1a, 0.85);
+            historyBg.setStrokeStyle(1, 0x283593);
+
+            // Input area
+            const inputAreaY = modalH / 2 - 30;
+            const sendBtnW = 36;
+            const inputBg = this.add.rectangle(-sendBtnW / 2, inputAreaY, modalW - 14 - sendBtnW - 4, 30, 0x1a237e, 0.9);
+            inputBg.setStrokeStyle(1, 0x3949ab);
+
+            // Arrow send button
+            const sendBtnX = modalW / 2 - 10 - sendBtnW / 2;
+            const sendBtn = this.add.rectangle(sendBtnX, inputAreaY, sendBtnW, 30, 0x3949ab, 1);
+            sendBtn.setStrokeStyle(1, 0x5c6bc0);
+            const sendText = this.add.text(sendBtnX, inputAreaY, '➤', {
+                fontSize: '13px', color: '#c5cae9', resolution: 2,
+            }).setOrigin(0.5);
+            sendBtn.setInteractive({ useHandCursor: true });
+            sendBtn.on('pointerover', () => sendBtn.setFillStyle(0x5c6bc0));
+            sendBtn.on('pointerout', () => sendBtn.setFillStyle(0x3949ab));
+            sendBtn.on('pointerdown', () => this.sendTeacherChatMessage());
+
+            // Loading indicator
+            const loadingText = this.add.text(0, inputAreaY - 20, '', {
+                fontSize: '8px', fontFamily: 'monospace', color: '#7986cb', resolution: 2,
+            }).setOrigin(0.5);
+
+            this.chatDialogContainer.add([
+                bg, headerBg, statusDot, headerText, closeBtn,
+                historyBg,
+                inputBg, sendBtn, sendText, loadingText,
+            ]);
+            this.cameras.main?.ignore(this.chatDialogContainer);
+
+            this.chatDialogContainer.setData('loadingText', loadingText);
+            this.chatDialogContainer.setData('modalW', modalW);
+            this.chatDialogContainer.setData('modalH', modalH);
+            this.chatDialogContainer.setData('historyH', historyH);
+            this.chatDialogContainer.setData('historyY', historyY);
+
+            // Create HTML chat history div (rendered with marked)
+            this.createChatHistoryElement(modalX, modalY, modalW, historyH, historyY);
+
+            // Create HTML input
+            this.createTeacherChatInput(modalX, modalY, modalW, modalH, inputAreaY, sendBtnW);
+
+            // Show welcome message
+            const welcomeMsg = npcKey === 'teacher1'
+                ? 'Hello! I\'m your **Teacher**. Ask me anything about today\'s lesson! 📖'
+                : 'Hey! I\'m the **Mentor**. Need help building something? 🛠️';
+            this.chatHistory.push({ role: 'assistant', content: welcomeMsg });
+            this.updateChatHistoryDisplay();
+        }
+
+    private createChatHistoryElement(modalX: number, modalY: number, modalW: number, historyH: number, historyY: number) {
+        if (this.chatHistoryElement) {
+            this.chatHistoryElement.remove();
+            this.chatHistoryElement = null;
+        }
+
+        const canvas = this.game.canvas;
+        const canvasRect = canvas.getBoundingClientRect();
+        const scaleX = canvasRect.width / this.scale.width;
+        const scaleY = canvasRect.height / this.scale.height;
+
+        const divW = (modalW - 14) * scaleX;
+        const divH = historyH * scaleY;
+        const divX = canvasRect.left + (modalX - (modalW - 14) / 2) * scaleX;
+        const divY = canvasRect.top + (modalY + historyY - historyH / 2) * scaleY;
+
+        this.chatHistoryElement = document.createElement('div');
+        this.chatHistoryElement.style.cssText = `
+            position: fixed;
+            left: ${divX}px;
+            top: ${divY}px;
+            width: ${divW}px;
+            height: ${divH}px;
+            overflow-y: auto;
+            padding: 8px 10px;
+            box-sizing: border-box;
+            z-index: 10000;
+            font-family: 'Arial', sans-serif;
+            font-size: ${Math.max(10, 11 * scaleY)}px;
+            line-height: 1.5;
+            color: #b0bec5;
+            background: transparent;
+            scrollbar-width: thin;
+            scrollbar-color: #3949ab transparent;
+        `;
+
+        // Inject scoped styles for chat bubble + markdown rendering
+        const styleTag = document.createElement('style');
+        styleTag.textContent = `
+            .chat-bubble-row {
+                display: flex; margin: 4px 0; clear: both;
+            }
+            .chat-bubble-row.user { justify-content: flex-end; }
+            .chat-bubble-row.assistant { justify-content: flex-start; }
+            .chat-bubble {
+                max-width: 82%; padding: 6px 10px; border-radius: 10px;
+                font-size: 0.92em; line-height: 1.45; word-break: break-word;
+            }
+            .chat-bubble.user {
+                background: #1a3a5c; color: #e1f5fe;
+                border-bottom-right-radius: 3px;
+            }
+            .chat-bubble.assistant {
+                background: #1e1e38; color: #cfd8dc;
+                border-bottom-left-radius: 3px;
+                border: 1px solid #283593;
+            }
+            .chat-bubble .chat-label {
+                font-size: 0.8em; font-weight: 600; margin-bottom: 2px; display: block;
+            }
+            .chat-bubble.user .chat-label { color: #81d4fa; }
+            .chat-bubble.assistant .chat-label { color: #9fa8da; }
+            .chat-md h1, .chat-md h2, .chat-md h3 {
+                color: #c5cae9; margin: 5px 0 2px; font-size: 1.05em; font-weight: 600;
+            }
+            .chat-md h1 { font-size: 1.12em; }
+            .chat-md p { margin: 2px 0; }
+            .chat-md strong { color: #e8eaf6; }
+            .chat-md em { color: #9fa8da; font-style: italic; }
+            .chat-md code {
+                background: #1a237e; color: #7986cb; padding: 1px 4px;
+                border-radius: 3px; font-family: monospace; font-size: 0.9em;
+            }
+            .chat-md pre {
+                background: #0a0a1a; border: 1px solid #283593; border-radius: 4px;
+                padding: 6px 8px; overflow-x: auto; margin: 4px 0;
+            }
+            .chat-md pre code { background: none; padding: 0; }
+            .chat-md ul, .chat-md ol { padding-left: 16px; margin: 3px 0; }
+            .chat-md li { margin: 1px 0; }
+            .chat-md hr { border: none; border-top: 1px solid #283593; margin: 5px 0; }
+            .chat-md a { color: #7986cb; text-decoration: underline; }
+            .chat-md blockquote {
+                border-left: 3px solid #3949ab; padding-left: 8px; margin: 4px 0;
+                color: #9fa8da;
+            }
+        `;
+        this.chatHistoryElement.appendChild(styleTag);
+
+        document.body.appendChild(this.chatHistoryElement);
+    }
+
+    private createTeacherChatInput(modalX: number, modalY: number, modalW: number, modalH: number, inputAreaY: number, sendBtnW: number) {
+            if (this.chatInputElement) {
+                this.chatInputElement.remove();
+                this.chatInputElement = null;
+            }
+
+            const gameW = this.scale.width;
+            const canvas = this.game.canvas;
+            const canvasRect = canvas.getBoundingClientRect();
+            const scaleX = canvasRect.width / gameW;
+            const scaleY = canvasRect.height / this.scale.height;
+
+            const inputWidthGame = modalW - 14 - sendBtnW - 4;
+            const inputHeightGame = 24;
+
+            const inputCenterX = modalX - sendBtnW / 2;
+            const inputCenterY = modalY + inputAreaY;
+
+            const screenX = canvasRect.left + inputCenterX * scaleX;
+            const screenY = canvasRect.top + inputCenterY * scaleY;
+            const screenWidth = inputWidthGame * scaleX;
+            const screenHeight = inputHeightGame * scaleY;
+
+            this.chatInputElement = document.createElement('input');
+            this.chatInputElement.type = 'text';
+            this.chatInputElement.placeholder = 'Ask a question...';
+            this.chatInputElement.maxLength = 500;
+
+            this.chatInputElement.style.cssText = `
+                position: fixed;
+                left: ${screenX}px;
+                top: ${screenY}px;
+                width: ${screenWidth}px;
+                height: ${screenHeight}px;
+                padding: 4px 8px;
+                font-family: 'Arial', sans-serif;
+                font-size: ${Math.max(10, 12 * scaleY)}px;
+                background: #0d0d1a;
+                color: #e8eaf6;
+                border: 1px solid #3949ab;
+                border-radius: 4px;
+                outline: none;
+                z-index: 10000;
+                box-sizing: border-box;
+                transform: translate(-50%, -50%);
+                transform-origin: center center;
+            `;
+
+            this.chatInputElement.addEventListener('keydown', (e: KeyboardEvent) => {
+                if (e.key === 'Enter') {
+                    this.sendTeacherChatMessage();
+                } else if (e.key === 'Escape') {
+                    this.closeTeacherChatDialog();
+                }
+                e.stopPropagation();
+            });
+            this.chatInputElement.addEventListener('keyup', (e) => e.stopPropagation());
+            this.chatInputElement.addEventListener('keypress', (e) => e.stopPropagation());
+
+            document.body.appendChild(this.chatInputElement);
+            this.chatInputElement.focus();
+        }
+
+    private async sendTeacherChatMessage() {
+            if (!this.chatInputElement || this.chatIsLoading) return;
+
+            const message = this.chatInputElement.value.trim();
+            if (!message) return;
+
+            // Add user message to history
+            this.chatHistory.push({ role: 'user', content: message });
+            this.updateChatHistoryDisplay();
+
+            // Clear input
+            this.chatInputElement.value = '';
+
+            // Show loading
+            this.chatIsLoading = true;
+            const loadingText = this.chatDialogContainer?.getData('loadingText') as Phaser.GameObjects.Text;
+            if (loadingText) loadingText.setText('⏳ Thinking...');
+
+            // Map NPC key to agentId
+            const agentId: 'teacher' | 'mentor' = this.activeNpcKey === 'teacher1' ? 'teacher' : 'mentor';
+
+            // Call API
+            const response = await this.chatService.sendMessage(message, agentId);
+
+            // Guard: dialog may have been closed while awaiting
+            if (!this.chatDialogOpen) return;
+
+            this.chatIsLoading = false;
+            if (loadingText) loadingText.setText('');
+
+            if (response.success && response.response) {
+                // Store raw markdown — rendered by updateChatHistoryDisplay via marked
+                this.chatHistory.push({ role: 'assistant', content: response.response });
+            } else {
+                this.chatHistory.push({
+                    role: 'assistant',
+                    content: response.error || 'Sorry, I cannot respond right now.',
+                });
+            }
+            this.updateChatHistoryDisplay();
+
+            this.chatInputElement?.focus();
+        }
+
+    private updateChatHistoryDisplay() {
+            if (!this.chatHistoryElement) return;
+
+            const npcName = this.activeNpcKey === 'teacher1' ? 'Teacher' : 'Mentor';
+            const npcIcon = this.activeNpcKey === 'teacher1' ? '📚' : '🧑‍🏫';
+
+            // Keep the style tag
+            const styleTag = this.chatHistoryElement.querySelector('style');
+            const styleHTML = styleTag ? styleTag.outerHTML : '';
+
+            const messagesHTML = this.chatHistory.map(msg => {
+                if (msg.role === 'user') {
+                    return `<div class="chat-bubble-row user">
+                        <div class="chat-bubble user">
+                            <span class="chat-label">🧑 You</span>
+                            ${this.escapeHtml(msg.content)}
+                        </div>
+                    </div>`;
+                } else {
+                    const html = marked.parse(msg.content, { async: false, breaks: true }) as string;
+                    return `<div class="chat-bubble-row assistant">
+                        <div class="chat-bubble assistant">
+                            <span class="chat-label">${npcIcon} ${npcName}</span>
+                            <div class="chat-md">${html}</div>
+                        </div>
+                    </div>`;
+                }
+            }).join('');
+
+            this.chatHistoryElement.innerHTML = styleHTML + messagesHTML;
+
+            // Auto-scroll to bottom
+            this.chatHistoryElement.scrollTop = this.chatHistoryElement.scrollHeight;
+        }
+
+        private escapeHtml(text: string): string {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+
+    private closeTeacherChatDialog() {
+            if (!this.chatDialogOpen) return;
+            this.chatDialogOpen = false;
+            this.chatIsLoading = false;
+
+            // Re-enable Phaser keyboard
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
+
+            // Remove HTML input
+            if (this.chatInputElement) {
+                this.chatInputElement.remove();
+                this.chatInputElement = null;
+            }
+
+            // Remove HTML chat history div
+            if (this.chatHistoryElement) {
+                this.chatHistoryElement.remove();
+                this.chatHistoryElement = null;
+            }
+
+            // Destroy overlay
+            this.chatDialogOverlay?.destroy();
+            this.chatDialogOverlay = null;
+
+            // Destroy dialog container (destroys all children)
+            this.chatDialogContainer?.destroy();
+            this.chatDialogContainer = null;
+
+            // Clear chat state
+            this.chatHistory = [];
+            this.activeNpcKey = '';
+        }
+
     shutdown() {
         this.scale.off('resize', this.onResize, this);
         EventBus.off('gamedata:updated', this.onGameDataUpdated, this);
         this.events.off('postupdate', this.updatePlayerUI, this);
 
+        // Clean up teacher chat dialog
+        this.closeTeacherChatDialog();
+
         this.studyingOverlay?.destroy();
         this.studyingOverlay = null;
+        if (this.lessonContentElement) {
+            this.lessonContentElement.remove();
+            this.lessonContentElement = null;
+        }
         for (const npc of this.npcs) { npc.chatBubble?.destroy(); }
         this.npcs = [];
         this.soundManager?.destroy();

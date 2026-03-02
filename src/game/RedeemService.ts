@@ -130,9 +130,9 @@ export class RedeemService {
 
             if (response.ok) {
                 const data = await response.json();
+                // API returns: { success, type, reward: { amount }, data }
                 return {
                     success: data.success !== false,
-                    event: data.event,
                     reward: data.reward,
                     type: data.type, // Pass the type field from backend response
                     message: data.reward?.message || data.message || 'Code redeemed successfully!'
