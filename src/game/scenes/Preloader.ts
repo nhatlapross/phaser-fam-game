@@ -423,40 +423,88 @@ export class Preloader extends Scene {
             },
         );
 
-        // Exit door for Pet Farm
+        // Exit door for Cyber-Home
         this.load.image("exit-door", "objects/door/exit-door.png");
 
-        // Pet spritesheets (4x4 grid = 16 frames, 300x300 total, 75x75 each)
-        this.load.spritesheet("pet-cat", "pet/cat/cat.png", {
-            frameWidth: 75,
-            frameHeight: 75,
+        // Commented out - Animal characters (not used, only cosplay characters)
+        // this.load.spritesheet("pet-cat", "pet/cat/cat.png", {
+        //     frameWidth: 75,
+        //     frameHeight: 75,
+        // });
+        // this.load.spritesheet("pet-dino", "pet/dino/dino.png", {
+        //     frameWidth: 75,
+        //     frameHeight: 75,
+        // });
+        // this.load.spritesheet("pet-dragon", "pet/dragon/dragon.png", {
+        //     frameWidth: 75,
+        //     frameHeight: 75,
+        // });
+        // this.load.spritesheet("pet-lion", "pet/lion/lion.png", {
+        //     frameWidth: 75,
+        //     frameHeight: 75,
+        // });
+
+        // Cosplay characters (4x4 grid = 16 frames, 500x500 total, 125x125 each)
+        this.load.spritesheet(
+            "kungfu-master",
+            "pet/kungfu-master/kungfu-master.png",
+            {
+                frameWidth: 125,
+                frameHeight: 125,
+            },
+        );
+        this.load.spritesheet("cowboy", "pet/cowboy/cowboy.png", {
+            frameWidth: 125,
+            frameHeight: 125,
         });
-        this.load.spritesheet("pet-dino", "pet/dino/dino.png", {
-            frameWidth: 75,
-            frameHeight: 75,
+        this.load.spritesheet("explorer", "pet/explorer/explorer.png", {
+            frameWidth: 125,
+            frameHeight: 125,
         });
-        this.load.spritesheet("pet-dragon", "pet/dragon/dragon.png", {
-            frameWidth: 75,
-            frameHeight: 75,
+        this.load.spritesheet(
+            "bullfighter",
+            "pet/bullfighter/bullfighter.png",
+            {
+                frameWidth: 125,
+                frameHeight: 125,
+            },
+        );
+        this.load.spritesheet(
+            "soccer-player",
+            "pet/soccer-player/soccer-player.png",
+            {
+                frameWidth: 125,
+                frameHeight: 125,
+            },
+        );
+        this.load.spritesheet("ninja", "pet/ninja/ninja.png", {
+            frameWidth: 125,
+            frameHeight: 125,
         });
-        this.load.spritesheet("pet-lion", "pet/lion/lion.png", {
-            frameWidth: 75,
-            frameHeight: 75,
+        this.load.spritesheet("nurse", "pet/nurse/nurse.png", {
+            frameWidth: 125,
+            frameHeight: 125,
         });
 
-        // Maid Cat NPC (4x4 grid = 16 frames, 500x500 total)
-        // Using unique key "npc-maidcat" to avoid conflicts
+        // New character (add spritesheet when ready)
+        // Uncomment when you add the magician.png spritesheet:
+        // this.load.spritesheet("magician", "pet/magician/magician.png", {
+        //     frameWidth: 125,
+        //     frameHeight: 125,
+        // });
+
+        // Pet NPCs (larger spritesheets, 500x500 total, 125x125 each)
         this.load.spritesheet(
             "npc-maidcat",
-            "characters/npc-maidcat/npc-maidcat.png",
+            "pet/npc-maidcat/npc-maidcat.png",
             {
                 frameWidth: 125,
                 frameHeight: 125,
             },
         );
 
-        // Nobita NPC (4x4 grid = 16 frames, 500x500 total)
-        this.load.spritesheet("nobita", "characters/nobita/nobita.png", {
+        // Nobita NPC (pet shop keeper, 500x500 total, 125x125 each)
+        this.load.spritesheet("nobita", "pet/nobita/nobita.png", {
             frameWidth: 125,
             frameHeight: 125,
         });
@@ -470,7 +518,7 @@ export class Preloader extends Scene {
         this.load.image("place-farm", "places/farm.png");
         this.load.image("place-townsquare", "places/townSquare.png");
         this.load.image("place-forest", "places/forest.png");
-        this.load.image("place-pethome", "places/petHome.png"); // Pet Farm interior
+        this.load.image("place-pethome", "places/petHome.png"); // Cyber-Home interior
 
         // ========== Audio Assets ==========
         // Reset path for audio files (they are in public/sound, not assets/sound)

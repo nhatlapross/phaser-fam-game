@@ -6,10 +6,9 @@ import { GameDataService } from "../GameDataService";
 import { UserService } from "../UserService";
 import { PLAYABLE_CHARACTERS } from "../config/CharacterConfig";
 import { GAME_CONSTANTS, StationManager } from "../managers";
-import { useGameState } from "../hooks/useGameState";
 
 /**
- * PetFarm Scene - Pet Farm Map
+ * PetFarm Scene - Cyber-Home Map
  * Khu vực riêng để nuôi và chăm sóc thú cưng
  */
 export class PetFarm extends Scene {
@@ -56,8 +55,11 @@ export class PetFarm extends Scene {
 
     // Lucky box state
     private luckyBoxOpenCount: number = 0; // Track how many times opened
-    private readonly LUCKY_BOX_COST = 100; // Gold cost after first free open
-    private maidCatSpawned: boolean = false; // Flag to prevent duplicate spawns
+    private readonly LUCKY_BOX_COST = 9999; // Gold cost for second pet (first is free)
+    private spawnedPet: Phaser.GameObjects.Sprite | null = null; // Track single spawned pet
+    private spawnedPetShadow: DynamicShadow | null = null; // Track pet shadow
+    private spawnedPetLabel: Phaser.GameObjects.Text | null = null; // Track pet label
+    private spawnedPetHitArea: Phaser.GameObjects.Arc | null = null; // Track pet hit area
 
     // Station manager for travel
     private stationManager!: StationManager;
@@ -149,7 +151,24 @@ export class PetFarm extends Scene {
             this.maidCatHitArea.destroy();
             this.maidCatHitArea = null;
         }
-        this.maidCatSpawned = false;
+
+        // Clean up spawned pet and related objects
+        if (this.spawnedPet && this.spawnedPet.scene) {
+            this.spawnedPet.destroy();
+            this.spawnedPet = null;
+        }
+        if (this.spawnedPetShadow) {
+            this.spawnedPetShadow.destroy();
+            this.spawnedPetShadow = null;
+        }
+        if (this.spawnedPetLabel) {
+            this.spawnedPetLabel.destroy();
+            this.spawnedPetLabel = null;
+        }
+        if (this.spawnedPetHitArea) {
+            this.spawnedPetHitArea.destroy();
+            this.spawnedPetHitArea = null;
+        }
     }
 
     /**
@@ -375,7 +394,7 @@ export class PetFarm extends Scene {
                 x: 0, // Not used since we won't create the station sprite
                 y: 0,
                 flipX: false,
-                currentLocationId: "petfarm",
+                currentLocationId: "cyberhome",
             },
         );
         // Don't call stationManager.create() - we only want the modal functionality
@@ -457,7 +476,7 @@ export class PetFarm extends Scene {
 
         // Add name label above NPC (no background, no icon)
         const nameLabel = this.add
-            .text(centerX, centerY - 50, "Nobita", {
+            .text(centerX, centerY - 50, "Future Nobita", {
                 fontSize: "14px",
                 color: "#fff",
                 stroke: "#000",
@@ -573,164 +592,102 @@ export class PetFarm extends Scene {
         );
     }
 
-    private createPetCatNPC() {
-        // Check if already spawned
-        if (this.maidCatSprite && this.maidCatSprite.scene) {
-            return;
-        }
+    // Commented out - Not used (animal character)
+    // private createPetCatNPC() { ... }
 
-        // Position Pet Cat at a different location (left side of Nobita)
-        const centerX = (this.MAP_WIDTH * this.TILE_SIZE) / 2; // 400
-        const centerY = (this.MAP_HEIGHT * this.TILE_SIZE) / 2; // 280
-        const petCatX = centerX - 80; // Left side of Nobita
-        const petCatY = centerY + 40; // Slightly below
+    // Commented out - Animal characters (not used, only cosplay characters)
+    // private createPetCatAnimations() { ... }
+    // private createPetDinoAnimations() { ... }
+    // private createPetDragonAnimations() { ... }
+    // private createPetLionAnimations() { ... }
 
-        // Create Pet Cat sprite (using pet-cat spritesheet)
-        this.maidCatSprite = this.add.sprite(petCatX, petCatY, "pet-cat", 0);
-        this.maidCatSprite.setScale(0.5); // Appropriate scale for 75x75 frames
-        this.maidCatSprite.setDepth(petCatY);
-        this.maidCatSprite.setOrigin(0.5, 0.8);
-
-        // Create animations for Pet Cat if not exists
-        this.createPetCatAnimations();
-
-        // Play idle animation
-        this.maidCatSprite.play("pet-cat-idle-down");
-
-        // Add shadow
-        this.maidCatShadow = new DynamicShadow(this, this.maidCatSprite, 0, 2);
-
-        // Add name label above NPC
-        this.maidCatLabel = this.add
-            .text(petCatX, petCatY - 50, "Pet Cat", {
-                fontSize: "14px",
-                color: "#fff",
-                stroke: "#000",
-                strokeThickness: 3,
-            })
-            .setOrigin(0.5)
-            .setDepth(10000);
-
-        // Make NPC interactive
-        this.maidCatHitArea = this.add
-            .circle(petCatX, petCatY, 30, 0x000000, 0)
-            .setInteractive({ useHandCursor: true })
-            .setDepth(petCatY - 1);
-
-        // Hover effect
-        this.maidCatHitArea.on("pointerover", () => {
-            if (this.maidCatSprite) {
-                this.maidCatSprite.setTint(0xffcccc);
-            }
-        });
-
-        this.maidCatHitArea.on("pointerout", () => {
-            if (this.maidCatSprite) {
-                this.maidCatSprite.clearTint();
-            }
-        });
-
-        // Click to interact
-        this.maidCatHitArea.on("pointerdown", () => {
-            this.showToast("Pet Cat is playing! 🐱✨", 0x3498db);
-        });
-
-        // Start random movement AI around center area
-        this.startNPCRandomMovement(
-            this.maidCatSprite,
-            this.maidCatShadow,
-            this.maidCatLabel,
-            this.maidCatHitArea,
-            "center",
-        );
-    }
-
-    private createPetCatAnimations() {
-        const charKey = "pet-cat";
-        const frameRate = 6;
-
-        // Idle animations
-        if (!this.anims.exists("pet-cat-idle-down")) {
-            this.anims.create({
-                key: "pet-cat-idle-down",
-                frames: [{ key: charKey, frame: 0 }],
-                frameRate: 1,
-            });
-        }
-
-        if (!this.anims.exists("pet-cat-idle-up")) {
-            this.anims.create({
-                key: "pet-cat-idle-up",
-                frames: [{ key: charKey, frame: 4 }],
-                frameRate: 1,
-            });
-        }
-
-        if (!this.anims.exists("pet-cat-idle-left")) {
-            this.anims.create({
-                key: "pet-cat-idle-left",
-                frames: [{ key: charKey, frame: 8 }],
-                frameRate: 1,
-            });
-        }
-
-        if (!this.anims.exists("pet-cat-idle-right")) {
-            this.anims.create({
-                key: "pet-cat-idle-right",
-                frames: [{ key: charKey, frame: 12 }],
-                frameRate: 1,
-            });
-        }
-
-        // Walk animations
-        if (!this.anims.exists("pet-cat-walk-down")) {
-            this.anims.create({
-                key: "pet-cat-walk-down",
-                frames: this.anims.generateFrameNumbers(charKey, {
-                    start: 0,
-                    end: 3,
-                }),
-                frameRate: frameRate,
-                repeat: -1,
-            });
-        }
-
-        if (!this.anims.exists("pet-cat-walk-up")) {
-            this.anims.create({
-                key: "pet-cat-walk-up",
-                frames: this.anims.generateFrameNumbers(charKey, {
-                    start: 4,
-                    end: 7,
-                }),
-                frameRate: frameRate,
-                repeat: -1,
-            });
-        }
-
-        if (!this.anims.exists("pet-cat-walk-left")) {
-            this.anims.create({
-                key: "pet-cat-walk-left",
-                frames: this.anims.generateFrameNumbers(charKey, {
-                    start: 8,
-                    end: 11,
-                }),
-                frameRate: frameRate,
-                repeat: -1,
-            });
-        }
-
-        if (!this.anims.exists("pet-cat-walk-right")) {
-            this.anims.create({
-                key: "pet-cat-walk-right",
-                frames: this.anims.generateFrameNumbers(charKey, {
-                    start: 12,
-                    end: 15,
-                }),
-                frameRate: frameRate,
-                repeat: -1,
-            });
-        }
-    }
+    // Uncomment when penguin.png is added:
+    // private createPetPenguinAnimations() {
+    //     const charKey = "pet-penguin";
+    //     const frameRate = 6;
+    //
+    //     // Idle animations
+    //     if (!this.anims.exists("pet-penguin-idle-down")) {
+    //         this.anims.create({
+    //             key: "pet-penguin-idle-down",
+    //             frames: [{ key: charKey, frame: 0 }],
+    //             frameRate: 1,
+    //         });
+    //     }
+    //
+    //     if (!this.anims.exists("pet-penguin-idle-up")) {
+    //         this.anims.create({
+    //             key: "pet-penguin-idle-up",
+    //             frames: [{ key: charKey, frame: 4 }],
+    //             frameRate: 1,
+    //         });
+    //     }
+    //
+    //     if (!this.anims.exists("pet-penguin-idle-left")) {
+    //         this.anims.create({
+    //             key: "pet-penguin-idle-left",
+    //             frames: [{ key: charKey, frame: 8 }],
+    //             frameRate: 1,
+    //         });
+    //     }
+    //
+    //     if (!this.anims.exists("pet-penguin-idle-right")) {
+    //         this.anims.create({
+    //             key: "pet-penguin-idle-right",
+    //             frames: [{ key: charKey, frame: 12 }],
+    //             frameRate: 1,
+    //         });
+    //     }
+    //
+    //     // Walk animations
+    //     if (!this.anims.exists("pet-penguin-walk-down")) {
+    //         this.anims.create({
+    //             key: "pet-penguin-walk-down",
+    //             frames: this.anims.generateFrameNumbers(charKey, {
+    //                 start: 0,
+    //                 end: 3,
+    //             }),
+    //             frameRate: frameRate,
+    //             repeat: -1,
+    //         });
+    //     }
+    //
+    //     if (!this.anims.exists("pet-penguin-walk-up")) {
+    //         this.anims.create({
+    //             key: "pet-penguin-walk-up",
+    //             frames: this.anims.generateFrameNumbers(charKey, {
+    //                 start: 4,
+    //                 end: 7,
+    //             }),
+    //             frameRate: frameRate,
+    //             repeat: -1,
+    //         });
+    //     }
+    //
+    //     if (!this.anims.exists("pet-penguin-walk-left")) {
+    //         this.anims.create({
+    //             key: "pet-penguin-walk-left",
+    //             frames: this.anims.generateFrameNumbers(charKey, {
+    //                 start: 8,
+    //                 end: 11,
+    //             }),
+    //             frameRate: frameRate,
+    //             repeat: -1,
+    //         });
+    //     }
+    //
+    //     if (!this.anims.exists("pet-penguin-walk-right")) {
+    //         this.anims.create({
+    //             key: "pet-penguin-walk-right",
+    //             frames: this.anims.generateFrameNumbers(charKey, {
+    //                 start: 12,
+    //                 end: 15,
+    //             }),
+    //             frameRate: frameRate,
+    //             repeat: -1,
+    //         });
+    //     }
+    // }
 
     private createNobitaAnimations() {
         const charKey = "nobita";
@@ -855,7 +812,38 @@ export class PetFarm extends Scene {
                   };
 
         // Get animation prefix based on NPC type
-        const animPrefix = npc.texture.key; // "nobita" or "maid-cat"
+        const textureKey = npc.texture.key;
+        let animPrefix = textureKey;
+
+        // Map texture keys to animation prefixes
+        if (textureKey === "npc-maidcat") {
+            animPrefix = "npc-maidcat";
+        } else if (textureKey === "kungfu-master") {
+            animPrefix = "kungfu-master";
+        } else if (textureKey === "cowboy") {
+            animPrefix = "cowboy";
+        } else if (textureKey === "explorer") {
+            animPrefix = "explorer";
+        } else if (textureKey === "bullfighter") {
+            animPrefix = "bullfighter";
+        } else if (textureKey === "soccer-player") {
+            animPrefix = "soccer-player";
+        } else if (textureKey === "ninja") {
+            animPrefix = "ninja";
+        } else if (textureKey === "nurse") {
+            animPrefix = "nurse";
+        } else if (textureKey === "nobita") {
+            animPrefix = "nobita";
+        }
+        // Commented out - Animal characters
+        // } else if (textureKey === "pet-cat") {
+        //     animPrefix = "pet-cat";
+        // } else if (textureKey === "pet-dino") {
+        //     animPrefix = "pet-dino";
+        // } else if (textureKey === "pet-dragon") {
+        //     animPrefix = "pet-dragon";
+        // } else if (textureKey === "pet-lion") {
+        //     animPrefix = "pet-lion";
 
         // Random movement timer
         this.time.addEvent({
@@ -1188,7 +1176,9 @@ export class PetFarm extends Scene {
         const infoText = this.add.text(
             modalX,
             modalY + modalHeight / 2 - 30,
-            isFree ? "🎁 First open is FREE!" : "Each open costs 100 Gold",
+            isFree
+                ? "🎁 First open is FREE!"
+                : `Replace your pet for ${cost} Gold`,
             {
                 fontSize: "12px",
                 fontFamily: "PixelFont",
@@ -1248,6 +1238,41 @@ export class PetFarm extends Scene {
             btnShadow.setScale(1.0);
         });
         openBtn.on("pointerdown", () => {
+            // Gold check for second pet onwards
+            if (!isFree) {
+                // Get current gold from GameDataService
+                const cachedData = GameDataService.getCachedData();
+                const currentGold = cachedData?.user?.gold || 0;
+
+                if (currentGold < cost) {
+                    this.showToast(`Not enough gold! Need ${cost} �`, 0xe74c3c);
+                    return;
+                }
+
+                // Deduct gold (you'll need to implement this in your backend)
+                // For now, just show a message
+                console.log(`💰 Deducting ${cost} gold for new pet`);
+            }
+
+            // Clean up old pet before spawning new one
+            if (this.spawnedPet) {
+                this.spawnedPet.destroy();
+                this.spawnedPet = null;
+            }
+            if (this.spawnedPetShadow) {
+                this.spawnedPetShadow.destroy();
+                this.spawnedPetShadow = null;
+            }
+            if (this.spawnedPetLabel) {
+                this.spawnedPetLabel.destroy();
+                this.spawnedPetLabel = null;
+            }
+            if (this.spawnedPetHitArea) {
+                this.spawnedPetHitArea.destroy();
+                this.spawnedPetHitArea = null;
+            }
+
+            this.luckyBoxOpenCount++;
             this.openLuckyBox();
             closeModal();
         });
@@ -1256,57 +1281,475 @@ export class PetFarm extends Scene {
     }
 
     /**
+     * Show naming modal for new pet
+     */
+    private showNamingModal(petType: string) {
+        const modalWidth = 400;
+        const modalHeight = 300;
+        const modalX = this.scale.width / 2;
+        const modalY = this.scale.height / 2;
+
+        // Get pet display name
+        const petDisplayNames: { [key: string]: string } = {
+            "npc-maidcat": "Maid Cat",
+            "kungfu-master": "Kungfu Master",
+            cowboy: "Cowboy",
+            explorer: "Explorer",
+            bullfighter: "Bullfighter",
+            "soccer-player": "Soccer Player",
+            ninja: "Ninja",
+            nurse: "Nurse",
+        };
+        const petDisplayName = petDisplayNames[petType] || "Pet";
+
+        // Dark overlay
+        const overlay = this.add
+            .rectangle(
+                modalX,
+                modalY,
+                this.scale.width,
+                this.scale.height,
+                0x000000,
+                0.8,
+            )
+            .setScrollFactor(0)
+            .setDepth(3000)
+            .setInteractive();
+
+        // Modal background
+        const modalBg = this.add.rectangle(
+            modalX,
+            modalY,
+            modalWidth,
+            modalHeight,
+            0x2c3e50,
+        );
+        modalBg.setStrokeStyle(4, 0x3498db);
+        modalBg.setScrollFactor(0).setDepth(3001);
+
+        // Title
+        const title = this.add.text(
+            modalX,
+            modalY - modalHeight / 2 + 30,
+            `🎉 You got ${petDisplayName}!`,
+            {
+                fontSize: "24px",
+                fontFamily: "PixelFont",
+                color: "#FFD700",
+                resolution: 2,
+            },
+        );
+        title
+            .setOrigin(0.5)
+            .setDepth(3002)
+            .setScrollFactor(0)
+            .setStroke("#000000", 4);
+
+        // Instruction text (moved up more)
+        const instruction = this.add.text(
+            modalX,
+            modalY - 100,
+            "Name your companion:",
+            {
+                fontSize: "16px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
+            },
+        );
+        instruction.setOrigin(0.5).setDepth(3002).setScrollFactor(0);
+
+        // Add pet sprite preview (moved up)
+        const petSprite = this.add.sprite(modalX, modalY - 40, petType, 0);
+        petSprite.setScale(0.8); // Larger scale for preview
+        petSprite.setDepth(3002);
+        petSprite.setScrollFactor(0);
+
+        // Play idle animation
+        const animKey = `${petType}-idle-down`;
+        if (this.anims.exists(animKey)) {
+            petSprite.play(animKey);
+        }
+
+        // Create HTML input element (no background needed, HTML input has its own)
+        const inputElement = document.createElement("input");
+        inputElement.type = "text";
+        inputElement.maxLength = 20;
+        inputElement.value = petDisplayName; // Pre-fill with default name
+        inputElement.style.position = "fixed";
+
+        // Calculate position - center of screen
+        const canvas = this.game.canvas;
+        const rect = canvas.getBoundingClientRect();
+
+        // Center horizontally, position below pet sprite
+        const inputWidth = 300;
+        const inputHeight = 50;
+        inputElement.style.left = `${rect.left + (rect.width - inputWidth) / 2}px`;
+        inputElement.style.top = `${rect.top + rect.height / 2 + 40}px`; // Back to original
+        inputElement.style.width = `${inputWidth}px`;
+        inputElement.style.height = `${inputHeight}px`;
+        inputElement.style.fontSize = "20px";
+        inputElement.style.fontFamily = "Arial, sans-serif";
+        inputElement.style.padding = "5px 10px";
+        inputElement.style.border = "2px solid #3498db";
+        inputElement.style.borderRadius = "5px";
+        inputElement.style.backgroundColor = "#34495e";
+        inputElement.style.color = "#ffffff";
+        inputElement.style.outline = "none";
+        inputElement.style.zIndex = "999999"; // Very high z-index
+        inputElement.style.textAlign = "center";
+        document.body.appendChild(inputElement);
+        inputElement.focus();
+        inputElement.select(); // Select all text for easy editing
+
+        // Confirm button
+        const btnY = modalY + modalHeight / 2 - 50;
+        const confirmBtn = this.add.rectangle(modalX, btnY, 200, 50, 0x27ae60);
+        confirmBtn.setStrokeStyle(3, 0x2ecc71);
+        confirmBtn
+            .setScrollFactor(0)
+            .setDepth(3002)
+            .setInteractive({ useHandCursor: true });
+
+        const confirmText = this.add.text(modalX, btnY, "CONFIRM", {
+            fontSize: "20px",
+            fontFamily: "PixelFont",
+            color: "#FFFFFF",
+            resolution: 2,
+        });
+        confirmText
+            .setOrigin(0.5)
+            .setDepth(3003)
+            .setScrollFactor(0)
+            .setStroke("#000000", 4);
+
+        const modalElements: (Phaser.GameObjects.GameObject | HTMLElement)[] = [
+            overlay,
+            modalBg,
+            title,
+            instruction,
+            petSprite,
+            confirmBtn,
+            confirmText,
+            inputElement,
+        ];
+
+        const closeModal = () => {
+            modalElements.forEach((el) => {
+                if (el instanceof HTMLElement) {
+                    el.remove();
+                } else {
+                    el.destroy();
+                }
+            });
+        };
+
+        const confirmNaming = () => {
+            const petName = inputElement.value.trim() || petDisplayName;
+            closeModal();
+
+            // Update the spawned pet's label with the new name
+            if (this.spawnedPetLabel) {
+                this.spawnedPetLabel.setText(petName);
+            }
+
+            // Show success toast with custom name
+            this.showToast(`✨ Named your companion: ${petName}!`, 0x3498db);
+        };
+
+        // Button hover effects
+        confirmBtn.on("pointerover", () => {
+            confirmBtn.setFillStyle(0x2ecc71);
+            confirmBtn.setScale(1.05);
+            confirmText.setScale(1.05);
+        });
+
+        confirmBtn.on("pointerout", () => {
+            confirmBtn.setFillStyle(0x27ae60);
+            confirmBtn.setScale(1.0);
+            confirmText.setScale(1.0);
+        });
+
+        confirmBtn.on("pointerdown", confirmNaming);
+
+        // Enter key to confirm
+        inputElement.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                confirmNaming();
+            }
+        });
+
+        this.cameras.main.ignore([
+            overlay,
+            modalBg,
+            title,
+            instruction,
+            petSprite,
+            confirmBtn,
+            confirmText,
+        ]);
+    }
+
+    /**
      * Open lucky box and spawn random pet
      */
     private openLuckyBox() {
-        // Check if pet already spawned
-        if (this.maidCatSpawned) {
-            this.showToast("Pet already adopted! 🐱", 0xe74c3c);
-            return;
-        }
-
         // Check cost
         const isFree = this.luckyBoxOpenCount === 0;
         const cost = isFree ? 0 : this.LUCKY_BOX_COST;
 
+        // TODO: Uncomment when gold system is ready
         // Check if player has enough gold (if not free)
-        if (!isFree) {
-            const gameState = useGameState(this);
-            const currentGold = gameState.getGold();
+        // if (!isFree) {
+        //     // Get current gold from GameDataService
+        //     const cachedData = GameDataService.getCachedData();
+        //     const currentGold = cachedData?.user?.gold || 0;
 
-            if (currentGold < cost) {
-                this.showToast(`Not enough gold! Need ${cost} 💰`, 0xe74c3c);
-                return;
-            }
+        //     if (currentGold < cost) {
+        //         this.showToast(`Not enough gold! Need ${cost} 💰`, 0xe74c3c);
+        //         return;
+        //     }
 
-            // Deduct gold from game state
-            const newGold = currentGold - cost;
-            gameState.setGold(newGold);
+        //     // Deduct gold
+        //     const newGold = currentGold - cost;
 
-            // Emit event to update UI
-            EventBus.emit("currency-updated", { gold: newGold });
+        //     // Update gold in cached data
+        //     if (cachedData?.user) {
+        //         cachedData.user.gold = newGold;
+        //     }
 
-            this.showToast(`-${cost} Gold`, 0xff9800);
-        }
+        //     // Emit event to update UI
+        //     EventBus.emit("currency-updated", { gold: newGold });
+
+        //     this.showToast(`-${cost} Gold`, 0xff9800);
+        // }
 
         // Increment open count
         this.luckyBoxOpenCount++;
 
-        // Random pet selection
-        const pets = ["npc-maidcat", "pet-cat"];
+        // Random pet selection - only cosplay characters (no animals)
+        const pets = [
+            "npc-maidcat",
+            "kungfu-master",
+            "cowboy",
+            "explorer",
+            "bullfighter",
+            "soccer-player",
+            "ninja",
+            "nurse",
+            // "magician", // Uncomment when magician.png is added
+        ];
         const randomIndex = Math.floor(Math.random() * pets.length);
         const randomPet = pets[randomIndex];
 
-        // Spawn pet based on selection
-        if (randomPet === "npc-maidcat") {
-            this.createMaidCatNPC();
-            this.maidCatSpawned = true;
-            this.showToast(`🎉 You got Maid Cat!`, 0x9b59b6);
-        } else if (randomPet === "pet-cat") {
-            this.createPetCatNPC();
-            this.maidCatSpawned = true;
-            this.showToast(`🎉 You got Pet Cat!`, 0x3498db);
+        // Debug log
+        console.log(`🎲 Lucky Box #${this.luckyBoxOpenCount}:`);
+        console.log(`   Random index: ${randomIndex} / ${pets.length}`);
+        console.log(`   Selected pet: ${randomPet}`);
+
+        // Spawn at center of map (only one pet allowed)
+        const centerX = (this.MAP_WIDTH * this.TILE_SIZE) / 2;
+        const centerY = (this.MAP_HEIGHT * this.TILE_SIZE) / 2;
+        const spawnX = centerX + 80; // Slightly offset from Nobita
+        const spawnY = centerY + 40;
+
+        // Spawn pet first, then show naming modal
+        this.spawnPet(randomPet, spawnX, spawnY);
+
+        // Show naming modal after a delay to let pet appear and animate
+        this.time.delayedCall(1000, () => {
+            this.showNamingModal(randomPet);
+        });
+    }
+
+    /**
+     * Spawn a pet at specified position
+     */
+    private spawnPet(petType: string, x: number, y: number) {
+        let petSprite: Phaser.GameObjects.Sprite;
+        let petName: string;
+        let petScale: number;
+        let petColor: number;
+
+        // Determine pet properties based on type
+        switch (petType) {
+            case "npc-maidcat":
+                petSprite = this.add.sprite(x, y, "npc-maidcat", 0);
+                petName = "Maid Cat";
+                petScale = 0.35;
+                petColor = 0x9b59b6;
+                this.createMaidCatAnimations();
+                petSprite.play("npc-maidcat-idle-down");
+                break;
+            case "kungfu-master":
+                petSprite = this.add.sprite(x, y, "kungfu-master", 0);
+                petName = "Kungfu Master";
+                petScale = 0.35;
+                petColor = 0xe91e63;
+                this.createKungfuMasterAnimations();
+                petSprite.play("kungfu-master-idle-down");
+                break;
+            case "cowboy":
+                petSprite = this.add.sprite(x, y, "cowboy", 0);
+                petName = "Cowboy";
+                petScale = 0.35;
+                petColor = 0x8b4513;
+                this.createCowboyAnimations();
+                petSprite.play("cowboy-idle-down");
+                break;
+            case "explorer":
+                petSprite = this.add.sprite(x, y, "explorer", 0);
+                petName = "Explorer";
+                petScale = 0.35;
+                petColor = 0xff5722;
+                this.createExplorerAnimations();
+                petSprite.play("explorer-idle-down");
+                break;
+            case "bullfighter":
+                petSprite = this.add.sprite(x, y, "bullfighter", 0);
+                petName = "Bullfighter";
+                petScale = 0.35;
+                petColor = 0xd32f2f;
+                this.createBullfighterAnimations();
+                petSprite.play("bullfighter-idle-down");
+                break;
+            case "soccer-player":
+                petSprite = this.add.sprite(x, y, "soccer-player", 0);
+                petName = "Soccer Player";
+                petScale = 0.35;
+                petColor = 0x4caf50;
+                this.createSoccerPlayerAnimations();
+                petSprite.play("soccer-player-idle-down");
+                break;
+            case "ninja":
+                petSprite = this.add.sprite(x, y, "ninja", 0);
+                petName = "Ninja";
+                petScale = 0.35;
+                petColor = 0x424242;
+                this.createNinjaAnimations();
+                petSprite.play("ninja-idle-down");
+                break;
+            case "nurse":
+                petSprite = this.add.sprite(x, y, "nurse", 0);
+                petName = "Nurse";
+                petScale = 0.35;
+                petColor = 0xf06292;
+                this.createNurseAnimations();
+                petSprite.play("nurse-idle-down");
+                break;
+            // Commented out - Animal characters
+            // case "pet-cat":
+            //     petSprite = this.add.sprite(x, y, "pet-cat", 0);
+            //     petName = "Pet Cat";
+            //     petScale = 0.5;
+            //     petColor = 0x3498db;
+            //     this.createPetCatAnimations();
+            //     petSprite.play("pet-cat-idle-down");
+            //     break;
+            // case "pet-dino":
+            //     petSprite = this.add.sprite(x, y, "pet-dino", 0);
+            //     petName = "Dino";
+            //     petScale = 0.5;
+            //     petColor = 0x2ecc71;
+            //     this.createPetDinoAnimations();
+            //     petSprite.play("pet-dino-idle-down");
+            //     break;
+            // case "pet-dragon":
+            //     petSprite = this.add.sprite(x, y, "pet-dragon", 0);
+            //     petName = "Dragon";
+            //     petScale = 0.5;
+            //     petColor = 0xe74c3c;
+            //     this.createPetDragonAnimations();
+            //     petSprite.play("pet-dragon-idle-down");
+            //     break;
+            // case "pet-lion":
+            //     petSprite = this.add.sprite(x, y, "pet-lion", 0);
+            //     petName = "Lion";
+            //     petScale = 0.5;
+            //     petColor = 0xf39c12;
+            //     this.createPetLionAnimations();
+            //     petSprite.play("pet-lion-idle-down");
+            //     break;
+            // Uncomment when magician.png is added:
+            // case "magician":
+            //     petSprite = this.add.sprite(x, y, "magician", 0);
+            //     petName = "Magician";
+            //     petScale = 0.35;
+            //     petColor = 0x9c27b0;
+            //     this.createMagicianAnimations();
+            //     petSprite.play("magician-idle-down");
+            //     break;
+            default:
+                return;
         }
+
+        petSprite.setScale(petScale);
+        petSprite.setDepth(y);
+        petSprite.setOrigin(0.5, 0.8);
+
+        // Add shadow
+        const shadow = new DynamicShadow(this, petSprite, 0, 2);
+
+        // Make UI camera ignore pet and shadow (prevent ghost images)
+        this.uiCamera.ignore([petSprite, shadow]);
+
+        // Add name label
+        const label = this.add
+            .text(x, y - 50, petName, {
+                fontSize: "14px",
+                color: "#fff",
+                stroke: "#000",
+                strokeThickness: 3,
+            })
+            .setOrigin(0.5)
+            .setDepth(10000);
+
+        // Make interactive
+        const hitArea = this.add
+            .circle(x, y, 30, 0x000000, 0)
+            .setInteractive({ useHandCursor: true })
+            .setDepth(y - 1);
+
+        // Make UI camera ignore label and hitArea too
+        this.uiCamera.ignore([label, hitArea]);
+
+        // Hover effect
+        hitArea.on("pointerover", () => {
+            petSprite.setTint(0xffcccc);
+        });
+
+        hitArea.on("pointerout", () => {
+            petSprite.clearTint();
+        });
+
+        // Click to interact
+        hitArea.on("pointerdown", () => {
+            const currentName = label.text;
+            this.showToast(`${currentName} says hello! 👋`, petColor);
+        });
+
+        // Start random movement
+        this.startNPCRandomMovement(
+            petSprite,
+            shadow,
+            label,
+            hitArea,
+            "center",
+        );
+
+        // Track spawned pet and related objects
+        this.spawnedPet = petSprite;
+        this.spawnedPetShadow = shadow;
+        this.spawnedPetLabel = label;
+        this.spawnedPetHitArea = hitArea;
+
+        // Show success message
+        const costMsg =
+            this.luckyBoxOpenCount === 1
+                ? "FREE"
+                : `${this.LUCKY_BOX_COST} Gold`;
+        this.showToast(`🎉 You got ${petName}! (${costMsg})`, petColor);
     }
 
     private createMaidCatAnimations() {
@@ -1386,6 +1829,615 @@ export class PetFarm extends Scene {
         if (!this.anims.exists("npc-maidcat-walk-right")) {
             this.anims.create({
                 key: "npc-maidcat-walk-right",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 12,
+                    end: 15,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+    }
+
+    private createKungfuMasterAnimations() {
+        const charKey = "kungfu-master";
+        const frameRate = 6;
+
+        // Idle animations
+        if (!this.anims.exists("kungfu-master-idle-down")) {
+            this.anims.create({
+                key: "kungfu-master-idle-down",
+                frames: [{ key: charKey, frame: 0 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("kungfu-master-idle-up")) {
+            this.anims.create({
+                key: "kungfu-master-idle-up",
+                frames: [{ key: charKey, frame: 4 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("kungfu-master-idle-left")) {
+            this.anims.create({
+                key: "kungfu-master-idle-left",
+                frames: [{ key: charKey, frame: 8 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("kungfu-master-idle-right")) {
+            this.anims.create({
+                key: "kungfu-master-idle-right",
+                frames: [{ key: charKey, frame: 12 }],
+                frameRate: 1,
+            });
+        }
+
+        // Walk animations
+        if (!this.anims.exists("kungfu-master-walk-down")) {
+            this.anims.create({
+                key: "kungfu-master-walk-down",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 0,
+                    end: 3,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("kungfu-master-walk-up")) {
+            this.anims.create({
+                key: "kungfu-master-walk-up",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 4,
+                    end: 7,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("kungfu-master-walk-left")) {
+            this.anims.create({
+                key: "kungfu-master-walk-left",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 8,
+                    end: 11,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("kungfu-master-walk-right")) {
+            this.anims.create({
+                key: "kungfu-master-walk-right",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 12,
+                    end: 15,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+    }
+
+    private createCowboyAnimations() {
+        const charKey = "cowboy";
+        const frameRate = 6;
+
+        // Idle animations
+        if (!this.anims.exists("cowboy-idle-down")) {
+            this.anims.create({
+                key: "cowboy-idle-down",
+                frames: [{ key: charKey, frame: 0 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("cowboy-idle-up")) {
+            this.anims.create({
+                key: "cowboy-idle-up",
+                frames: [{ key: charKey, frame: 4 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("cowboy-idle-left")) {
+            this.anims.create({
+                key: "cowboy-idle-left",
+                frames: [{ key: charKey, frame: 8 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("cowboy-idle-right")) {
+            this.anims.create({
+                key: "cowboy-idle-right",
+                frames: [{ key: charKey, frame: 12 }],
+                frameRate: 1,
+            });
+        }
+
+        // Walk animations
+        if (!this.anims.exists("cowboy-walk-down")) {
+            this.anims.create({
+                key: "cowboy-walk-down",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 0,
+                    end: 3,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("cowboy-walk-up")) {
+            this.anims.create({
+                key: "cowboy-walk-up",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 4,
+                    end: 7,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("cowboy-walk-left")) {
+            this.anims.create({
+                key: "cowboy-walk-left",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 8,
+                    end: 11,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("cowboy-walk-right")) {
+            this.anims.create({
+                key: "cowboy-walk-right",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 12,
+                    end: 15,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+    }
+
+    private createExplorerAnimations() {
+        const charKey = "explorer";
+        const frameRate = 6;
+
+        // Idle animations
+        if (!this.anims.exists("explorer-idle-down")) {
+            this.anims.create({
+                key: "explorer-idle-down",
+                frames: [{ key: charKey, frame: 0 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("explorer-idle-up")) {
+            this.anims.create({
+                key: "explorer-idle-up",
+                frames: [{ key: charKey, frame: 4 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("explorer-idle-left")) {
+            this.anims.create({
+                key: "explorer-idle-left",
+                frames: [{ key: charKey, frame: 8 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("explorer-idle-right")) {
+            this.anims.create({
+                key: "explorer-idle-right",
+                frames: [{ key: charKey, frame: 12 }],
+                frameRate: 1,
+            });
+        }
+
+        // Walk animations
+        if (!this.anims.exists("explorer-walk-down")) {
+            this.anims.create({
+                key: "explorer-walk-down",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 0,
+                    end: 3,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("explorer-walk-up")) {
+            this.anims.create({
+                key: "explorer-walk-up",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 4,
+                    end: 7,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("explorer-walk-left")) {
+            this.anims.create({
+                key: "explorer-walk-left",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 8,
+                    end: 11,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("explorer-walk-right")) {
+            this.anims.create({
+                key: "explorer-walk-right",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 12,
+                    end: 15,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+    }
+
+    private createBullfighterAnimations() {
+        const charKey = "bullfighter";
+        const frameRate = 6;
+
+        // Idle animations
+        if (!this.anims.exists("bullfighter-idle-down")) {
+            this.anims.create({
+                key: "bullfighter-idle-down",
+                frames: [{ key: charKey, frame: 0 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("bullfighter-idle-up")) {
+            this.anims.create({
+                key: "bullfighter-idle-up",
+                frames: [{ key: charKey, frame: 4 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("bullfighter-idle-left")) {
+            this.anims.create({
+                key: "bullfighter-idle-left",
+                frames: [{ key: charKey, frame: 8 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("bullfighter-idle-right")) {
+            this.anims.create({
+                key: "bullfighter-idle-right",
+                frames: [{ key: charKey, frame: 12 }],
+                frameRate: 1,
+            });
+        }
+
+        // Walk animations
+        if (!this.anims.exists("bullfighter-walk-down")) {
+            this.anims.create({
+                key: "bullfighter-walk-down",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 0,
+                    end: 3,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("bullfighter-walk-up")) {
+            this.anims.create({
+                key: "bullfighter-walk-up",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 4,
+                    end: 7,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("bullfighter-walk-left")) {
+            this.anims.create({
+                key: "bullfighter-walk-left",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 8,
+                    end: 11,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("bullfighter-walk-right")) {
+            this.anims.create({
+                key: "bullfighter-walk-right",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 12,
+                    end: 15,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+    }
+
+    private createSoccerPlayerAnimations() {
+        const charKey = "soccer-player";
+        const frameRate = 6;
+
+        // Idle animations
+        if (!this.anims.exists("soccer-player-idle-down")) {
+            this.anims.create({
+                key: "soccer-player-idle-down",
+                frames: [{ key: charKey, frame: 0 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("soccer-player-idle-up")) {
+            this.anims.create({
+                key: "soccer-player-idle-up",
+                frames: [{ key: charKey, frame: 4 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("soccer-player-idle-left")) {
+            this.anims.create({
+                key: "soccer-player-idle-left",
+                frames: [{ key: charKey, frame: 8 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("soccer-player-idle-right")) {
+            this.anims.create({
+                key: "soccer-player-idle-right",
+                frames: [{ key: charKey, frame: 12 }],
+                frameRate: 1,
+            });
+        }
+
+        // Walk animations
+        if (!this.anims.exists("soccer-player-walk-down")) {
+            this.anims.create({
+                key: "soccer-player-walk-down",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 0,
+                    end: 3,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("soccer-player-walk-up")) {
+            this.anims.create({
+                key: "soccer-player-walk-up",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 4,
+                    end: 7,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("soccer-player-walk-left")) {
+            this.anims.create({
+                key: "soccer-player-walk-left",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 8,
+                    end: 11,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("soccer-player-walk-right")) {
+            this.anims.create({
+                key: "soccer-player-walk-right",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 12,
+                    end: 15,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+    }
+
+    private createNinjaAnimations() {
+        const charKey = "ninja";
+        const frameRate = 6;
+
+        // Idle animations
+        if (!this.anims.exists("ninja-idle-down")) {
+            this.anims.create({
+                key: "ninja-idle-down",
+                frames: [{ key: charKey, frame: 0 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("ninja-idle-up")) {
+            this.anims.create({
+                key: "ninja-idle-up",
+                frames: [{ key: charKey, frame: 4 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("ninja-idle-left")) {
+            this.anims.create({
+                key: "ninja-idle-left",
+                frames: [{ key: charKey, frame: 8 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("ninja-idle-right")) {
+            this.anims.create({
+                key: "ninja-idle-right",
+                frames: [{ key: charKey, frame: 12 }],
+                frameRate: 1,
+            });
+        }
+
+        // Walk animations
+        if (!this.anims.exists("ninja-walk-down")) {
+            this.anims.create({
+                key: "ninja-walk-down",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 0,
+                    end: 3,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("ninja-walk-up")) {
+            this.anims.create({
+                key: "ninja-walk-up",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 4,
+                    end: 7,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("ninja-walk-left")) {
+            this.anims.create({
+                key: "ninja-walk-left",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 8,
+                    end: 11,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("ninja-walk-right")) {
+            this.anims.create({
+                key: "ninja-walk-right",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 12,
+                    end: 15,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+    }
+
+    private createNurseAnimations() {
+        const charKey = "nurse";
+        const frameRate = 6;
+
+        // Idle animations
+        if (!this.anims.exists("nurse-idle-down")) {
+            this.anims.create({
+                key: "nurse-idle-down",
+                frames: [{ key: charKey, frame: 0 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("nurse-idle-up")) {
+            this.anims.create({
+                key: "nurse-idle-up",
+                frames: [{ key: charKey, frame: 4 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("nurse-idle-left")) {
+            this.anims.create({
+                key: "nurse-idle-left",
+                frames: [{ key: charKey, frame: 8 }],
+                frameRate: 1,
+            });
+        }
+
+        if (!this.anims.exists("nurse-idle-right")) {
+            this.anims.create({
+                key: "nurse-idle-right",
+                frames: [{ key: charKey, frame: 12 }],
+                frameRate: 1,
+            });
+        }
+
+        // Walk animations
+        if (!this.anims.exists("nurse-walk-down")) {
+            this.anims.create({
+                key: "nurse-walk-down",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 0,
+                    end: 3,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("nurse-walk-up")) {
+            this.anims.create({
+                key: "nurse-walk-up",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 4,
+                    end: 7,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("nurse-walk-left")) {
+            this.anims.create({
+                key: "nurse-walk-left",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 8,
+                    end: 11,
+                }),
+                frameRate: frameRate,
+                repeat: -1,
+            });
+        }
+
+        if (!this.anims.exists("nurse-walk-right")) {
+            this.anims.create({
+                key: "nurse-walk-right",
                 frames: this.anims.generateFrameNumbers(charKey, {
                     start: 12,
                     end: 15,

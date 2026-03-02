@@ -1,10 +1,10 @@
-import { Scene } from 'phaser';
-import { EventBus } from '../EventBus';
-import { UserService } from '../UserService';
-import { GameDataService } from '../GameDataService';
-import { BadgeService, ApiBadge } from '../BadgeService';
-import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
-import { showAccessKeyPrompt, isAccessVerified } from '../utils/AccessKeyUtils';
+import { Scene } from "phaser";
+import { EventBus } from "../EventBus";
+import { UserService } from "../UserService";
+import { GameDataService } from "../GameDataService";
+import { BadgeService, ApiBadge } from "../BadgeService";
+import { PLAYABLE_CHARACTERS } from "../config/CharacterConfig";
+import { showAccessKeyPrompt, isAccessVerified } from "../utils/AccessKeyUtils";
 
 /**
  * Profile Scene - Main profile screen with navigation options
@@ -19,29 +19,39 @@ export class ProfileScene extends Scene {
     private proofInput: HTMLInputElement | null = null;
     private currentBadge: ApiBadge | null = null;
     private allBadges: ApiBadge[] = [];
-    
+
     // My Badges scrollable
     private myBadgesContainer!: Phaser.GameObjects.Container;
     private myBadgesMask!: Phaser.GameObjects.Graphics;
     private myBadgesScrollY: number = 0;
     private myBadgesMaxScrollY: number = 0;
-    private myBadgesBounds: { x: number; y: number; width: number; height: number } | null = null;
-    
+    private myBadgesBounds: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    } | null = null;
+
     // Unlock Badges scrollable
     private unlockBadgesContainer!: Phaser.GameObjects.Container;
     private unlockBadgesMask!: Phaser.GameObjects.Graphics;
     private unlockBadgesScrollY: number = 0;
     private unlockBadgesMaxScrollY: number = 0;
-    private unlockBadgesBounds: { x: number; y: number; width: number; height: number } | null = null;
-    
+    private unlockBadgesBounds: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    } | null = null;
+
     // Scroll state
-    private activeScrollArea: 'myBadges' | 'unlockBadges' | null = null;
+    private activeScrollArea: "myBadges" | "unlockBadges" | null = null;
     private isDragging: boolean = false;
     private dragStartY: number = 0;
     private scrollStartY: number = 0;
 
     constructor() {
-        super('ProfileScene');
+        super("ProfileScene");
     }
 
     /**
@@ -49,11 +59,11 @@ export class ProfileScene extends Scene {
      */
     private getBadgeImageKey(badgeName: string): string | null {
         const nameLower = badgeName.toLowerCase();
-        if (nameLower.includes('overguild') || nameLower.includes('og')) {
-            return 'og-badge';
+        if (nameLower.includes("overguild") || nameLower.includes("og")) {
+            return "og-badge";
         }
-        if (nameLower.includes('cardano') || nameLower.includes('ada')) {
-            return 'ada-badge';
+        if (nameLower.includes("cardano") || nameLower.includes("ada")) {
+            return "ada-badge";
         }
         return null;
     }
@@ -67,11 +77,18 @@ export class ProfileScene extends Scene {
         const centerY = this.scale.height / 2;
 
         // Background
-        const bg = this.add.image(centerX, centerY, 'start-background');
+        const bg = this.add.image(centerX, centerY, "start-background");
         bg.setDisplaySize(this.scale.width, this.scale.height);
 
         // Semi-transparent overlay
-        const overlay = this.add.rectangle(centerX, centerY, this.scale.width, this.scale.height, 0x000000, 0.4);
+        const overlay = this.add.rectangle(
+            centerX,
+            centerY,
+            this.scale.width,
+            this.scale.height,
+            0x000000,
+            0.4,
+        );
 
         // Load badges then create panel
         this.loadBadgesAndCreatePanel(centerX, centerY);
@@ -79,13 +96,13 @@ export class ProfileScene extends Scene {
         // Fade in
         this.cameras.main.fadeIn(500);
 
-        EventBus.emit('current-scene-ready', this);
+        EventBus.emit("current-scene-ready", this);
     }
 
     private async loadBadgesAndCreatePanel(centerX: number, centerY: number) {
         // Load badges from API
         this.allBadges = await BadgeService.getAllBadges();
-        
+
         // Main panel
         this.createMainPanel(centerX, centerY);
     }
@@ -95,61 +112,75 @@ export class ProfileScene extends Scene {
         const panelHeight = 450;
 
         // Panel background
-        const panelBg = this.add.sprite(centerX, centerY, 'settings-panel', 1);
+        const panelBg = this.add.sprite(centerX, centerY, "settings-panel", 1);
         panelBg.setDisplaySize(panelWidth, panelHeight);
 
         // Get user data
         const cachedData = GameDataService.getCachedData();
         const user = cachedData?.user || UserService.getStoredUser();
 
-
         if (!user) {
-            this.scene.start('Login');
+            this.scene.start("Login");
             return;
         }
 
         const panelTop = centerY - panelHeight / 2 + 30;
 
         // Title
-        const title = this.add.text(centerX, panelTop + 30, '👤 Profile', {
-            fontSize: '18px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
+        const title = this.add.text(centerX, panelTop + 30, "👤 Profile", {
+            fontSize: "18px",
+            fontFamily: "PixelFont",
+            color: "#FFD700",
+            resolution: 2,
         });
         title.setOrigin(0.5);
-        title.setStroke('#5D4037', 3);
+        title.setStroke("#5D4037", 3);
 
         // Character preview + name + wallets
         this.createCharacterSection(centerX, panelTop + 80, panelWidth, user);
 
         // My Badges section (inline with title)
-        this.createMyBadgesSection(centerX + 10, panelTop + 175, panelWidth - 30);
+        this.createMyBadgesSection(
+            centerX + 10,
+            panelTop + 175,
+            panelWidth - 30,
+        );
 
         // Unlock Badges section (scrollable list)
-        this.createUnlockBadgesSection(centerX + 10, panelTop + 210, panelWidth - 30);
+        this.createUnlockBadgesSection(
+            centerX + 10,
+            panelTop + 210,
+            panelWidth - 30,
+        );
 
         // Navigation buttons - at bottom
         this.createNavigationButtons(centerX + 10, panelTop + 350);
 
         // Logout button (small, top right)
         this.createLogoutButton(centerX + panelWidth / 2 - 30, panelTop + 30);
-        
+
         // Setup global scroll handlers
         this.setupScrollHandlers();
     }
 
-    private createCharacterSection(centerX: number, y: number, panelWidth: number, user: any) {
+    private createCharacterSection(
+        centerX: number,
+        y: number,
+        panelWidth: number,
+        user: any,
+    ) {
         // Character frame
-        const frame = this.add.sprite(centerX, y, 'square-buttons', 6);
+        const frame = this.add.sprite(centerX, y, "square-buttons", 6);
         frame.setDisplaySize(70, 70);
-        frame.setTint(0x5D4037);
+        frame.setTint(0x5d4037);
 
         // Get character type from user data (1-5, maps to index 0-4)
         const characterType = user?.characterType || 1;
-        const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
-        const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
-
+        const characterIndex = Math.max(
+            0,
+            Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1),
+        );
+        const characterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || "bear";
 
         // Character sprite (125x125 frames, scale to fit 70x70 frame)
         this.characterSprite = this.add.sprite(centerX, y, characterKey, 0);
@@ -160,22 +191,30 @@ export class ProfileScene extends Scene {
         if (!this.anims.exists(animKey)) {
             this.anims.create({
                 key: animKey,
-                frames: this.anims.generateFrameNumbers(characterKey, { start: 0, end: 3 }),
+                frames: this.anims.generateFrameNumbers(characterKey, {
+                    start: 0,
+                    end: 3,
+                }),
                 frameRate: 6,
-                repeat: -1
+                repeat: -1,
             });
         }
         this.characterSprite.play(animKey);
 
         // Username below character
-        const nameText = this.add.text(centerX, y + 48, user.username || 'Farmer', {
-            fontSize: '14px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
-        });
+        const nameText = this.add.text(
+            centerX,
+            y + 48,
+            user.username || "Farmer",
+            {
+                fontSize: "14px",
+                fontFamily: "PixelFont",
+                color: "#FFD700",
+                resolution: 2,
+            },
+        );
         nameText.setOrigin(0.5);
-        nameText.setStroke('#5D4037', 2);
+        nameText.setStroke("#5D4037", 2);
 
         // Multichain wallets section
         const walletsStartY = y + 68;
@@ -188,88 +227,95 @@ export class ProfileScene extends Scene {
     private walletModalElements: Phaser.GameObjects.GameObject[] = [];
     private walletModalOpen: boolean = false;
 
-    private createWalletsSection(centerX: number, startY: number, panelWidth: number, user: any) {
+    private createWalletsSection(
+        centerX: number,
+        startY: number,
+        panelWidth: number,
+        user: any,
+    ) {
         this.walletsUser = user;
 
         // Clear existing wallet elements
-        this.walletElements.forEach(el => (el as any)?.destroy?.());
+        this.walletElements.forEach((el) => (el as any)?.destroy?.());
         this.walletElements = [];
 
         const leftX = centerX - panelWidth / 2 + 55;
         const evmAddress = user.walletAddress || user.address;
 
         // Show only EVM address
-        const chainLabel = this.add.text(leftX, startY, 'EVM:', {
-            fontSize: '10px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
+        const chainLabel = this.add.text(leftX, startY, "EVM:", {
+            fontSize: "10px",
+            fontFamily: "PixelFont",
+            color: "#FFFFFF",
+            resolution: 2,
         });
-        chainLabel.setStroke('#000000', 3);
+        chainLabel.setStroke("#000000", 3);
         this.walletElements.push(chainLabel);
 
         if (evmAddress) {
             const shortAddr = `${evmAddress.slice(0, 6)}...${evmAddress.slice(-4)}`;
             const addrText = this.add.text(leftX + 40, startY, shortAddr, {
-                fontSize: '10px',
-                fontFamily: 'PixelFont',
-                color: '#FFFFFF', // White for better visibility
-                fontStyle: 'bold',
-                resolution: 2
+                fontSize: "10px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF", // White for better visibility
+                fontStyle: "bold",
+                resolution: 2,
             });
-            addrText.setStroke('#000000', 3);
+            addrText.setStroke("#000000", 3);
             this.walletElements.push(addrText);
 
             // Copy button
-            const copyBtn = this.add.text(leftX + 140, startY, 'Copy', {
-                fontSize: '8px',
-                fontFamily: 'PixelFont',
-                color: '#FFFFFF',
-                resolution: 2
+            const copyBtn = this.add.text(leftX + 140, startY, "Copy", {
+                fontSize: "8px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
             });
-            copyBtn.setStroke('#000000', 3);
+            copyBtn.setStroke("#000000", 3);
             copyBtn.setInteractive({ useHandCursor: true });
             this.walletElements.push(copyBtn);
 
-            copyBtn.on('pointerdown', async () => {
+            copyBtn.on("pointerdown", async () => {
                 try {
                     await navigator.clipboard.writeText(evmAddress);
-                    copyBtn.setText('Copied!');
-                    copyBtn.setColor('#FFFFFF');
-                    copyBtn.setStroke('#000000', 3);
+                    copyBtn.setText("Copied!");
+                    copyBtn.setColor("#FFFFFF");
+                    copyBtn.setStroke("#000000", 3);
                     this.time.delayedCall(1500, () => {
                         if (copyBtn.active) {
-                            copyBtn.setText('Copy');
-                            copyBtn.setColor('#FFFFFF');
-                            copyBtn.setStroke('#000000', 3);
+                            copyBtn.setText("Copy");
+                            copyBtn.setColor("#FFFFFF");
+                            copyBtn.setStroke("#000000", 3);
                         }
                     });
-                } catch {
-                }
+                } catch {}
             });
-            copyBtn.on('pointerover', () => copyBtn.setColor('#CCCCCC'));
-            copyBtn.on('pointerout', () => {
-                if (copyBtn.text === 'Copy') copyBtn.setColor('#FFFFFF');
+            copyBtn.on("pointerover", () => copyBtn.setColor("#CCCCCC"));
+            copyBtn.on("pointerout", () => {
+                if (copyBtn.text === "Copy") copyBtn.setColor("#FFFFFF");
             });
         }
 
         // Check if there are other wallets
-        const hasOtherWallets = user.walletAddressAptos || user.walletAddressSui || user.walletAddressCardano;
+        const hasOtherWallets =
+            user.walletAddressAptos ||
+            user.walletAddressSui ||
+            user.walletAddressCardano;
 
         if (hasOtherWallets) {
             // More button - opens modal
-            const moreBtn = this.add.text(leftX + 185, startY, '▼ More', {
-                fontSize: '8px',
-                fontFamily: 'PixelFont',
-                color: '#4a90e2',
-                resolution: 2
+            const moreBtn = this.add.text(leftX + 185, startY, "▼ More", {
+                fontSize: "8px",
+                fontFamily: "PixelFont",
+                color: "#4a90e2",
+                resolution: 2,
             });
             moreBtn.setInteractive({ useHandCursor: true });
             this.walletElements.push(moreBtn);
 
-            moreBtn.on('pointerdown', () => this.openWalletsModal(user));
-            moreBtn.on('pointerover', () => moreBtn.setColor('#6bb3ff'));
-            moreBtn.on('pointerout', () => moreBtn.setColor('#4a90e2'));
+            moreBtn.on("pointerdown", () => this.openWalletsModal(user));
+            moreBtn.on("pointerover", () => moreBtn.setColor("#6bb3ff"));
+            moreBtn.on("pointerout", () => moreBtn.setColor("#4a90e2"));
         }
     }
 
@@ -286,19 +332,34 @@ export class ProfileScene extends Scene {
         const modalHeight = 180;
 
         // Overlay
-        const overlay = this.add.rectangle(centerX, centerY, this.scale.width, this.scale.height, 0x000000, 0.8);
+        const overlay = this.add.rectangle(
+            centerX,
+            centerY,
+            this.scale.width,
+            this.scale.height,
+            0x000000,
+            0.8,
+        );
         overlay.setDepth(100);
         overlay.setInteractive();
         this.walletModalElements.push(overlay);
 
         // Modal background
-        const modalBg = this.add.sprite(centerX, centerY, 'settings-panel', 1);
+        const modalBg = this.add.sprite(centerX, centerY, "settings-panel", 1);
         modalBg.setDisplaySize(modalWidth, modalHeight);
         modalBg.setDepth(101);
         modalBg.setInteractive();
-        modalBg.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
-            e.stopPropagation();
-        });
+        modalBg.on(
+            "pointerdown",
+            (
+                _p: Phaser.Input.Pointer,
+                _x: number,
+                _y: number,
+                e: Phaser.Types.Input.EventData,
+            ) => {
+                e.stopPropagation();
+            },
+        );
         this.walletModalElements.push(modalBg);
 
         // Animate
@@ -308,27 +369,32 @@ export class ProfileScene extends Scene {
             scaleX: modalWidth / 125,
             scaleY: modalHeight / 140,
             duration: 200,
-            ease: 'Back.easeOut'
+            ease: "Back.easeOut",
         });
 
         // Title
-        const title = this.add.text(centerX, centerY - modalHeight / 2 + 25, '🔗 All Wallets', {
-            fontSize: '12px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
-        });
+        const title = this.add.text(
+            centerX,
+            centerY - modalHeight / 2 + 25,
+            "🔗 All Wallets",
+            {
+                fontSize: "12px",
+                fontFamily: "PixelFont",
+                color: "#FFD700",
+                resolution: 2,
+            },
+        );
         title.setOrigin(0.5);
         title.setDepth(102);
-        title.setStroke('#5D4037', 2);
+        title.setStroke("#5D4037", 2);
         this.walletModalElements.push(title);
 
         // All wallets list
         const wallets = [
-            { chain: 'EVM', address: user.walletAddress || user.address },
-            { chain: 'Aptos', address: user.walletAddressAptos },
-            { chain: 'Sui', address: user.walletAddressSui },
-            { chain: 'Cardano', address: user.walletAddressCardano }
+            { chain: "EVM", address: user.walletAddress || user.address },
+            { chain: "Aptos", address: user.walletAddressAptos },
+            { chain: "Sui", address: user.walletAddressSui },
+            { chain: "Cardano", address: user.walletAddressCardano },
         ];
 
         const listStartY = centerY - modalHeight / 2 + 50;
@@ -338,65 +404,64 @@ export class ProfileScene extends Scene {
             const y = listStartY + index * 24;
 
             const label = this.add.text(leftX, y, `${wallet.chain}:`, {
-                fontSize: '10px',
-                fontFamily: 'PixelFont',
-                color: '#FFFFFF',
-                resolution: 2
+                fontSize: "10px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
             });
             label.setDepth(102);
-            label.setStroke('#000000', 3);
+            label.setStroke("#000000", 3);
             this.walletModalElements.push(label);
 
             if (wallet.address) {
                 const shortAddr = `${wallet.address.slice(0, 8)}...${wallet.address.slice(-6)}`;
                 const addrText = this.add.text(leftX + 70, y, shortAddr, {
-                    fontSize: '10px',
-                    fontFamily: 'PixelFont',
-                    color: '#FFFFFF',
-                    fontStyle: 'bold',
-                    resolution: 2
+                    fontSize: "10px",
+                    fontFamily: "PixelFont",
+                    color: "#FFFFFF",
+                    fontStyle: "bold",
+                    resolution: 2,
                 });
                 addrText.setDepth(102);
-                addrText.setStroke('#000000', 3);
+                addrText.setStroke("#000000", 3);
                 this.walletModalElements.push(addrText);
 
-                const copyBtn = this.add.text(leftX + 185, y, 'Copy', {
-                    fontSize: '8px',
-                    fontFamily: 'PixelFont',
-                    color: '#FFFFFF',
-                    resolution: 2
+                const copyBtn = this.add.text(leftX + 185, y, "Copy", {
+                    fontSize: "8px",
+                    fontFamily: "PixelFont",
+                    color: "#FFFFFF",
+                    resolution: 2,
                 });
                 copyBtn.setDepth(102);
-                copyBtn.setStroke('#000000', 3);
+                copyBtn.setStroke("#000000", 3);
                 copyBtn.setInteractive({ useHandCursor: true });
                 this.walletModalElements.push(copyBtn);
 
-                copyBtn.on('pointerdown', async () => {
+                copyBtn.on("pointerdown", async () => {
                     try {
                         await navigator.clipboard.writeText(wallet.address!);
-                        copyBtn.setText('Copied!');
-                        copyBtn.setColor('#FFFFFF');
-                        copyBtn.setStroke('#000000', 3);
+                        copyBtn.setText("Copied!");
+                        copyBtn.setColor("#FFFFFF");
+                        copyBtn.setStroke("#000000", 3);
                         this.time.delayedCall(1500, () => {
                             if (copyBtn.active) {
-                                copyBtn.setText('Copy');
-                                copyBtn.setColor('#FFFFFF');
-                                copyBtn.setStroke('#000000', 3);
+                                copyBtn.setText("Copy");
+                                copyBtn.setColor("#FFFFFF");
+                                copyBtn.setStroke("#000000", 3);
                             }
                         });
-                    } catch {
-                    }
+                    } catch {}
                 });
-                copyBtn.on('pointerover', () => copyBtn.setColor('#CCCCCC'));
-                copyBtn.on('pointerout', () => {
-                    if (copyBtn.text === 'Copy') copyBtn.setColor('#FFFFFF');
+                copyBtn.on("pointerover", () => copyBtn.setColor("#CCCCCC"));
+                copyBtn.on("pointerout", () => {
+                    if (copyBtn.text === "Copy") copyBtn.setColor("#FFFFFF");
                 });
             } else {
-                const notLinked = this.add.text(leftX + 70, y, 'Not linked', {
-                    fontSize: '10px',
-                    fontFamily: 'PixelFont',
-                    color: '#6b7280',
-                    resolution: 2
+                const notLinked = this.add.text(leftX + 70, y, "Not linked", {
+                    fontSize: "10px",
+                    fontFamily: "PixelFont",
+                    color: "#6b7280",
+                    resolution: 2,
                 });
                 notLinked.setDepth(102);
                 this.walletModalElements.push(notLinked);
@@ -404,33 +469,43 @@ export class ProfileScene extends Scene {
         });
 
         // Close button
-        const closeBtnBg = this.add.sprite(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, 'square-buttons', 7);
+        const closeBtnBg = this.add.sprite(
+            centerX + modalWidth / 2 - 20,
+            centerY - modalHeight / 2 + 15,
+            "square-buttons",
+            7,
+        );
         closeBtnBg.setDisplaySize(24, 24);
         closeBtnBg.setDepth(103);
         closeBtnBg.setInteractive({ useHandCursor: true });
         this.walletModalElements.push(closeBtnBg);
 
-        const closeText = this.add.text(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, 'X', {
-            fontSize: '14px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
-        });
+        const closeText = this.add.text(
+            centerX + modalWidth / 2 - 20,
+            centerY - modalHeight / 2 + 15,
+            "X",
+            {
+                fontSize: "14px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
+            },
+        );
         closeText.setOrigin(0.5);
         closeText.setDepth(104);
-        closeText.setStroke('#5D4037', 2);
+        closeText.setStroke("#5D4037", 2);
         this.walletModalElements.push(closeText);
 
-        closeBtnBg.on('pointerdown', () => this.closeWalletsModal());
-        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
-        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+        closeBtnBg.on("pointerdown", () => this.closeWalletsModal());
+        closeBtnBg.on("pointerover", () => closeBtnBg.setTint(0xcccccc));
+        closeBtnBg.on("pointerout", () => closeBtnBg.clearTint());
 
-        overlay.on('pointerdown', () => this.closeWalletsModal());
+        overlay.on("pointerdown", () => this.closeWalletsModal());
     }
 
     private closeWalletsModal() {
         this.walletModalOpen = false;
-        this.walletModalElements.forEach(el => (el as any)?.destroy?.());
+        this.walletModalElements.forEach((el) => (el as any)?.destroy?.());
         this.walletModalElements = [];
     }
 
@@ -441,22 +516,28 @@ export class ProfileScene extends Scene {
     /**
      * Create "My Badges" section with inline badges (max 5, with more button)
      */
-    private createMyBadgesSection(centerX: number, startY: number, panelWidth: number) {
+    private createMyBadgesSection(
+        centerX: number,
+        startY: number,
+        panelWidth: number,
+    ) {
         const viewportWidth = panelWidth - 40;
         const leftX = centerX - viewportWidth / 2;
 
         // Section title
-        const title = this.add.text(leftX + 10, startY, '🏆 My Badges', {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
+        const title = this.add.text(leftX + 10, startY, "🏆 My Badges", {
+            fontSize: "9px",
+            fontFamily: "PixelFont",
+            color: "#FFD700",
+            resolution: 2,
         });
-        title.setStroke('#5D4037', 2);
+        title.setStroke("#5D4037", 2);
         this.badgeElements.push(title);
 
         // PENDING is considered as owned (user already submitted proof)
-        const claimedBadges = this.allBadges.filter(b => b.status === 'CLAIMED' || b.status === 'PENDING');
+        const claimedBadges = this.allBadges.filter(
+            (b) => b.status === "CLAIMED" || b.status === "PENDING",
+        );
 
         // Show badges inline with title (max 5)
         const maxInlineBadges = 5;
@@ -466,23 +547,33 @@ export class ProfileScene extends Scene {
         const badgesStartX = leftX + 85; // After title
 
         if (claimedBadges.length === 0) {
-            const noBadges = this.add.text(badgesStartX, startY, 'No badges yet', {
-                fontSize: '8px',
-                fontFamily: 'PixelFont',
-                color: '#6b7280',
-                resolution: 2
-            });
+            const noBadges = this.add.text(
+                badgesStartX,
+                startY,
+                "No badges yet",
+                {
+                    fontSize: "8px",
+                    fontFamily: "PixelFont",
+                    color: "#6b7280",
+                    resolution: 2,
+                },
+            );
             this.badgeElements.push(noBadges);
         } else {
             // Display badges inline
             badgesToShow.forEach((badge, index) => {
-                const x = badgesStartX + index * (badgeSize + badgeSpacing) + badgeSize / 2;
+                const x =
+                    badgesStartX +
+                    index * (badgeSize + badgeSpacing) +
+                    badgeSize / 2;
                 const y = startY + 5;
 
                 // Use badge image based on name, no background
                 const badgeImageKey = this.getBadgeImageKey(badge.name);
-                let badgeElement: Phaser.GameObjects.Image | Phaser.GameObjects.Text;
-                
+                let badgeElement:
+                    | Phaser.GameObjects.Image
+                    | Phaser.GameObjects.Text;
+
                 if (badgeImageKey && this.textures.exists(badgeImageKey)) {
                     const badgeImage = this.add.image(x, y, badgeImageKey);
                     badgeImage.setDisplaySize(badgeSize, badgeSize);
@@ -490,9 +581,9 @@ export class ProfileScene extends Scene {
                     this.badgeElements.push(badgeImage);
                     badgeElement = badgeImage;
                 } else {
-                    const badgeIcon = this.add.text(x, y, '🏆', {
-                        fontSize: '12px',
-                        resolution: 2
+                    const badgeIcon = this.add.text(x, y, "🏆", {
+                        fontSize: "12px",
+                        resolution: 2,
                     });
                     badgeIcon.setOrigin(0.5);
                     badgeIcon.setInteractive({ useHandCursor: true });
@@ -500,30 +591,40 @@ export class ProfileScene extends Scene {
                     badgeElement = badgeIcon;
                 }
 
-                badgeElement.on('pointerover', () => {
+                badgeElement.on("pointerover", () => {
                     this.showBadgeTooltip(x, y - badgeSize / 2 - 20, badge);
                 });
-                badgeElement.on('pointerout', () => {
+                badgeElement.on("pointerout", () => {
                     this.hideBadgeTooltip();
                 });
             });
 
             // Show "more" button if there are more than 5 badges
             if (claimedBadges.length > maxInlineBadges) {
-                const moreX = badgesStartX + maxInlineBadges * (badgeSize + badgeSpacing) + 15;
-                const moreBtn = this.add.text(moreX, startY + 5, `+${claimedBadges.length - maxInlineBadges}`, {
-                    fontSize: '9px',
-                    fontFamily: 'PixelFont',
-                    color: '#4a90e2',
-                    resolution: 2
-                });
+                const moreX =
+                    badgesStartX +
+                    maxInlineBadges * (badgeSize + badgeSpacing) +
+                    15;
+                const moreBtn = this.add.text(
+                    moreX,
+                    startY + 5,
+                    `+${claimedBadges.length - maxInlineBadges}`,
+                    {
+                        fontSize: "9px",
+                        fontFamily: "PixelFont",
+                        color: "#4a90e2",
+                        resolution: 2,
+                    },
+                );
                 moreBtn.setOrigin(0.5);
                 moreBtn.setInteractive({ useHandCursor: true });
                 this.badgeElements.push(moreBtn);
 
-                moreBtn.on('pointerdown', () => this.openBadgesModal(claimedBadges));
-                moreBtn.on('pointerover', () => moreBtn.setColor('#6bb3ff'));
-                moreBtn.on('pointerout', () => moreBtn.setColor('#4a90e2'));
+                moreBtn.on("pointerdown", () =>
+                    this.openBadgesModal(claimedBadges),
+                );
+                moreBtn.on("pointerover", () => moreBtn.setColor("#6bb3ff"));
+                moreBtn.on("pointerout", () => moreBtn.setColor("#4a90e2"));
             }
         }
 
@@ -545,19 +646,34 @@ export class ProfileScene extends Scene {
         const modalHeight = 220;
 
         // Overlay
-        const overlay = this.add.rectangle(centerX, centerY, this.scale.width, this.scale.height, 0x000000, 0.8);
+        const overlay = this.add.rectangle(
+            centerX,
+            centerY,
+            this.scale.width,
+            this.scale.height,
+            0x000000,
+            0.8,
+        );
         overlay.setDepth(100);
         overlay.setInteractive();
         this.badgeModalElements.push(overlay);
 
         // Modal background
-        const modalBg = this.add.sprite(centerX, centerY, 'settings-panel', 1);
+        const modalBg = this.add.sprite(centerX, centerY, "settings-panel", 1);
         modalBg.setDisplaySize(modalWidth, modalHeight);
         modalBg.setDepth(101);
         modalBg.setInteractive();
-        modalBg.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
-            e.stopPropagation();
-        });
+        modalBg.on(
+            "pointerdown",
+            (
+                _p: Phaser.Input.Pointer,
+                _x: number,
+                _y: number,
+                e: Phaser.Types.Input.EventData,
+            ) => {
+                e.stopPropagation();
+            },
+        );
         this.badgeModalElements.push(modalBg);
 
         // Animate
@@ -567,19 +683,24 @@ export class ProfileScene extends Scene {
             scaleX: modalWidth / 125,
             scaleY: modalHeight / 140,
             duration: 200,
-            ease: 'Back.easeOut'
+            ease: "Back.easeOut",
         });
 
         // Title
-        const title = this.add.text(centerX, centerY - modalHeight / 2 + 25, '🏆 All My Badges', {
-            fontSize: '12px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
-        });
+        const title = this.add.text(
+            centerX,
+            centerY - modalHeight / 2 + 25,
+            "🏆 All My Badges",
+            {
+                fontSize: "12px",
+                fontFamily: "PixelFont",
+                color: "#FFD700",
+                resolution: 2,
+            },
+        );
         title.setOrigin(0.5);
         title.setDepth(102);
-        title.setStroke('#5D4037', 2);
+        title.setStroke("#5D4037", 2);
         this.badgeModalElements.push(title);
 
         // Badge grid
@@ -598,8 +719,10 @@ export class ProfileScene extends Scene {
 
             // Use badge image based on name, no background
             const badgeImageKey = this.getBadgeImageKey(badge.name);
-            let badgeElement: Phaser.GameObjects.Image | Phaser.GameObjects.Text;
-            
+            let badgeElement:
+                | Phaser.GameObjects.Image
+                | Phaser.GameObjects.Text;
+
             if (badgeImageKey && this.textures.exists(badgeImageKey)) {
                 const badgeImage = this.add.image(x, y, badgeImageKey);
                 badgeImage.setDisplaySize(cellSize, cellSize);
@@ -608,9 +731,9 @@ export class ProfileScene extends Scene {
                 this.badgeModalElements.push(badgeImage);
                 badgeElement = badgeImage;
             } else {
-                const badgeIcon = this.add.text(x, y, badge.icon || '🏆', {
-                    fontSize: '16px',
-                    resolution: 2
+                const badgeIcon = this.add.text(x, y, badge.icon || "🏆", {
+                    fontSize: "16px",
+                    resolution: 2,
                 });
                 badgeIcon.setOrigin(0.5);
                 badgeIcon.setDepth(103);
@@ -619,31 +742,36 @@ export class ProfileScene extends Scene {
                 badgeElement = badgeIcon;
             }
 
-            badgeElement.on('pointerover', () => {
+            badgeElement.on("pointerover", () => {
                 this.showBadgeTooltipModal(x, y - cellSize / 2 - 20, badge);
             });
-            badgeElement.on('pointerout', () => {
+            badgeElement.on("pointerout", () => {
                 this.hideBadgeTooltipModal();
             });
         });
 
         // Close button
-        const closeBtn = this.add.text(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, '✕', {
-            fontSize: '14px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
-        });
+        const closeBtn = this.add.text(
+            centerX + modalWidth / 2 - 20,
+            centerY - modalHeight / 2 + 15,
+            "✕",
+            {
+                fontSize: "14px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
+            },
+        );
         closeBtn.setOrigin(0.5);
         closeBtn.setDepth(103);
         closeBtn.setInteractive({ useHandCursor: true });
         this.badgeModalElements.push(closeBtn);
 
-        closeBtn.on('pointerdown', () => this.closeBadgesModal());
-        closeBtn.on('pointerover', () => closeBtn.setColor('#ff6b6b'));
-        closeBtn.on('pointerout', () => closeBtn.setColor('#FFFFFF'));
+        closeBtn.on("pointerdown", () => this.closeBadgesModal());
+        closeBtn.on("pointerover", () => closeBtn.setColor("#ff6b6b"));
+        closeBtn.on("pointerout", () => closeBtn.setColor("#FFFFFF"));
 
-        overlay.on('pointerdown', () => this.closeBadgesModal());
+        overlay.on("pointerdown", () => this.closeBadgesModal());
     }
 
     private badgeModalTooltip: Phaser.GameObjects.Container | null = null;
@@ -654,18 +782,18 @@ export class ProfileScene extends Scene {
         const container = this.add.container(x, y);
         container.setDepth(150);
 
-        const bg = this.add.rectangle(0, 0, 100, 32, 0x3E2723, 0.95);
-        bg.setStrokeStyle(1, 0x5D4037);
+        const bg = this.add.rectangle(0, 0, 100, 32, 0x3e2723, 0.95);
+        bg.setStrokeStyle(1, 0x5d4037);
         container.add(bg);
 
         const nameText = this.add.text(0, 0, badge.name, {
-            fontSize: '8px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
+            fontSize: "8px",
+            fontFamily: "PixelFont",
+            color: "#FFFFFF",
+            resolution: 2,
         });
         nameText.setOrigin(0.5);
-        nameText.setStroke('#000000', 3);
+        nameText.setStroke("#000000", 3);
         container.add(nameText);
 
         this.badgeModalTooltip = container;
@@ -678,7 +806,7 @@ export class ProfileScene extends Scene {
             alpha: 1,
             scale: 1,
             duration: 100,
-            ease: 'Back.easeOut'
+            ease: "Back.easeOut",
         });
     }
 
@@ -691,7 +819,7 @@ export class ProfileScene extends Scene {
 
     private closeBadgesModal() {
         this.badgeModalOpen = false;
-        this.badgeModalElements.forEach(el => (el as any)?.destroy?.());
+        this.badgeModalElements.forEach((el) => (el as any)?.destroy?.());
         this.badgeModalElements = [];
         this.badgeModalTooltip = null;
     }
@@ -699,33 +827,49 @@ export class ProfileScene extends Scene {
     /**
      * Create "Unlock Badges" section with scrollable list
      */
-    private createUnlockBadgesSection(centerX: number, startY: number, panelWidth: number) {
+    private createUnlockBadgesSection(
+        centerX: number,
+        startY: number,
+        panelWidth: number,
+    ) {
         const viewportWidth = panelWidth - 40;
         const viewportHeight = 90; // Height for unlock badges list
         const leftX = centerX - viewportWidth / 2;
 
         // Get all non-claimed badges for unlock section - exclude PENDING as they're already owned
-        const unclaimedBadges = this.allBadges.filter(b => b.status !== 'CLAIMED' && b.status !== 'PENDING');
+        const unclaimedBadges = this.allBadges.filter(
+            (b) => b.status !== "CLAIMED" && b.status !== "PENDING",
+        );
 
         // Section title - ADD TO badgeElements so it gets cleaned up!
-        const title = this.add.text(leftX + 10, startY, `🔓 Unlock Badges (${unclaimedBadges.length})`, {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
-        });
-        title.setStroke('#5D4037', 2);
+        const title = this.add.text(
+            leftX + 10,
+            startY,
+            `🔓 Unlock Badges (${unclaimedBadges.length})`,
+            {
+                fontSize: "9px",
+                fontFamily: "PixelFont",
+                color: "#FFD700",
+                resolution: 2,
+            },
+        );
+        title.setStroke("#5D4037", 2);
         this.badgeElements.push(title);
 
         if (unclaimedBadges.length === 0) {
-            const allClaimed = this.add.text(centerX, startY + 40, 'All badges claimed! 🎉', {
-                fontSize: '8px',
-                fontFamily: 'PixelFont',
-                color: '#FFFFFF',
-                resolution: 2
-            });
+            const allClaimed = this.add.text(
+                centerX,
+                startY + 40,
+                "All badges claimed! 🎉",
+                {
+                    fontSize: "8px",
+                    fontFamily: "PixelFont",
+                    color: "#FFFFFF",
+                    resolution: 2,
+                },
+            );
             allClaimed.setOrigin(0.5);
-            allClaimed.setStroke('#000000', 3);
+            allClaimed.setStroke("#000000", 3);
             this.badgeElements.push(allClaimed);
             return;
         }
@@ -734,7 +878,12 @@ export class ProfileScene extends Scene {
 
         // Create mask
         this.unlockBadgesMask = this.add.graphics();
-        this.unlockBadgesMask.fillRect(leftX, contentStartY, viewportWidth, viewportHeight);
+        this.unlockBadgesMask.fillRect(
+            leftX,
+            contentStartY,
+            viewportWidth,
+            viewportHeight,
+        );
         const mask = this.unlockBadgesMask.createGeometryMask();
 
         // Create container
@@ -744,46 +893,69 @@ export class ProfileScene extends Scene {
         // Create rows for each unclaimed badge with dynamic height
         let currentY = contentStartY;
         unclaimedBadges.forEach((badge) => {
-            const rowHeight = this.createUnlockBadgeRow(leftX + 10, currentY, viewportWidth - 20, badge);
+            const rowHeight = this.createUnlockBadgeRow(
+                leftX + 10,
+                currentY,
+                viewportWidth - 20,
+                badge,
+            );
             currentY += rowHeight + 4; // 4px spacing between rows
         });
 
         const totalContentHeight = currentY - contentStartY;
-        this.unlockBadgesMaxScrollY = Math.max(0, totalContentHeight - viewportHeight);
+        this.unlockBadgesMaxScrollY = Math.max(
+            0,
+            totalContentHeight - viewportHeight,
+        );
 
         // Scroll indicator if needed
         if (this.unlockBadgesMaxScrollY > 0) {
-            const scrollHint = this.add.text(centerX + viewportWidth / 2 - 15, startY, '↕', {
-                fontSize: '8px',
-                fontFamily: 'PixelFont',
-                color: '#6b7280',
-                resolution: 2
-            });
+            const scrollHint = this.add.text(
+                centerX + viewportWidth / 2 - 15,
+                startY,
+                "↕",
+                {
+                    fontSize: "8px",
+                    fontFamily: "PixelFont",
+                    color: "#6b7280",
+                    resolution: 2,
+                },
+            );
             scrollHint.setAlpha(0.6);
             this.badgeElements.push(scrollHint);
         }
 
         // Store bounds for scroll detection (used in setupScrollHandlers)
-        this.unlockBadgesBounds = { x: leftX, y: contentStartY, width: viewportWidth, height: viewportHeight };
+        this.unlockBadgesBounds = {
+            x: leftX,
+            y: contentStartY,
+            width: viewportWidth,
+            height: viewportHeight,
+        };
     }
 
-    private createUnlockBadgeRow(leftX: number, y: number, width: number, badge: ApiBadge): number {
+    private createUnlockBadgeRow(
+        leftX: number,
+        y: number,
+        width: number,
+        badge: ApiBadge,
+    ): number {
         // Store original Y for visibility check
         const originalY = y;
-        const isPending = badge.status === 'PENDING';
-        const isLocked = badge.status === 'LOCKED';
+        const isPending = badge.status === "PENDING";
+        const isLocked = badge.status === "LOCKED";
         // const canClaim = badge.status === 'CAN_CLAIM' || badge.status === 'COMPLETED';
-        const canClaim = badge.status === 'CAN_CLAIM';
-        const isClaimed = badge.status === 'CLAIMED';
-        
+        const canClaim = badge.status === "CAN_CLAIM";
+        const isClaimed = badge.status === "CLAIMED";
+
         // Fixed row height (no description in row)
         const rowHeight = 32;
         const rowCenterY = y + rowHeight / 2;
-        
+
         // Row background - different colors based on status
-        let bgColor = 0x4A4035; // default for LOCKED
-        let strokeColor = 0x6B5B4D;
-        
+        let bgColor = 0x4a4035; // default for LOCKED
+        let strokeColor = 0x6b5b4d;
+
         if (isClaimed) {
             bgColor = 0x3d5a3d;
             strokeColor = 0x4ade80;
@@ -791,11 +963,18 @@ export class ProfileScene extends Scene {
             bgColor = 0x2d5a3d;
             strokeColor = 0x4ade80;
         } else if (isPending) {
-            bgColor = 0x6B5B3D;
+            bgColor = 0x6b5b3d;
             strokeColor = 0xfbbf24;
         }
-        
-        const rowBg = this.add.rectangle(leftX + width / 2, rowCenterY, width, rowHeight, bgColor, 0.9);
+
+        const rowBg = this.add.rectangle(
+            leftX + width / 2,
+            rowCenterY,
+            width,
+            rowHeight,
+            bgColor,
+            0.9,
+        );
         rowBg.setStrokeStyle(1, strokeColor);
         this.unlockBadgesContainer.add(rowBg);
         this.badgeElements.push(rowBg);
@@ -803,22 +982,26 @@ export class ProfileScene extends Scene {
         // Badge icon - use image if available
         const badgeImageKey = this.getBadgeImageKey(badge.name);
         let iconElement: Phaser.GameObjects.Image | Phaser.GameObjects.Text;
-        
+
         if (badgeImageKey && this.textures.exists(badgeImageKey)) {
-            const badgeImage = this.add.image(leftX + 18, rowCenterY, badgeImageKey);
+            const badgeImage = this.add.image(
+                leftX + 18,
+                rowCenterY,
+                badgeImageKey,
+            );
             badgeImage.setDisplaySize(22, 22);
             badgeImage.setAlpha(isLocked ? 0.5 : 0.9);
             this.unlockBadgesContainer.add(badgeImage);
             this.badgeElements.push(badgeImage);
             iconElement = badgeImage;
         } else {
-            let iconEmoji = '🔒';
-            if (isClaimed || canClaim) iconEmoji = '🏆';
-            else if (isPending) iconEmoji = '⏳';
-            
+            let iconEmoji = "🔒";
+            if (isClaimed || canClaim) iconEmoji = "🏆";
+            else if (isPending) iconEmoji = "⏳";
+
             const icon = this.add.text(leftX + 18, rowCenterY, iconEmoji, {
-                fontSize: '14px',
-                resolution: 2
+                fontSize: "14px",
+                resolution: 2,
             });
             icon.setOrigin(0.5);
             icon.setAlpha(isLocked ? 0.5 : 0.9);
@@ -828,220 +1011,277 @@ export class ProfileScene extends Scene {
         }
 
         // Badge name - centered vertically, color based on status
-        let nameColor = '#FFFFFF'; // white for LOCKED
-        if (isClaimed) nameColor = '#FFFFFF'; // white
-        else if (canClaim) nameColor = '#FFFFFF'; // white
-        else if (isPending) nameColor = '#fbbf24'; // yellow
-        
+        let nameColor = "#FFFFFF"; // white for LOCKED
+        if (isClaimed)
+            nameColor = "#FFFFFF"; // white
+        else if (canClaim)
+            nameColor = "#FFFFFF"; // white
+        else if (isPending) nameColor = "#fbbf24"; // yellow
+
         const name = this.add.text(leftX + 38, rowCenterY, badge.name, {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
+            fontSize: "9px",
+            fontFamily: "PixelFont",
             color: nameColor,
-            resolution: 2
+            resolution: 2,
         });
         name.setOrigin(0, 0.5);
         if (isClaimed || canClaim) {
-            name.setStroke('#000000', 3);
+            name.setStroke("#000000", 3);
         } else {
-            name.setStroke('#3E2723', 2);
+            name.setStroke("#3E2723", 2);
         }
         this.unlockBadgesContainer.add(name);
         this.badgeElements.push(name);
 
         // Button or status based on badge status - centered vertically
         const btnX = leftX + width - 30;
-        
+
         // Helper to check if button is visible
         const isButtonVisible = (): boolean => {
             if (!this.unlockBadgesBounds) return true;
             const visibleY = originalY - this.unlockBadgesScrollY;
             const bounds = this.unlockBadgesBounds;
-            return visibleY + rowHeight / 2 >= bounds.y && visibleY + rowHeight / 2 <= bounds.y + bounds.height;
+            return (
+                visibleY + rowHeight / 2 >= bounds.y &&
+                visibleY + rowHeight / 2 <= bounds.y + bounds.height
+            );
         };
-        
+
         if (isLocked) {
             // Unlock button - submit proof
-            const unlockBtnBg = this.add.sprite(btnX, rowCenterY, 'square-buttons', 6);
+            const unlockBtnBg = this.add.sprite(
+                btnX,
+                rowCenterY,
+                "square-buttons",
+                6,
+            );
             unlockBtnBg.setDisplaySize(50, 22);
             unlockBtnBg.setTint(0x6b7280);
             unlockBtnBg.setInteractive({ useHandCursor: true });
             this.unlockBadgesContainer.add(unlockBtnBg);
             this.badgeElements.push(unlockBtnBg);
 
-            const unlockText = this.add.text(btnX, rowCenterY, 'Unlock', {
-                fontSize: '7px',
-                fontFamily: 'PixelFont',
-                color: '#FFFFFF',
-                resolution: 2
+            const unlockText = this.add.text(btnX, rowCenterY, "Unlock", {
+                fontSize: "7px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
             });
             unlockText.setOrigin(0.5);
-            unlockText.setStroke('#374151', 1);
+            unlockText.setStroke("#374151", 1);
             this.unlockBadgesContainer.add(unlockText);
             this.badgeElements.push(unlockText);
 
-            unlockBtnBg.on('pointerdown', () => {
+            unlockBtnBg.on("pointerdown", () => {
                 if (isButtonVisible()) {
                     this.openClaimForm(badge);
                 }
             });
-            unlockBtnBg.on('pointerover', () => {
+            unlockBtnBg.on("pointerover", () => {
                 if (isButtonVisible()) {
                     unlockBtnBg.setTint(0x9ca3af);
                 }
             });
-            unlockBtnBg.on('pointerout', () => unlockBtnBg.setTint(0x6b7280));
+            unlockBtnBg.on("pointerout", () => unlockBtnBg.setTint(0x6b7280));
         } else if (isPending) {
             // Show "Pending" text - waiting for admin
-            const pendingText = this.add.text(btnX, rowCenterY, 'Pending', {
-                fontSize: '8px',
-                fontFamily: 'PixelFont',
-                color: '#fbbf24',
-                resolution: 2
+            const pendingText = this.add.text(btnX, rowCenterY, "Pending", {
+                fontSize: "8px",
+                fontFamily: "PixelFont",
+                color: "#fbbf24",
+                resolution: 2,
             });
             pendingText.setOrigin(0.5);
-            pendingText.setStroke('#3E2723', 1);
+            pendingText.setStroke("#3E2723", 1);
             this.unlockBadgesContainer.add(pendingText);
             this.badgeElements.push(pendingText);
         } else if (canClaim) {
             // Claim button - claim directly without modal
-            const claimBtnBg = this.add.sprite(btnX, rowCenterY, 'square-buttons', 6);
+            const claimBtnBg = this.add.sprite(
+                btnX,
+                rowCenterY,
+                "square-buttons",
+                6,
+            );
             claimBtnBg.setDisplaySize(50, 22);
             claimBtnBg.setTint(0x4ade80);
             claimBtnBg.setInteractive({ useHandCursor: true });
             this.unlockBadgesContainer.add(claimBtnBg);
             this.badgeElements.push(claimBtnBg);
 
-            const claimText = this.add.text(btnX, rowCenterY, 'Claim', {
-                fontSize: '7px',
-                fontFamily: 'PixelFont',
-                color: '#FFFFFF',
-                resolution: 2
+            const claimText = this.add.text(btnX, rowCenterY, "Claim", {
+                fontSize: "7px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
             });
             claimText.setOrigin(0.5);
-            claimText.setStroke('#166534', 1);
+            claimText.setStroke("#166534", 1);
             this.unlockBadgesContainer.add(claimText);
             this.badgeElements.push(claimText);
 
-            claimBtnBg.on('pointerdown', async () => {
+            claimBtnBg.on("pointerdown", async () => {
                 if (isButtonVisible()) {
                     // Disable button while claiming
                     claimBtnBg.disableInteractive();
                     claimBtnBg.setTint(0x6b7280);
-                    claimText.setText('...');
-                    
-                    this.showToast('⏳ Claiming...', 0x4a90e2);
-                    const result = await BadgeService.claimBadge(badge.id, '');
-                    
+                    claimText.setText("...");
+
+                    this.showToast("⏳ Claiming...", 0x4a90e2);
+                    const result = await BadgeService.claimBadge(badge.id, "");
+
                     if (result.success) {
                         this.showToast(`🎉 "${badge.name}" claimed!`, 0x4ade80);
-                        
+
                         // Update badge status in local array
-                        badge.status = 'CLAIMED';
-                        
+                        badge.status = "CLAIMED";
+
                         // Update UI: Change button to "Claimed" state
                         claimBtnBg.setTint(0x374151);
                         claimBtnBg.setAlpha(0.7);
-                        claimText.setText('✓ Claimed');
-                        claimText.setFontSize('6px');
-                        claimText.setColor('#9CA3AF');
-                        
+                        claimText.setText("✓ Claimed");
+                        claimText.setFontSize("6px");
+                        claimText.setColor("#9CA3AF");
+
                         // Update row background color to claimed style
                         rowBg.setFillStyle(0x3d5a3d, 0.9);
                         rowBg.setStrokeStyle(1, 0x4ade80);
-                        
+
                         // Update icon - only if it's a text element
                         if (iconElement instanceof Phaser.GameObjects.Text) {
-                            iconElement.setText('🏆');
+                            iconElement.setText("🏆");
                         }
                         iconElement.setAlpha(0.9);
-                        
+
                         // Update name color
-                        name.setColor('#FFFFFF');
-                        name.setStroke('#000000', 3);
+                        name.setColor("#FFFFFF");
+                        name.setStroke("#000000", 3);
                     } else {
                         this.showToast(`❌ ${result.message}`, 0xef4444);
                         // Re-enable button on error
                         claimBtnBg.setInteractive({ useHandCursor: true });
                         claimBtnBg.setTint(0x4ade80);
-                        claimText.setText('Claim');
+                        claimText.setText("Claim");
                     }
                 }
             });
-            claimBtnBg.on('pointerover', () => {
+            claimBtnBg.on("pointerover", () => {
                 if (isButtonVisible()) {
                     claimBtnBg.setTint(0x86efac);
                 }
             });
-            claimBtnBg.on('pointerout', () => claimBtnBg.setTint(0x4ade80));
+            claimBtnBg.on("pointerout", () => claimBtnBg.setTint(0x4ade80));
         } else if (isClaimed) {
             // Claimed button - disabled
-            const claimedBtnBg = this.add.sprite(btnX, rowCenterY, 'square-buttons', 6);
+            const claimedBtnBg = this.add.sprite(
+                btnX,
+                rowCenterY,
+                "square-buttons",
+                6,
+            );
             claimedBtnBg.setDisplaySize(55, 22);
             claimedBtnBg.setTint(0x374151);
             claimedBtnBg.setAlpha(0.7);
             this.unlockBadgesContainer.add(claimedBtnBg);
             this.badgeElements.push(claimedBtnBg);
 
-            const claimedText = this.add.text(btnX, rowCenterY, '✓ Claimed', {
-                fontSize: '6px',
-                fontFamily: 'PixelFont',
-                color: '#9CA3AF',
-                resolution: 2
+            const claimedText = this.add.text(btnX, rowCenterY, "✓ Claimed", {
+                fontSize: "6px",
+                fontFamily: "PixelFont",
+                color: "#9CA3AF",
+                resolution: 2,
             });
             claimedText.setOrigin(0.5);
             this.unlockBadgesContainer.add(claimedText);
             this.badgeElements.push(claimedText);
         }
-        
+
         return rowHeight;
     }
 
     private setupScrollHandlers() {
         // Mouse wheel scroll
-        this.input.on('wheel', (pointer: Phaser.Input.Pointer, _gameObjects: any[], _deltaX: number, deltaY: number) => {
-            // Check if pointer is within myBadges bounds
-            if (this.myBadgesBounds && this.myBadgesMaxScrollY > 0) {
-                const b = this.myBadgesBounds;
-                if (pointer.x >= b.x && pointer.x <= b.x + b.width &&
-                    pointer.y >= b.y && pointer.y <= b.y + b.height) {
-                    this.myBadgesScrollY = Phaser.Math.Clamp(this.myBadgesScrollY + deltaY * 0.5, 0, this.myBadgesMaxScrollY);
-                    this.myBadgesContainer.setY(-this.myBadgesScrollY);
-                    return;
+        this.input.on(
+            "wheel",
+            (
+                pointer: Phaser.Input.Pointer,
+                _gameObjects: any[],
+                _deltaX: number,
+                deltaY: number,
+            ) => {
+                // Check if pointer is within myBadges bounds
+                if (this.myBadgesBounds && this.myBadgesMaxScrollY > 0) {
+                    const b = this.myBadgesBounds;
+                    if (
+                        pointer.x >= b.x &&
+                        pointer.x <= b.x + b.width &&
+                        pointer.y >= b.y &&
+                        pointer.y <= b.y + b.height
+                    ) {
+                        this.myBadgesScrollY = Phaser.Math.Clamp(
+                            this.myBadgesScrollY + deltaY * 0.5,
+                            0,
+                            this.myBadgesMaxScrollY,
+                        );
+                        this.myBadgesContainer.setY(-this.myBadgesScrollY);
+                        return;
+                    }
                 }
-            }
-            
-            // Check if pointer is within unlockBadges bounds
-            if (this.unlockBadgesBounds && this.unlockBadgesMaxScrollY > 0) {
-                const b = this.unlockBadgesBounds;
-                if (pointer.x >= b.x && pointer.x <= b.x + b.width &&
-                    pointer.y >= b.y && pointer.y <= b.y + b.height) {
-                    this.unlockBadgesScrollY = Phaser.Math.Clamp(this.unlockBadgesScrollY + deltaY * 0.5, 0, this.unlockBadgesMaxScrollY);
-                    this.unlockBadgesContainer.setY(-this.unlockBadgesScrollY);
+
+                // Check if pointer is within unlockBadges bounds
+                if (
+                    this.unlockBadgesBounds &&
+                    this.unlockBadgesMaxScrollY > 0
+                ) {
+                    const b = this.unlockBadgesBounds;
+                    if (
+                        pointer.x >= b.x &&
+                        pointer.x <= b.x + b.width &&
+                        pointer.y >= b.y &&
+                        pointer.y <= b.y + b.height
+                    ) {
+                        this.unlockBadgesScrollY = Phaser.Math.Clamp(
+                            this.unlockBadgesScrollY + deltaY * 0.5,
+                            0,
+                            this.unlockBadgesMaxScrollY,
+                        );
+                        this.unlockBadgesContainer.setY(
+                            -this.unlockBadgesScrollY,
+                        );
+                    }
                 }
-            }
-        });
+            },
+        );
 
         // Touch/drag scroll - detect area on pointerdown
-        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
             // Check myBadges area
             if (this.myBadgesBounds) {
                 const b = this.myBadgesBounds;
-                if (pointer.x >= b.x && pointer.x <= b.x + b.width &&
-                    pointer.y >= b.y && pointer.y <= b.y + b.height) {
-                    this.activeScrollArea = 'myBadges';
+                if (
+                    pointer.x >= b.x &&
+                    pointer.x <= b.x + b.width &&
+                    pointer.y >= b.y &&
+                    pointer.y <= b.y + b.height
+                ) {
+                    this.activeScrollArea = "myBadges";
                     this.isDragging = true;
                     this.dragStartY = pointer.y;
                     this.scrollStartY = this.myBadgesScrollY;
                     return;
                 }
             }
-            
+
             // Check unlockBadges area
             if (this.unlockBadgesBounds) {
                 const b = this.unlockBadgesBounds;
-                if (pointer.x >= b.x && pointer.x <= b.x + b.width &&
-                    pointer.y >= b.y && pointer.y <= b.y + b.height) {
-                    this.activeScrollArea = 'unlockBadges';
+                if (
+                    pointer.x >= b.x &&
+                    pointer.x <= b.x + b.width &&
+                    pointer.y >= b.y &&
+                    pointer.y <= b.y + b.height
+                ) {
+                    this.activeScrollArea = "unlockBadges";
                     this.isDragging = true;
                     this.dragStartY = pointer.y;
                     this.scrollStartY = this.unlockBadgesScrollY;
@@ -1049,21 +1289,35 @@ export class ProfileScene extends Scene {
             }
         });
 
-        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+        this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
             if (!this.isDragging) return;
-            
+
             const deltaY = this.dragStartY - pointer.y;
-            
-            if (this.activeScrollArea === 'myBadges' && this.myBadgesMaxScrollY > 0) {
-                this.myBadgesScrollY = Phaser.Math.Clamp(this.scrollStartY + deltaY, 0, this.myBadgesMaxScrollY);
+
+            if (
+                this.activeScrollArea === "myBadges" &&
+                this.myBadgesMaxScrollY > 0
+            ) {
+                this.myBadgesScrollY = Phaser.Math.Clamp(
+                    this.scrollStartY + deltaY,
+                    0,
+                    this.myBadgesMaxScrollY,
+                );
                 this.myBadgesContainer.setY(-this.myBadgesScrollY);
-            } else if (this.activeScrollArea === 'unlockBadges' && this.unlockBadgesMaxScrollY > 0) {
-                this.unlockBadgesScrollY = Phaser.Math.Clamp(this.scrollStartY + deltaY, 0, this.unlockBadgesMaxScrollY);
+            } else if (
+                this.activeScrollArea === "unlockBadges" &&
+                this.unlockBadgesMaxScrollY > 0
+            ) {
+                this.unlockBadgesScrollY = Phaser.Math.Clamp(
+                    this.scrollStartY + deltaY,
+                    0,
+                    this.unlockBadgesMaxScrollY,
+                );
                 this.unlockBadgesContainer.setY(-this.unlockBadgesScrollY);
             }
         });
 
-        this.input.on('pointerup', () => {
+        this.input.on("pointerup", () => {
             this.isDragging = false;
             this.activeScrollArea = null;
         });
@@ -1077,18 +1331,18 @@ export class ProfileScene extends Scene {
         const container = this.add.container(x, y);
         container.setDepth(50);
 
-        const bg = this.add.rectangle(0, 0, 90, 28, 0x3E2723, 0.95);
-        bg.setStrokeStyle(1, 0x5D4037);
+        const bg = this.add.rectangle(0, 0, 90, 28, 0x3e2723, 0.95);
+        bg.setStrokeStyle(1, 0x5d4037);
         container.add(bg);
 
         const nameText = this.add.text(0, 0, badge.name, {
-            fontSize: '8px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
+            fontSize: "8px",
+            fontFamily: "PixelFont",
+            color: "#FFFFFF",
+            resolution: 2,
         });
         nameText.setOrigin(0.5);
-        nameText.setStroke('#000000', 3);
+        nameText.setStroke("#000000", 3);
         container.add(nameText);
 
         this.badgeTooltip = container;
@@ -1100,7 +1354,7 @@ export class ProfileScene extends Scene {
             alpha: 1,
             scale: 1,
             duration: 100,
-            ease: 'Back.easeOut'
+            ease: "Back.easeOut",
         });
     }
 
@@ -1121,19 +1375,34 @@ export class ProfileScene extends Scene {
         const formHeight = 220;
 
         // Overlay
-        const overlay = this.add.rectangle(centerX, centerY, this.scale.width, this.scale.height, 0x000000, 0.8);
+        const overlay = this.add.rectangle(
+            centerX,
+            centerY,
+            this.scale.width,
+            this.scale.height,
+            0x000000,
+            0.8,
+        );
         overlay.setDepth(100);
         overlay.setInteractive();
         this.claimFormElements.push(overlay);
 
         // Form background
-        const formBg = this.add.sprite(centerX, centerY, 'settings-panel', 1);
+        const formBg = this.add.sprite(centerX, centerY, "settings-panel", 1);
         formBg.setDisplaySize(formWidth, formHeight);
         formBg.setDepth(101);
         formBg.setInteractive();
-        formBg.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
-            e.stopPropagation();
-        });
+        formBg.on(
+            "pointerdown",
+            (
+                _p: Phaser.Input.Pointer,
+                _x: number,
+                _y: number,
+                e: Phaser.Types.Input.EventData,
+            ) => {
+                e.stopPropagation();
+            },
+        );
         this.claimFormElements.push(formBg);
 
         formBg.setScale(0);
@@ -1142,58 +1411,78 @@ export class ProfileScene extends Scene {
             scaleX: formWidth / 125,
             scaleY: formHeight / 140,
             duration: 200,
-            ease: 'Back.easeOut'
+            ease: "Back.easeOut",
         });
 
         // Title with better contrast
-        const title = this.add.text(centerX, centerY - formHeight / 2 + 25, `🔓 ${badge.name}`, {
-            fontSize: '13px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
-        });
+        const title = this.add.text(
+            centerX,
+            centerY - formHeight / 2 + 25,
+            `🔓 ${badge.name}`,
+            {
+                fontSize: "13px",
+                fontFamily: "PixelFont",
+                color: "#FFD700",
+                resolution: 2,
+            },
+        );
         title.setOrigin(0.5);
         title.setDepth(102);
-        title.setStroke('#3E2723', 3);
+        title.setStroke("#3E2723", 3);
         this.claimFormElements.push(title);
 
         // Badge description with better color
-        const description = this.add.text(centerX + 10, centerY - formHeight / 2 + 50, badge.description, {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#3E2723',
-            resolution: 2,
-            wordWrap: { width: formWidth - 60 },
-            align: 'center',
-            lineSpacing: 6
-        });
+        const description = this.add.text(
+            centerX + 10,
+            centerY - formHeight / 2 + 50,
+            badge.description,
+            {
+                fontSize: "9px",
+                fontFamily: "PixelFont",
+                color: "#3E2723",
+                resolution: 2,
+                wordWrap: { width: formWidth - 60 },
+                align: "center",
+                lineSpacing: 6,
+            },
+        );
         description.setOrigin(0.5);
         description.setDepth(102);
         this.claimFormElements.push(description);
 
         // Instructions with darker color
-        const instructions = this.add.text(centerX, centerY - 15, 'Submit proof (link or description):', {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#5D4037',
-            resolution: 2,
-            wordWrap: { width: formWidth - 40 },
-            align: 'center'
-        });
+        const instructions = this.add.text(
+            centerX,
+            centerY - 15,
+            "Submit proof (link or description):",
+            {
+                fontSize: "9px",
+                fontFamily: "PixelFont",
+                color: "#5D4037",
+                resolution: 2,
+                wordWrap: { width: formWidth - 40 },
+                align: "center",
+            },
+        );
         instructions.setOrigin(0.5);
         instructions.setDepth(102);
         this.claimFormElements.push(instructions);
 
         // Note about verification with better color
-        const note = this.add.text(centerX, centerY + 75, '⏳ Admin will verify your proof', {
-            fontSize: '8px',
-            fontFamily: 'PixelFont',
-            color: '#f59e0b',
-            resolution: 2
-        });
+        const note = this.add.text(
+            centerX,
+            centerY + 75,
+            "⏳ Admin will verify your proof",
+            {
+                fontSize: "8px",
+                fontFamily: "PixelFont",
+                color: "#f59e0b",
+                resolution: 2,
+            },
+        );
         note.setOrigin(0.5);
         note.setDepth(102);
-        note.setStroke('#3E2723', 2);
+        note.setStroke("#3E2723", 2);
         this.claimFormElements.push(note);
 
         // Create input after animation
@@ -1201,16 +1490,20 @@ export class ProfileScene extends Scene {
             this.createProofInput(centerX, centerY, badge);
         });
 
-        overlay.on('pointerdown', () => this.closeClaimForm());
+        overlay.on("pointerdown", () => this.closeClaimForm());
     }
 
-    private createProofInput(centerX: number, centerY: number, badge: ApiBadge) {
+    private createProofInput(
+        centerX: number,
+        centerY: number,
+        badge: ApiBadge,
+    ) {
         this.currentBadge = badge;
-        
+
         // HTML input for proof
-        this.proofInput = document.createElement('input');
-        this.proofInput.type = 'text';
-        this.proofInput.placeholder = 'https://twitter.com/...';
+        this.proofInput = document.createElement("input");
+        this.proofInput.type = "text";
+        this.proofInput.placeholder = "https://twitter.com/...";
         this.proofInput.maxLength = 200;
         this.proofInput.style.cssText = `
             position: fixed;
@@ -1231,89 +1524,104 @@ export class ProfileScene extends Scene {
         `;
         document.body.appendChild(this.proofInput);
 
-        this.proofInput.addEventListener('keydown', async (e) => {
-            if (e.key === 'Enter') {
+        this.proofInput.addEventListener("keydown", async (e) => {
+            if (e.key === "Enter") {
                 await this.submitProof(badge);
                 e.preventDefault();
-            } else if (e.key === 'Escape') {
+            } else if (e.key === "Escape") {
                 this.closeClaimForm();
                 e.preventDefault();
             }
             e.stopPropagation();
         });
-        this.proofInput.addEventListener('keyup', (e) => e.stopPropagation());
-        this.proofInput.addEventListener('keypress', (e) => e.stopPropagation());
+        this.proofInput.addEventListener("keyup", (e) => e.stopPropagation());
+        this.proofInput.addEventListener("keypress", (e) =>
+            e.stopPropagation(),
+        );
         this.proofInput.focus();
 
         // Buttons
         const btnY = centerY + 50;
 
         // Submit button
-        const submitBtnBg = this.add.sprite(centerX - 50, btnY, 'square-buttons', 6);
+        const submitBtnBg = this.add.sprite(
+            centerX - 50,
+            btnY,
+            "square-buttons",
+            6,
+        );
         submitBtnBg.setDisplaySize(80, 30);
         submitBtnBg.setDepth(102);
         submitBtnBg.setTint(0x4ade80);
         submitBtnBg.setInteractive({ useHandCursor: true });
         this.claimFormElements.push(submitBtnBg);
 
-        const submitText = this.add.text(centerX - 50, btnY, 'Submit', {
-            fontSize: '10px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
+        const submitText = this.add.text(centerX - 50, btnY, "Submit", {
+            fontSize: "10px",
+            fontFamily: "PixelFont",
+            color: "#FFFFFF",
+            resolution: 2,
         });
         submitText.setOrigin(0.5);
         submitText.setDepth(103);
-        submitText.setStroke('#166534', 2);
+        submitText.setStroke("#166534", 2);
         this.claimFormElements.push(submitText);
 
         // Cancel button
-        const cancelBtnBg = this.add.sprite(centerX + 50, btnY, 'square-buttons', 7);
+        const cancelBtnBg = this.add.sprite(
+            centerX + 50,
+            btnY,
+            "square-buttons",
+            7,
+        );
         cancelBtnBg.setDisplaySize(80, 30);
         cancelBtnBg.setDepth(102);
         cancelBtnBg.setInteractive({ useHandCursor: true });
         this.claimFormElements.push(cancelBtnBg);
 
-        const cancelText = this.add.text(centerX + 50, btnY, 'Cancel', {
-            fontSize: '10px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
+        const cancelText = this.add.text(centerX + 50, btnY, "Cancel", {
+            fontSize: "10px",
+            fontFamily: "PixelFont",
+            color: "#FFFFFF",
+            resolution: 2,
         });
         cancelText.setOrigin(0.5);
         cancelText.setDepth(103);
-        cancelText.setStroke('#5D4037', 2);
+        cancelText.setStroke("#5D4037", 2);
         this.claimFormElements.push(cancelText);
 
-        submitBtnBg.on('pointerdown', () => this.submitProof(badge));
-        submitBtnBg.on('pointerover', () => submitBtnBg.setTint(0x86efac));
-        submitBtnBg.on('pointerout', () => submitBtnBg.setTint(0x4ade80));
+        submitBtnBg.on("pointerdown", () => this.submitProof(badge));
+        submitBtnBg.on("pointerover", () => submitBtnBg.setTint(0x86efac));
+        submitBtnBg.on("pointerout", () => submitBtnBg.setTint(0x4ade80));
 
-        cancelBtnBg.on('pointerdown', () => this.closeClaimForm());
-        cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
-        cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
+        cancelBtnBg.on("pointerdown", () => this.closeClaimForm());
+        cancelBtnBg.on("pointerover", () => cancelBtnBg.setTint(0xcccccc));
+        cancelBtnBg.on("pointerout", () => cancelBtnBg.clearTint());
     }
 
     private async submitProof(badge: ApiBadge) {
         const proof = this.proofInput?.value.trim();
         if (!proof) {
-            this.showToast('Please enter proof', 0xfbbf24);
+            this.showToast("Please enter proof", 0xfbbf24);
             return;
         }
 
         // Show loading state
-        this.showToast('⏳ Submitting proof...', 0x4a90e2);
+        this.showToast("⏳ Submitting proof...", 0x4a90e2);
 
         const result = await BadgeService.claimBadge(badge.id, proof);
 
         if (result.success) {
-            this.showToast('⏳ Proof submitted! Waiting for verification.', 0x4ade80);
-            
+            this.showToast(
+                "⏳ Proof submitted! Waiting for verification.",
+                0x4ade80,
+            );
+
             // Update badge status in local array
-            badge.status = 'PENDING';
-            
+            badge.status = "PENDING";
+
             this.closeClaimForm();
-            
+
             // Reload badges from API to get latest status
             this.allBadges = await BadgeService.getAllBadges();
             this.refreshBadgesDisplay();
@@ -1331,13 +1639,13 @@ export class ProfileScene extends Scene {
         }
         this.proofInput = null;
 
-        this.claimFormElements.forEach(el => (el as any)?.destroy?.());
+        this.claimFormElements.forEach((el) => (el as any)?.destroy?.());
         this.claimFormElements = [];
     }
 
     private refreshBadgesDisplay() {
         // Clear existing badge elements
-        this.badgeElements.forEach(el => (el as any)?.destroy?.());
+        this.badgeElements.forEach((el) => (el as any)?.destroy?.());
         this.badgeElements = [];
 
         // Destroy old containers and masks
@@ -1367,20 +1675,28 @@ export class ProfileScene extends Scene {
         const panelTop = this.scale.height / 2 - panelHeight / 2 + 30;
 
         // Use same coordinates as in createMainPanel
-        this.createMyBadgesSection(centerX + 10, panelTop + 175, panelWidth - 30);
-        this.createUnlockBadgesSection(centerX + 10, panelTop + 210, panelWidth - 30);
+        this.createMyBadgesSection(
+            centerX + 10,
+            panelTop + 175,
+            panelWidth - 30,
+        );
+        this.createUnlockBadgesSection(
+            centerX + 10,
+            panelTop + 210,
+            panelWidth - 30,
+        );
     }
 
     private showToast(message: string, color: number) {
         const centerX = this.scale.width / 2;
-        
+
         const toast = this.add.text(centerX, 50, message, {
-            fontSize: '12px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            backgroundColor: `#${color.toString(16).padStart(6, '0')}`,
+            fontSize: "12px",
+            fontFamily: "PixelFont",
+            color: "#FFFFFF",
+            backgroundColor: `#${color.toString(16).padStart(6, "0")}`,
             padding: { x: 15, y: 8 },
-            resolution: 2
+            resolution: 2,
         });
         toast.setOrigin(0.5);
         toast.setDepth(200);
@@ -1389,7 +1705,7 @@ export class ProfileScene extends Scene {
             targets: toast,
             y: 70,
             duration: 200,
-            ease: 'Back.easeOut',
+            ease: "Back.easeOut",
             onComplete: () => {
                 this.tweens.add({
                     targets: toast,
@@ -1397,45 +1713,54 @@ export class ProfileScene extends Scene {
                     y: 50,
                     duration: 300,
                     delay: 2000,
-                    onComplete: () => toast.destroy()
+                    onComplete: () => toast.destroy(),
                 });
-            }
+            },
         });
     }
 
     private createNavigationButtons(centerX: number, y: number) {
-        const buttonWidth = 115;
+        const buttonWidth = 75; // Smaller to fit 3 buttons
         const buttonHeight = 45;
-        const spacing = 10;
+        const spacing = 8;
 
-        // Garden destination button (like Travel style)
+        // Garden destination button
         this.createDestinationButton(
-            centerX - buttonWidth / 2 - spacing / 2,
+            centerX - buttonWidth - spacing,
             y,
             buttonWidth,
             buttonHeight,
             {
-                name: 'GARDEN',
-                nameVi: 'Vườn',
-                description: 'Grow your plants',
-                bgImage: 'place-farm',
-                onClick: () => this.goToGarden()
-            }
+                name: "GARDEN",
+                nameVi: "Vườn",
+                description: "Grow your plants",
+                bgImage: "place-farm",
+                onClick: () => this.goToGarden(),
+            },
         );
+
+        // Cyber-Home destination button
+        this.createDestinationButton(centerX, y, buttonWidth, buttonHeight, {
+            name: "CYBER-HOME",
+            nameVi: "Thú cưng",
+            description: "Visit your Cyber-Home",
+            bgImage: "place-pethome",
+            onClick: () => this.goToPetFarm(),
+        });
 
         // Town Square destination button
         this.createDestinationButton(
-            centerX + buttonWidth / 2 + spacing / 2,
+            centerX + buttonWidth + spacing,
             y,
             buttonWidth,
             buttonHeight,
             {
-                name: 'SQUARE',
-                nameVi: 'Quảng trường',
-                description: 'Meet other farmers',
-                bgImage: 'place-townsquare',
-                onClick: () => this.goToTownSquare()
-            }
+                name: "SQUARE",
+                nameVi: "Quảng trường",
+                description: "Meet other farmers",
+                bgImage: "place-townsquare",
+                onClick: () => this.goToTownSquare(),
+            },
         );
     }
 
@@ -1450,7 +1775,7 @@ export class ProfileScene extends Scene {
             description: string;
             bgImage: string;
             onClick: () => void;
-        }
+        },
     ): void {
         // Background image
         const bgImage = this.add.image(x, y, destination.bgImage);
@@ -1464,38 +1789,55 @@ export class ProfileScene extends Scene {
         // Make interactive
         bgImage.setInteractive({ useHandCursor: true });
 
-        bgImage.on('pointerover', () => {
+        bgImage.on("pointerover", () => {
             bgImage.setTint(0xffffaa);
-            border.setStrokeStyle(2, 0xFFD700);
+            border.setStrokeStyle(2, 0xffd700);
         });
 
-        bgImage.on('pointerout', () => {
+        bgImage.on("pointerout", () => {
             bgImage.clearTint();
             border.setStrokeStyle(2, 0x4a7c59);
         });
 
-        bgImage.on('pointerdown', destination.onClick);
+        bgImage.on("pointerdown", destination.onClick);
 
         // Semi-transparent overlay at bottom for text
-        const textBg = this.add.rectangle(x, y + height / 2 - 10, width, 20, 0x000000, 0.7);
+        const textBg = this.add.rectangle(
+            x,
+            y + height / 2 - 10,
+            width,
+            20,
+            0x000000,
+            0.7,
+        );
 
         // Name
-        const nameText = this.add.text(x - width / 2 + 6, y + height / 2 - 15, destination.name, {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
-        });
+        const nameText = this.add.text(
+            x - width / 2 + 6,
+            y + height / 2 - 15,
+            destination.name,
+            {
+                fontSize: "9px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
+            },
+        );
         nameText.setOrigin(0, 0.5);
-        nameText.setStroke('#000000', 2);
+        nameText.setStroke("#000000", 2);
 
         // Description
-        const descText = this.add.text(x - width / 2 + 6, y + height / 2 - 4, destination.description, {
-            fontSize: '6px',
-            fontFamily: 'PixelFont',
-            color: '#CCCCCC',
-            resolution: 2
-        });
+        const descText = this.add.text(
+            x - width / 2 + 6,
+            y + height / 2 - 4,
+            destination.description,
+            {
+                fontSize: "6px",
+                fontFamily: "PixelFont",
+                color: "#CCCCCC",
+                resolution: 2,
+            },
+        );
         descText.setOrigin(0, 0.5);
 
         // Animate entrance
@@ -1506,22 +1848,22 @@ export class ProfileScene extends Scene {
                 alpha: 1,
                 duration: 200,
                 delay: 200 + i * 20,
-                ease: 'Quad.easeOut'
+                ease: "Quad.easeOut",
             });
         });
     }
 
     private createLogoutButton(x: number, y: number) {
-        const btn = this.add.text(x, y, '🚪', {
-            fontSize: '16px',
-            resolution: 2
+        const btn = this.add.text(x, y, "🚪", {
+            fontSize: "16px",
+            resolution: 2,
         });
         btn.setOrigin(0.5);
         btn.setInteractive({ useHandCursor: true });
 
-        btn.on('pointerdown', () => this.handleLogout());
-        btn.on('pointerover', () => btn.setScale(1.2));
-        btn.on('pointerout', () => btn.setScale(1));
+        btn.on("pointerdown", () => this.handleLogout());
+        btn.on("pointerover", () => btn.setScale(1.2));
+        btn.on("pointerout", () => btn.setScale(1));
     }
 
     private async goToGarden() {
@@ -1531,29 +1873,36 @@ export class ProfileScene extends Scene {
             if (!verified) return;
         }
 
-        localStorage.setItem('fam_game_destination', 'FarmingGame');
-        
+        localStorage.setItem("fam_game_destination", "FarmingGame");
+
         this.cameras.main.fadeOut(500, 0, 0, 0);
-        this.cameras.main.once('camerafadeoutcomplete', () => {
-            this.scene.start('FarmingGame');
+        this.cameras.main.once("camerafadeoutcomplete", () => {
+            this.scene.start("FarmingGame");
         });
     }
 
     private goToTownSquare() {
         this.cameras.main.fadeOut(500, 0, 0, 0);
-        this.cameras.main.once('camerafadeoutcomplete', () => {
-            this.scene.start('TownSquare');
+        this.cameras.main.once("camerafadeoutcomplete", () => {
+            this.scene.start("TownSquare");
+        });
+    }
+
+    private goToPetFarm() {
+        this.cameras.main.fadeOut(500, 0, 0, 0);
+        this.cameras.main.once("camerafadeoutcomplete", () => {
+            this.scene.start("PetFarm");
         });
     }
 
     private handleLogout() {
-        EventBus.emit('disconnect-wallet');
+        EventBus.emit("disconnect-wallet");
         UserService.clearAuthData();
         BadgeService.clearBadges();
-        
+
         this.cameras.main.fadeOut(300, 0, 0, 0);
-        this.cameras.main.once('camerafadeoutcomplete', () => {
-            this.scene.start('Login', { fromLogout: true });
+        this.cameras.main.once("camerafadeoutcomplete", () => {
+            this.scene.start("Login", { fromLogout: true });
         });
     }
 
@@ -1561,7 +1910,8 @@ export class ProfileScene extends Scene {
         this.closeClaimForm();
         this.closeBadgesModal();
         this.closeWalletsModal();
-        this.walletElements.forEach(el => (el as any)?.destroy?.());
+        this.walletElements.forEach((el) => (el as any)?.destroy?.());
         this.walletElements = [];
     }
 }
+

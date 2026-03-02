@@ -1,18 +1,21 @@
-import { Scene } from 'phaser';
-import { EventBus } from '../EventBus';
-import { ISLAND_MAP_DATA } from './IslandMapData';
-import { UserService } from '../UserService';
-import { SeedService } from '../SeedService';
-import { FertilizerService } from '../FertilizerService';
-import { GardenService } from '../GardenService';
-import { FruitService } from '../FruitService';
-import { GameDataService } from '../GameDataService';
-import { ShopService } from '../ShopService';
-import { getSocketService, SocketService } from '../SocketService';
-import { getMissionSocketService, MissionSocketService } from '../MissionSocketService';
+import { Scene } from "phaser";
+import { EventBus } from "../EventBus";
+import { ISLAND_MAP_DATA } from "./IslandMapData";
+import { UserService } from "../UserService";
+import { SeedService } from "../SeedService";
+import { FertilizerService } from "../FertilizerService";
+import { GardenService } from "../GardenService";
+import { FruitService } from "../FruitService";
+import { GameDataService } from "../GameDataService";
+import { ShopService } from "../ShopService";
+import { getSocketService, SocketService } from "../SocketService";
+import {
+    getMissionSocketService,
+    MissionSocketService,
+} from "../MissionSocketService";
 
 // Import game state hook
-import { useGameState, GameStateHook, PlantUpdateHandler } from '../hooks';
+import { useGameState, GameStateHook, PlantUpdateHandler } from "../hooks";
 
 // Import managers
 import {
@@ -38,16 +41,16 @@ import {
     CROP_DEFINITIONS,
     DEATH_TIMER_MS,
     GAME_CONSTANTS,
-    getMaxWaterHours
-} from '../managers';
-import { InventoryService, InventoryItem } from '../InventoryService';
-import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
-import { DynamicShadow } from '../objects/DynamicShadow';
+    getMaxWaterHours,
+} from "../managers";
+import { InventoryService, InventoryItem } from "../InventoryService";
+import { PLAYABLE_CHARACTERS } from "../config/CharacterConfig";
+import { DynamicShadow } from "../objects/DynamicShadow";
 
 export class FarmingGame extends Scene {
     private player!: Phaser.Physics.Arcade.Sprite;
     private playerShadow!: DynamicShadow;
-    private currentCharacterKey: string = 'bear'; // Default character, will be set from user data
+    private currentCharacterKey: string = "bear"; // Default character, will be set from user data
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
     // World
@@ -78,26 +81,29 @@ export class FarmingGame extends Scene {
     private seedCounts: Record<PlantType, number> = {
         algae: 0,
         mushroom: 0,
-        tree: 0
+        tree: 0,
     };
 
     // Fertilizer counts per type (loaded from API, defaults to 0)
-    private fertilizerCounts: Record<'common' | 'rare' | 'epic' | 'legendary', number> = {
+    private fertilizerCounts: Record<
+        "common" | "rare" | "epic" | "legendary",
+        number
+    > = {
         common: 0,
         rare: 0,
         epic: 0,
-        legendary: 0
+        legendary: 0,
     };
     private selectedFertilizerIndex: number = 0; // Index in fertilizer types (0=common, 1=rare, 2=epic, 3=legendary)
 
     // Toolbar items (6 slots: hand, watering can, seed, fertilizer, digest, chest)
     private toolbarItems: ToolbarItem[] = [
-        { type: 'tool', name: 'hand' },
-        { type: 'tool', name: 'wateringCan', count: 0 }, // count is fetched from API
-        { type: 'seed', name: 'seed' }, // count is managed by seedCounts
-        { type: 'tool', name: 'fertilizer' }, // count is managed by fertilizerCounts
-        { type: 'tool', name: 'digest' },
-        { type: 'tool', name: 'chest' },
+        { type: "tool", name: "hand" },
+        { type: "tool", name: "wateringCan", count: 0 }, // count is fetched from API
+        { type: "seed", name: "seed" }, // count is managed by seedCounts
+        { type: "tool", name: "fertilizer" }, // count is managed by fertilizerCounts
+        { type: "tool", name: "digest" },
+        { type: "tool", name: "chest" },
     ];
 
     // Chest inventory system (Backpack - items carried)
@@ -120,11 +126,15 @@ export class FarmingGame extends Scene {
     private pendingPlantAction: {
         tileKey: string;
         landId: string;
-        seedType: 'algae' | 'mushroom' | 'tree';
+        seedType: "algae" | "mushroom" | "tree";
     } | null = null;
 
     // Selected item for transfer between chest and warehouse
-    private selectedItem: { itemType: string; amount: number; source: 'backpack' | 'storage' } | null = null;
+    private selectedItem: {
+        itemType: string;
+        amount: number;
+        source: "backpack" | "storage";
+    } | null = null;
 
     // Factory system (managed by FactoryManager) - temporarily disabled
     private factoryModalOpen: boolean = false;
@@ -180,7 +190,8 @@ export class FarmingGame extends Scene {
     // All plots start locked - garden API determines which are unlocked
     private readonly INITIAL_OWNED_PLOTS = 0; // Start with 0, API will unlock
     private ownedPlotsCount: number = this.INITIAL_OWNED_PLOTS;
-    private lockedPlotOverlays: Map<string, Phaser.GameObjects.Container> = new Map();
+    private lockedPlotOverlays: Map<string, Phaser.GameObjects.Container> =
+        new Map();
     private buyPlotModalOpen: boolean = false;
 
     // ========== MANAGERS ==========
@@ -206,7 +217,7 @@ export class FarmingGame extends Scene {
     private gameState!: GameStateHook;
 
     constructor() {
-        super('FarmingGame');
+        super("FarmingGame");
     }
 
     init(data?: NavigationData) {
@@ -273,7 +284,12 @@ export class FarmingGame extends Scene {
         this.cameras.main.setBounds(0, 0, worldW, worldH);
 
         // Create UI camera (no zoom, fixed position, for UI elements only)
-        this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
+        this.uiCamera = this.cameras.add(
+            0,
+            0,
+            this.scale.width,
+            this.scale.height,
+        );
         this.uiCamera.setScroll(0, 0);
         // UI camera ignores all game world objects - will be set up after they're created
 
@@ -303,7 +319,7 @@ export class FarmingGame extends Scene {
             delay: 100, // Update every 100ms
             callback: this.gameLoop,
             callbackScope: this,
-            loop: true
+            loop: true,
         });
 
         // Smart garden refresh: check if any plant is about to change stage
@@ -314,13 +330,13 @@ export class FarmingGame extends Scene {
                 this.smartGardenRefresh();
             },
             callbackScope: this,
-            loop: true
+            loop: true,
         });
 
         // Listen for wallet connection
-        EventBus.on('wallet-connected', this.onWalletConnected, this);
+        EventBus.on("wallet-connected", this.onWalletConnected, this);
         // Check if already connected
-        EventBus.emit('check-wallet-connection');
+        EventBus.emit("check-wallet-connection");
 
         // Load data from cache (pre-loaded by GameLoader) or fetch if not available
         this.loadGameDataFromCache();
@@ -330,28 +346,28 @@ export class FarmingGame extends Scene {
         GameDataService.setUIUpdateCallback(() => this.refreshAllUI());
 
         // Also listen for EventBus event as backup (in case callback is not registered)
-        EventBus.on('gamedata:updated', this.onGameDataUpdated, this);
+        EventBus.on("gamedata:updated", this.onGameDataUpdated, this);
 
         // Listen for game state changes to auto-update UI
         // Use a flag to prevent infinite loops when refreshAllUI syncs state
         let isRefreshingUI = false;
-        let lastToolbarHash = '';
+        let lastToolbarHash = "";
 
-        this.gameState.on('change', () => {
+        this.gameState.on("change", () => {
             if (isRefreshingUI) return; // Prevent recursive calls
             isRefreshingUI = true;
             // Only update UI displays, don't sync state again
             this.createUserProfileUI();
-            
+
             // Check if toolbar needs update (ignore currency changes)
             // This prevents toolbar reloading/flickering when only gold/gem changes
             const currentHash = JSON.stringify({
                 items: this.toolbarItems,
                 seeds: this.seedCounts,
                 fertilizers: this.fertilizerCounts,
-                chest: this.chestInventory
+                chest: this.chestInventory,
             });
-            
+
             if (currentHash !== lastToolbarHash) {
                 lastToolbarHash = currentHash;
                 this.updateToolbar();
@@ -361,7 +377,7 @@ export class FarmingGame extends Scene {
         });
 
         // Handle screen resize
-        this.scale.on('resize', this.onResize, this);
+        this.scale.on("resize", this.onResize, this);
 
         // Start playing theme music
         this.soundManager.playRandomTheme();
@@ -369,21 +385,22 @@ export class FarmingGame extends Scene {
         // Initialize WebSocket connection for real-time updates
         this.initializeSocketConnection();
 
-        EventBus.emit('current-scene-ready', this);
+        EventBus.emit("current-scene-ready", this);
     }
 
     private setupFarmObjectCollisions(): void {
         const colliders: Phaser.GameObjects.Rectangle[] = [];
         const wellCollider = this.wellManager.getWellCollider?.();
         if (wellCollider) colliders.push(wellCollider);
-        const warehouseCollider = this.warehouseManager.getWarehouseCollider?.();
+        const warehouseCollider =
+            this.warehouseManager.getWarehouseCollider?.();
         if (warehouseCollider) colliders.push(warehouseCollider);
         const mailboxCollider = this.mailboxManager.getMailboxCollider?.();
         if (mailboxCollider) colliders.push(mailboxCollider);
         const stationCollider = this.stationManager.getStationCollider?.();
         if (stationCollider) colliders.push(stationCollider);
 
-        colliders.forEach(collider => {
+        colliders.forEach((collider) => {
             this.physics.add.collider(this.player, collider);
         });
     }
@@ -405,52 +422,69 @@ export class FarmingGame extends Scene {
         // CheckinManager
         // Data refresh is handled by GameDataService.refreshAndUpdateUI()
         this.checkinManager = new CheckinManager(this, {
-            playSuccessSound: () => this.soundManager.playSuccessSound()
+            playSuccessSound: () => this.soundManager.playSuccessSound(),
         });
 
         // FactoryManager (Phygital Exchange) - temporarily disabled
         // UI refresh is handled by GameDataService.refreshAndUpdateUI()
-        this.factoryManager = new FactoryManager(this, {
-            getChestInventory: () => this.chestInventory,
-            getPlayer: () => this.player,
-            closeSeedSelector: () => this.closeSeedSelector(),
-            closeChestPanel: () => this.closeChestPanel(),
-            showToastMessage: (text, color) => this.showToastMessage(text, color),
-            playSuccessSound: () => this.soundManager.playSuccessSound()
-        }, this.TILE_SIZE);
+        this.factoryManager = new FactoryManager(
+            this,
+            {
+                getChestInventory: () => this.chestInventory,
+                getPlayer: () => this.player,
+                closeSeedSelector: () => this.closeSeedSelector(),
+                closeChestPanel: () => this.closeChestPanel(),
+                showToastMessage: (text, color) =>
+                    this.showToastMessage(text, color),
+                playSuccessSound: () => this.soundManager.playSuccessSound(),
+            },
+            this.TILE_SIZE,
+        );
 
         // WarehouseManager (Storage system - replaces factory temporarily)
-        this.warehouseManager = new WarehouseManager(this, {
-            getBackpackItems: () => this.backpackItems,
-            showToastMessage: (text, color) => this.showToastMessage(text, color),
-            playSuccessSound: () => this.soundManager.playSuccessSound(),
-            refreshInventory: async () => {
-                await this.loadBackpackData();
-                this.toolbarManager.updateToolbar();
+        this.warehouseManager = new WarehouseManager(
+            this,
+            {
+                getBackpackItems: () => this.backpackItems,
+                showToastMessage: (text, color) =>
+                    this.showToastMessage(text, color),
+                playSuccessSound: () => this.soundManager.playSuccessSound(),
+                refreshInventory: async () => {
+                    await this.loadBackpackData();
+                    this.toolbarManager.updateToolbar();
+                },
+                updateToolbar: () => this.toolbarManager.updateToolbar(),
+                getSelectedItem: () => this.selectedItem,
+                setSelectedItem: (item) => {
+                    this.selectedItem = item;
+                },
             },
-            updateToolbar: () => this.toolbarManager.updateToolbar(),
-            getSelectedItem: () => this.selectedItem,
-            setSelectedItem: (item) => { this.selectedItem = item; }
-        }, this.TILE_SIZE);
+            this.TILE_SIZE,
+        );
 
         // MailboxManager
         // UI refresh is handled by GameDataService.refreshAndUpdateUI()
-        this.mailboxManager = new MailboxManager(this, {
-            getSeedCounts: () => this.seedCounts,
-            getFertilizerCounts: () => this.fertilizerCounts,
-            showToastMessage: (text, color) => this.showToastMessage(text, color),
-            playSuccessSound: () => this.soundManager.playSuccessSound()
-        }, this.TILE_SIZE);
+        this.mailboxManager = new MailboxManager(
+            this,
+            {
+                getSeedCounts: () => this.seedCounts,
+                getFertilizerCounts: () => this.fertilizerCounts,
+                showToastMessage: (text, color) =>
+                    this.showToastMessage(text, color),
+                playSuccessSound: () => this.soundManager.playSuccessSound(),
+            },
+            this.TILE_SIZE,
+        );
 
         // ProfileManager
         this.profileManager = new ProfileManager(this, {
             onLogout: () => {
                 // Navigate back to Login screen with fromLogout flag
-                this.scene.start('Login', { fromLogout: true });
+                this.scene.start("Login", { fromLogout: true });
             },
             onWalletConnected: (_address) => {
                 // Wallet address handled by ProfileManager
-            }
+            },
         });
 
         // ToolbarManager
@@ -463,13 +497,24 @@ export class FarmingGame extends Scene {
             getSelectedSeedIndex: () => this.selectedSeedIndex,
             getSelectedFertilizerIndex: () => this.selectedFertilizerIndex,
             getChestOpen: () => this.chestOpen,
-            setSelectedToolIndex: (index) => { this.selectedToolIndex = index; },
-            setSelectedSeedIndex: (index) => { this.selectedSeedIndex = index; },
-            setSelectedFertilizerIndex: (index) => { this.selectedFertilizerIndex = index; },
-            setChestOpen: (open) => { this.chestOpen = open; },
-            onSeedOptionClicked: () => { this.seedOptionJustClicked = true; },
-            showToastMessage: (text, color) => this.showToastMessage(text, color),
-            playSuccessSound: () => this.soundManager.playSuccessSound()
+            setSelectedToolIndex: (index) => {
+                this.selectedToolIndex = index;
+            },
+            setSelectedSeedIndex: (index) => {
+                this.selectedSeedIndex = index;
+            },
+            setSelectedFertilizerIndex: (index) => {
+                this.selectedFertilizerIndex = index;
+            },
+            setChestOpen: (open) => {
+                this.chestOpen = open;
+            },
+            onSeedOptionClicked: () => {
+                this.seedOptionJustClicked = true;
+            },
+            showToastMessage: (text, color) =>
+                this.showToastMessage(text, color),
+            playSuccessSound: () => this.soundManager.playSuccessSound(),
         });
 
         // PlotManager
@@ -482,15 +527,18 @@ export class FarmingGame extends Scene {
             getOwnedPlotsCount: () => this.ownedPlotsCount,
             getLockedPlotOverlays: () => this.lockedPlotOverlays,
             getFarmLandStates: () => this.farmLandStates,
-            setPlayerGems: (gems) => { 
-                this.playerGems = gems; 
+            setPlayerGems: (gems) => {
+                this.playerGems = gems;
                 // Also update SSOT for consistency
                 GameDataService.updateCurrency(this.playerGold, gems);
                 useGameState(this).setCurrency(this.playerGold, gems);
             },
-            setOwnedPlotsCount: (count) => { this.ownedPlotsCount = count; },
+            setOwnedPlotsCount: (count) => {
+                this.ownedPlotsCount = count;
+            },
             refreshProfileUI: () => this.createUserProfileUI(),
-            showFloatingMessage: (msg, x, y) => this.showFloatingMessage(msg, x, y)
+            showFloatingMessage: (msg, x, y) =>
+                this.showFloatingMessage(msg, x, y),
         });
 
         // SoundManager
@@ -498,19 +546,28 @@ export class FarmingGame extends Scene {
 
         // WellManager
         // UI refresh is handled by GameDataService.refreshAndUpdateUI()
-        this.wellManager = new WellManager(this, {
-            getWaterCount: () => {
-                const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
-                return wateringCan?.count || 0;
+        this.wellManager = new WellManager(
+            this,
+            {
+                getWaterCount: () => {
+                    const wateringCan = this.toolbarItems.find(
+                        (item) => item.name === "wateringCan",
+                    );
+                    return wateringCan?.count || 0;
+                },
+                addWater: (amount) => {
+                    const wateringCan = this.toolbarItems.find(
+                        (item) => item.name === "wateringCan",
+                    );
+                    if (wateringCan)
+                        wateringCan.count = (wateringCan.count || 0) + amount;
+                },
+                playSuccessSound: () => this.soundManager.playSuccessSound(),
+                getPlayer: () => this.player,
+                getUICamera: () => this.uiCamera,
             },
-            addWater: (amount) => {
-                const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
-                if (wateringCan) wateringCan.count = (wateringCan.count || 0) + amount;
-            },
-            playSuccessSound: () => this.soundManager.playSuccessSound(),
-            getPlayer: () => this.player,
-            getUICamera: () => this.uiCamera
-        }, this.TILE_SIZE);
+            this.TILE_SIZE,
+        );
 
         // PlantDetailManager
         this.plantDetailManager = new PlantDetailManager(this, {
@@ -525,7 +582,7 @@ export class FarmingGame extends Scene {
             onRemove: (landId) => {
                 // Find tile by landId and remove plant
                 this.removePlantByLandId(landId);
-            }
+            },
         });
 
         // StationManager - Travel/Navigation
@@ -538,13 +595,14 @@ export class FarmingGame extends Scene {
                     this.scene.start(sceneKey, navData);
                 });
             },
-            showToastMessage: (text, color) => this.showToastMessage(text, color)
+            showToastMessage: (text, color) =>
+                this.showToastMessage(text, color),
         });
 
         // PetManager - Pet following system
         this.petManager = new PetManager(this, {
             getPlayer: () => this.player,
-            getUICamera: () => this.uiCamera
+            getUICamera: () => this.uiCamera,
         });
     }
 
@@ -559,10 +617,28 @@ export class FarmingGame extends Scene {
         // Initialize plant update handler with callbacks
         this.plantUpdateHandler = new PlantUpdateHandler(this, {
             getFarmLandStates: () => this.farmLandStates,
-            showPlant: (x: number, y: number, plantType: PlantType, stage: number, isDead: boolean, isWilted: boolean) => {
-                this.updatePlantSprite(x, y, plantType, stage, isDead, isWilted);
+            showPlant: (
+                x: number,
+                y: number,
+                plantType: PlantType,
+                stage: number,
+                isDead: boolean,
+                isWilted: boolean,
+            ) => {
+                this.updatePlantSprite(
+                    x,
+                    y,
+                    plantType,
+                    stage,
+                    isDead,
+                    isWilted,
+                );
             },
-            updateHealthBar: (tileKey: string, hoursToDeath: number, maxHours: number = 48) => {
+            updateHealthBar: (
+                tileKey: string,
+                hoursToDeath: number,
+                maxHours: number = 48,
+            ) => {
                 this.updateHealthBarFromSocket(tileKey, hoursToDeath, maxHours);
             },
             showWaterSplashEffect: (x: number, y: number) => {
@@ -584,19 +660,18 @@ export class FarmingGame extends Scene {
 
         // Connect to socket server
         this.socketService.connect();
-        
+
         // Connect to mission socket server
         this.missionSocketService.connect();
 
         // Listen for socket connection events
-        EventBus.on('socket:connected', this.onSocketConnected, this);
-        EventBus.on('socket:disconnected', this.onSocketDisconnected, this);
-        EventBus.on('socket:inventory_update', this.onInventoryUpdate, this);
-        EventBus.on('socket:land_update', this.onLandUpdate, this);
-        EventBus.on('socket:currency_update', this.onCurrencyUpdate, this);
-        EventBus.on('socket:action_success', this.onActionSuccess, this);
-        EventBus.on('socket:action_error', this.onActionError, this);
-
+        EventBus.on("socket:connected", this.onSocketConnected, this);
+        EventBus.on("socket:disconnected", this.onSocketDisconnected, this);
+        EventBus.on("socket:inventory_update", this.onInventoryUpdate, this);
+        EventBus.on("socket:land_update", this.onLandUpdate, this);
+        EventBus.on("socket:currency_update", this.onCurrencyUpdate, this);
+        EventBus.on("socket:action_success", this.onActionSuccess, this);
+        EventBus.on("socket:action_error", this.onActionError, this);
     }
 
     /**
@@ -610,51 +685,56 @@ export class FarmingGame extends Scene {
     /**
      * Handle socket disconnected event
      */
-    private onSocketDisconnected(reason: string): void {
-    }
+    private onSocketDisconnected(reason: string): void {}
 
     /**
      * Handle inventory_update event from socket
      * Updates water count, seeds, and other inventory items in real-time
      */
-    private onInventoryUpdate(items: Array<{ itemType: string; amount: number; location?: string }>): void {
+    private onInventoryUpdate(
+        items: Array<{ itemType: string; amount: number; location?: string }>,
+    ): void {
         let needsToolbarUpdate = false;
-        
+
         // Update GameDataService cache for warehouse/backpack
         GameDataService.updateStorageCacheFromSocket(items);
         GameDataService.updateBackpackCacheFromSocket(items);
-        
+
         // Process each inventory item for toolbar
-        items.forEach(item => {
+        items.forEach((item) => {
             const itemType = item.itemType.toUpperCase();
-            
+
             // Update water count - only for TOOLS location
-            if (itemType === 'WATER' && item.location === 'TOOLS') {
-                const wateringCan = this.toolbarItems.find(i => i.name === 'wateringCan');
+            if (itemType === "WATER" && item.location === "TOOLS") {
+                const wateringCan = this.toolbarItems.find(
+                    (i) => i.name === "wateringCan",
+                );
                 if (wateringCan) {
                     wateringCan.count = item.amount;
                     needsToolbarUpdate = true;
                 }
             }
-            
+
             // Update seed counts (SEED_ALGAE, SEED_MUSHROOM, SEED_TREE)
-            if (itemType.startsWith('SEED_')) {
-                const seedType = itemType.replace('SEED_', '');
+            if (itemType.startsWith("SEED_")) {
+                const seedType = itemType.replace("SEED_", "");
                 const plantType = SeedService.mapSeedTypeToPlantType(seedType);
                 this.seedCounts[plantType] = item.amount;
                 needsToolbarUpdate = true;
             }
-            
+
             // Update fertilizer counts (FERTILIZER_COMMON, FERTILIZER_RARE, etc.)
-            if (itemType.startsWith('FERTILIZER_')) {
-                const fertilizerType = itemType.replace('FERTILIZER_', '').toLowerCase() as 'common' | 'rare' | 'epic' | 'legendary';
+            if (itemType.startsWith("FERTILIZER_")) {
+                const fertilizerType = itemType
+                    .replace("FERTILIZER_", "")
+                    .toLowerCase() as "common" | "rare" | "epic" | "legendary";
                 if (this.fertilizerCounts[fertilizerType] !== undefined) {
                     this.fertilizerCounts[fertilizerType] = item.amount;
                     needsToolbarUpdate = true;
                 }
             }
         });
-        
+
         // Update toolbar UI if any counts changed
         if (needsToolbarUpdate) {
             this.updateToolbar();
@@ -665,38 +745,45 @@ export class FarmingGame extends Scene {
      * Handle land_update event from socket
      * Updates land plots when buying land, planting, or harvesting
      */
-    private onLandUpdate(lands: Array<{ id: string; plotIndex: number; plant?: unknown; soilQuality: { fertility: number; hydration: number } }>): void {
+    private onLandUpdate(
+        lands: Array<{
+            id: string;
+            plotIndex: number;
+            plant?: unknown;
+            soilQuality: { fertility: number; hydration: number };
+        }>,
+    ): void {
         // Update owned plots count based on received lands
         const newOwnedPlotsCount = lands.length;
         if (newOwnedPlotsCount > this.ownedPlotsCount) {
             this.ownedPlotsCount = newOwnedPlotsCount;
-            
+
             // Refresh garden data to update the UI with new plots
             this.loadGardenData();
-            
+
             // Refresh profile UI to update gem count
             this.createUserProfileUI();
-            
+
             // Refresh gem shop data to update availability of next plots
             GameDataService.refreshGemShop();
         }
-        
+
         // Process each land update
-        lands.forEach(land => {
+        lands.forEach((land) => {
             // Convert plotIndex to tile coordinates
             const tileKey = GardenService.plotIndexToTileKey(land.plotIndex);
             const state = this.farmLandStates.get(tileKey);
-            
+
             if (state) {
                 // Update landId if not set
                 if (!state.landId) {
                     state.landId = land.id;
                 }
-                
+
                 // Unlock the plot if it was locked
                 if (state.locked) {
                     state.locked = false;
-                    
+
                     // Remove lock overlay
                     const lockOverlay = this.lockedPlotOverlays.get(tileKey);
                     if (lockOverlay) {
@@ -716,14 +803,14 @@ export class FarmingGame extends Scene {
         // Update local state
         this.playerGold = payload.gold;
         this.playerGems = payload.gem;
-        
+
         // Update global game state (single source of truth)
         const gameState = useGameState(this);
         gameState.setCurrency(payload.gold, payload.gem);
 
         // Sync with GameDataService cache (ensures modals and other services see updated values)
         GameDataService.updateCurrency(payload.gold, payload.gem);
-        
+
         // Refresh profile UI to show updated balances
         this.createUserProfileUI();
     }
@@ -733,11 +820,20 @@ export class FarmingGame extends Scene {
      * Processes successful game actions
      */
     private onActionSuccess(payload: { action: string; data: unknown }): void {
-        console.log('[FarmingGame] Action success:', payload.action, payload.data);
+        console.log(
+            "[FarmingGame] Action success:",
+            payload.action,
+            payload.data,
+        );
 
-        if (payload.action === 'plant_seed' && this.pendingPlantAction) {
+        if (payload.action === "plant_seed" && this.pendingPlantAction) {
             const data = payload.data as {
-                plant?: { id: string; type: string; stage: string; plantedAt: string };
+                plant?: {
+                    id: string;
+                    type: string;
+                    stage: string;
+                    plantedAt: string;
+                };
                 message?: string;
                 canWaterNow?: boolean;
             };
@@ -745,10 +841,15 @@ export class FarmingGame extends Scene {
             if (data.plant?.id) {
                 const { tileKey } = this.pendingPlantAction;
                 const state = this.farmLandStates.get(tileKey);
-                
+
                 if (state) {
                     state.plantId = data.plant.id;
-                    console.log('[FarmingGame] Plant ID set:', data.plant.id, 'for tile:', tileKey);
+                    console.log(
+                        "[FarmingGame] Plant ID set:",
+                        data.plant.id,
+                        "for tile:",
+                        tileKey,
+                    );
                 }
             }
 
@@ -761,7 +862,7 @@ export class FarmingGame extends Scene {
             this.pendingPlantAction = null;
         }
 
-        if (payload.action === 'event_checkin') {
+        if (payload.action === "event_checkin") {
             const data = payload.data as {
                 success: true;
                 event: {
@@ -781,22 +882,25 @@ export class FarmingGame extends Scene {
             // Show success message with event name and reward
             const eventName = data.event.name;
             const rewardText = `+${data.reward.amount} ${this.getItemDisplayName(data.reward.itemType)}`;
-            this.showToastMessage(`Checked in to "${eventName}"! Received ${rewardText}`, 0x22c55e);
+            this.showToastMessage(
+                `Checked in to "${eventName}"! Received ${rewardText}`,
+                0x22c55e,
+            );
 
             // Play success sound
             this.soundManager.playSuccessSound();
 
             // Emit event for EventModalManager to handle
-            EventBus.emit('event:checkin_websocket_success', {
+            EventBus.emit("event:checkin_websocket_success", {
                 eventName,
-                rewardText
+                rewardText,
             });
 
             // Refresh inventory to update item counts
             GameDataService.refreshInventoryAndUpdateUI();
         }
 
-        if (payload.action === 'claim_gift') {
+        if (payload.action === "claim_gift") {
             const data = payload.data as {
                 success: true;
                 event: {
@@ -820,11 +924,11 @@ export class FarmingGame extends Scene {
             this.soundManager.playSuccessSound();
 
             // Emit event for EventModalManager to handle
-            EventBus.emit('event:claim_gift_websocket_success', {
+            EventBus.emit("event:claim_gift_websocket_success", {
                 eventName: data.event.name,
                 code: data.event.code,
                 reward: data.reward,
-                message: data.message
+                message: data.message,
             });
 
             // Refresh inventory to update item counts
@@ -838,32 +942,32 @@ export class FarmingGame extends Scene {
      * Reverts optimistic UI updates
      */
     private onActionError(payload: { action: string; message: string }): void {
-
         // Show error toast to user
-        this.showToastMessage(payload.message || 'Action failed!', 0xef4444);
+        this.showToastMessage(payload.message || "Action failed!", 0xef4444);
 
         // Handle specific action errors
-        if (payload.action === 'event_checkin') {
+        if (payload.action === "event_checkin") {
             // Event checkin failed - emit event for EventModalManager
-            EventBus.emit('event:checkin_websocket_error', {
-                message: payload.message
+            EventBus.emit("event:checkin_websocket_error", {
+                message: payload.message,
             });
-            console.log('[FarmingGame] Event checkin failed:', payload.message);
+            console.log("[FarmingGame] Event checkin failed:", payload.message);
             return;
         }
 
-        if (payload.action === 'claim_gift') {
+        if (payload.action === "claim_gift") {
             // Claim gift failed - emit event for EventModalManager
-            EventBus.emit('event:claim_gift_websocket_error', {
-                message: payload.message
+            EventBus.emit("event:claim_gift_websocket_error", {
+                message: payload.message,
             });
-            console.log('[FarmingGame] Claim gift failed:', payload.message);
+            console.log("[FarmingGame] Claim gift failed:", payload.message);
             return;
         }
 
         // Revert optimistic updates based on action type
-        if (payload.action === 'water_plant' && this.pendingWaterAction) {
-            const { tileKey, previousWaterBalance, previousWaterCount } = this.pendingWaterAction;
+        if (payload.action === "water_plant" && this.pendingWaterAction) {
+            const { tileKey, previousWaterBalance, previousWaterCount } =
+                this.pendingWaterAction;
             const state = this.farmLandStates.get(tileKey);
 
             if (state) {
@@ -874,12 +978,18 @@ export class FarmingGame extends Scene {
                 }
 
                 // Revert health bar visual
-                const maxHours = getMaxWaterHours(state.cropType || 'algae');
-                const healthPercent = Math.min(previousWaterBalance / maxHours, 1);
+                const maxHours = getMaxWaterHours(state.cropType || "algae");
+                const healthPercent = Math.min(
+                    previousWaterBalance / maxHours,
+                    1,
+                );
                 const maxWidth = 11;
 
                 if (state.healthBarFill) {
-                    state.healthBarFill.width = Math.max(maxWidth * healthPercent, 1);
+                    state.healthBarFill.width = Math.max(
+                        maxWidth * healthPercent,
+                        1,
+                    );
                     if (healthPercent > 0.6) {
                         state.healthBarFill.setFillStyle(0x4ade80); // Green
                     } else if (healthPercent > 0.3) {
@@ -891,7 +1001,9 @@ export class FarmingGame extends Scene {
             }
 
             // Revert water count in toolbar
-            const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
+            const wateringCan = this.toolbarItems.find(
+                (item) => item.name === "wateringCan",
+            );
             if (wateringCan) {
                 wateringCan.count = previousWaterCount;
                 this.updateToolbar();
@@ -902,7 +1014,7 @@ export class FarmingGame extends Scene {
         }
 
         // Handle plant_seed error
-        if (payload.action === 'plant_seed' && this.pendingPlantAction) {
+        if (payload.action === "plant_seed" && this.pendingPlantAction) {
             const { tileKey, seedType } = this.pendingPlantAction;
             const state = this.farmLandStates.get(tileKey);
 
@@ -941,7 +1053,11 @@ export class FarmingGame extends Scene {
     /**
      * Update health bar from socket data
      */
-    private updateHealthBarFromSocket(tileKey: string, hoursToDeath: number, maxHours: number = 48): void {
+    private updateHealthBarFromSocket(
+        tileKey: string,
+        hoursToDeath: number,
+        maxHours: number = 48,
+    ): void {
         const state = this.farmLandStates.get(tileKey);
         if (!state?.healthBarFill) return;
 
@@ -972,8 +1088,8 @@ export class FarmingGame extends Scene {
                 worldX + Phaser.Math.Between(-6, 6),
                 worldY - 8,
                 2,
-                0x2196F3,
-                0.8
+                0x2196f3,
+                0.8,
             );
             droplet.setDepth(5000);
             this.uiCamera.ignore(droplet);
@@ -985,8 +1101,8 @@ export class FarmingGame extends Scene {
                 scale: 0.5,
                 duration: 400,
                 delay: i * 50,
-                ease: 'Quad.easeOut',
-                onComplete: () => droplet.destroy()
+                ease: "Quad.easeOut",
+                onComplete: () => droplet.destroy(),
             });
         }
 
@@ -1010,7 +1126,7 @@ export class FarmingGame extends Scene {
                 worldY,
                 2,
                 colors[i % colors.length],
-                1
+                1,
             );
             sparkle.setDepth(5000);
             this.uiCamera.ignore(sparkle);
@@ -1022,8 +1138,8 @@ export class FarmingGame extends Scene {
                 alpha: 0,
                 scale: 0,
                 duration: 500,
-                ease: 'Quad.easeOut',
-                onComplete: () => sparkle.destroy()
+                ease: "Quad.easeOut",
+                onComplete: () => sparkle.destroy(),
             });
         }
 
@@ -1039,8 +1155,8 @@ export class FarmingGame extends Scene {
         const worldY = tileY * this.TILE_SIZE - 4;
 
         // Create warning icon
-        const warning = this.add.text(worldX, worldY, '⚠️', {
-            fontSize: '12px',
+        const warning = this.add.text(worldX, worldY, "⚠️", {
+            fontSize: "12px",
         });
         warning.setOrigin(0.5);
         warning.setDepth(5000);
@@ -1053,8 +1169,8 @@ export class FarmingGame extends Scene {
             alpha: 0,
             scale: 1.5,
             duration: 1000,
-            ease: 'Quad.easeOut',
-            onComplete: () => warning.destroy()
+            ease: "Quad.easeOut",
+            onComplete: () => warning.destroy(),
         });
     }
 
@@ -1088,20 +1204,31 @@ export class FarmingGame extends Scene {
             // Load seeds from cache
             this.seedCounts = { algae: 0, mushroom: 0, tree: 0 };
             if (Array.isArray(cachedData.seeds)) {
-                cachedData.seeds.forEach(item => {
+                cachedData.seeds.forEach((item) => {
                     if (item && item.type) {
-                        const plantType = SeedService.mapSeedTypeToPlantType(item.type);
+                        const plantType = SeedService.mapSeedTypeToPlantType(
+                            item.type,
+                        );
                         this.seedCounts[plantType] = item.quantity;
                     }
                 });
             }
 
             // Load fertilizers from cache (new API format: { fertilizers: [], total: number })
-            this.fertilizerCounts = { common: 0, rare: 0, epic: 0, legendary: 0 };
-            if (cachedData.fertilizers && Array.isArray(cachedData.fertilizers.fertilizers)) {
-                cachedData.fertilizers.fertilizers.forEach(item => {
+            this.fertilizerCounts = {
+                common: 0,
+                rare: 0,
+                epic: 0,
+                legendary: 0,
+            };
+            if (
+                cachedData.fertilizers &&
+                Array.isArray(cachedData.fertilizers.fertilizers)
+            ) {
+                cachedData.fertilizers.fertilizers.forEach((item) => {
                     if (item && item.type) {
-                        const fertilizerType = FertilizerService.mapFertilizerType(item.type);
+                        const fertilizerType =
+                            FertilizerService.mapFertilizerType(item.type);
                         this.fertilizerCounts[fertilizerType] = item.amount;
                     }
                 });
@@ -1115,9 +1242,18 @@ export class FarmingGame extends Scene {
             for (const item of cachedData.fruits) {
                 if (item.count > 0) {
                     let remaining = item.count;
-                    while (remaining > 0 && this.chestInventory.length < this.CHEST_SLOTS) {
-                        const slotCount = Math.min(remaining, this.MAX_PER_SLOT);
-                        this.chestInventory.push({ type: item.type, count: slotCount });
+                    while (
+                        remaining > 0 &&
+                        this.chestInventory.length < this.CHEST_SLOTS
+                    ) {
+                        const slotCount = Math.min(
+                            remaining,
+                            this.MAX_PER_SLOT,
+                        );
+                        this.chestInventory.push({
+                            type: item.type,
+                            count: slotCount,
+                        });
                         remaining -= slotCount;
                     }
                 }
@@ -1132,14 +1268,21 @@ export class FarmingGame extends Scene {
 
             // Set streak data to CheckinManager from cache
             if (cachedData.streak) {
-                this.checkinManager.setStreakFromCache(cachedData.streak.status, cachedData.streak.history);
+                this.checkinManager.setStreakFromCache(
+                    cachedData.streak.status,
+                    cachedData.streak.history,
+                );
             }
 
             // Initialize global game state with cached data (SINGLE SOURCE OF TRUTH)
             // NOTE: Use user.balanceGold/Gem as primary source (more accurate than inventory API)
-            const gold = cachedData.user?.balanceGold ?? cachedData.currencies?.gold ?? 0;
-            const gem = cachedData.user?.balanceGem ?? cachedData.currencies?.gem ?? 0;
-            
+            const gold =
+                cachedData.user?.balanceGold ??
+                cachedData.currencies?.gold ??
+                0;
+            const gem =
+                cachedData.user?.balanceGem ?? cachedData.currencies?.gem ?? 0;
+
             // Sync local state (used by PlotManager and other legacy components)
             this.playerGold = gold;
             this.playerGems = gem;
@@ -1153,16 +1296,18 @@ export class FarmingGame extends Scene {
                 fertilizers: this.fertilizerCounts,
                 fruits: cachedData.fruits || [],
                 waterCount: this.toolbarItems[1]?.count ?? 0,
-                user: cachedData.user ? {
-                    id: cachedData.user.id,
-                    address: cachedData.user.address,
-                    username: cachedData.user.username,
-                    avatar: cachedData.user.avatar,
-                    xp: cachedData.user.xp,
-                    reputationScore: cachedData.user.reputationScore,
-                    landsCount: cachedData.user.landsCount,
-                    plantsCount: cachedData.user.plantsCount,
-                } : null,
+                user: cachedData.user
+                    ? {
+                          id: cachedData.user.id,
+                          address: cachedData.user.address,
+                          username: cachedData.user.username,
+                          avatar: cachedData.user.avatar,
+                          xp: cachedData.user.xp,
+                          reputationScore: cachedData.user.reputationScore,
+                          landsCount: cachedData.user.landsCount,
+                          plantsCount: cachedData.user.plantsCount,
+                      }
+                    : null,
             });
             // Update UI
             this.updateToolbar();
@@ -1186,7 +1331,9 @@ export class FarmingGame extends Scene {
     /**
      * Loads garden data from cached response
      */
-    private loadGardenDataFromCache(gardenData: import('../GardenService').GardenResponse) {
+    private loadGardenDataFromCache(
+        gardenData: import("../GardenService").GardenResponse,
+    ) {
         if (!gardenData || gardenData.length === 0) {
             return;
         }
@@ -1198,9 +1345,9 @@ export class FarmingGame extends Scene {
         }
 
         // Process each plot
-        gardenData.forEach(plot => {
+        gardenData.forEach((plot) => {
             const tileKey = GardenService.plotIndexToTileKey(plot.plotIndex);
-            const [x, y] = tileKey.split(',').map(Number);
+            const [x, y] = tileKey.split(",").map(Number);
 
             // Remove lock overlay
             this.unlockPlot(tileKey);
@@ -1212,7 +1359,7 @@ export class FarmingGame extends Scene {
                     tilled: true,
                     planted: false,
                     plantStage: 0,
-                    cropType: null
+                    cropType: null,
                 };
                 this.farmLandStates.set(tileKey, state);
             }
@@ -1222,8 +1369,12 @@ export class FarmingGame extends Scene {
             state.landId = plot.landId;
 
             if (plot.plant) {
-                const plantType = GardenService.mapPlantTypeToGameType(plot.plant.type);
-                const plantStage = GardenService.mapStageToGameStage(plot.plant.stage);
+                const plantType = GardenService.mapPlantTypeToGameType(
+                    plot.plant.type,
+                );
+                const plantStage = GardenService.mapStageToGameStage(
+                    plot.plant.stage,
+                );
 
                 state.planted = true;
                 state.cropType = plantType;
@@ -1244,53 +1395,63 @@ export class FarmingGame extends Scene {
                     plantedAt: plot.plant.plantedAt,
                     lastWateredAt: (plot.plant as any).lastWateredAt,
                     waterBalance: (plot.plant as any).waterBalance,
-                    waterCount: plot.plant.waterCount
+                    waterCount: plot.plant.waterCount,
                 };
 
                 // Store hydration data (health/water status)
                 const apiHydration = (plot as any).hydration;
-                state.hydration = apiHydration ? {
-                    hoursToDeath: apiHydration.hoursToDeath,
-                    isDead: apiHydration.isDead,
-                    isWithering: apiHydration.isWithering,
-                    status: apiHydration.status,
-                    message: apiHydration.message,
-                    waterBalance: apiHydration.waterBalance
-                } : undefined;
+                state.hydration = apiHydration
+                    ? {
+                          hoursToDeath: apiHydration.hoursToDeath,
+                          isDead: apiHydration.isDead,
+                          isWithering: apiHydration.isWithering,
+                          status: apiHydration.status,
+                          message: apiHydration.message,
+                          waterBalance: apiHydration.waterBalance,
+                      }
+                    : undefined;
 
                 // Store growth data
                 const apiGrowth = (plot as any).growth;
-                state.growth = apiGrowth ? {
-                    activeGrowthHours: apiGrowth.activeGrowthHours,
-                    currentStage: apiGrowth.currentStage,
-                    hoursRemaining: apiGrowth.hoursRemaining,
-                    progress: apiGrowth.progress,
-                    totalHoursNeeded: apiGrowth.totalHoursNeeded
-                } : undefined;
+                state.growth = apiGrowth
+                    ? {
+                          activeGrowthHours: apiGrowth.activeGrowthHours,
+                          currentStage: apiGrowth.currentStage,
+                          hoursRemaining: apiGrowth.hoursRemaining,
+                          progress: apiGrowth.progress,
+                          totalHoursNeeded: apiGrowth.totalHoursNeeded,
+                      }
+                    : undefined;
 
                 // Store refresh timestamp for smart refresh calculation
                 state.lastRefreshTime = Date.now();
 
                 // Store soil quality data
                 const apiSoilQuality = (plot as any).soilQuality;
-                state.soilQuality = apiSoilQuality ? {
-                    fertility: apiSoilQuality.fertility,
-                    hydration: apiSoilQuality.hydration,
-                    status: apiSoilQuality.status
-                } : undefined;
+                state.soilQuality = apiSoilQuality
+                    ? {
+                          fertility: apiSoilQuality.fertility,
+                          hydration: apiSoilQuality.hydration,
+                          status: apiSoilQuality.status,
+                      }
+                    : undefined;
 
-                state.progress = plot.progress ? {
-                    percentage: plot.progress.percentage,
-                    timeRemaining: plot.progress.timeRemaining,
-                    stage: plot.progress.stage,
-                    canWater: plot.progress.canWater
-                } : undefined;
-                state.config = plot.config ? {
-                    diggingTime: plot.config.diggingTime,
-                    growingTime: plot.config.growingTime,
-                    totalTime: plot.config.totalTime,
-                    baseYield: plot.config.baseYield
-                } : undefined;
+                state.progress = plot.progress
+                    ? {
+                          percentage: plot.progress.percentage,
+                          timeRemaining: plot.progress.timeRemaining,
+                          stage: plot.progress.stage,
+                          canWater: plot.progress.canWater,
+                      }
+                    : undefined;
+                state.config = plot.config
+                    ? {
+                          diggingTime: plot.config.diggingTime,
+                          growingTime: plot.config.growingTime,
+                          totalTime: plot.config.totalTime,
+                          baseYield: plot.config.baseYield,
+                      }
+                    : undefined;
 
                 // Update plant status from hydration
                 if (state.hydration) {
@@ -1309,7 +1470,14 @@ export class FarmingGame extends Scene {
                 }
 
                 // Show plant sprite
-                this.showPlant(x, y, plantType, plantStage, state.isDead, state.isWilted);
+                this.showPlant(
+                    x,
+                    y,
+                    plantType,
+                    plantStage,
+                    state.isDead,
+                    state.isWilted,
+                );
 
                 // Create health bar (only if not dead)
                 if (!state.isDead) {
@@ -1320,10 +1488,15 @@ export class FarmingGame extends Scene {
                 const updatedState = this.farmLandStates.get(tileKey);
                 if (updatedState?.healthBarFill && state.hydration) {
                     const waterBalance = state.hydration.waterBalance ?? 0;
-                    const maxHours = getMaxWaterHours(state.cropType || 'algae');
+                    const maxHours = getMaxWaterHours(
+                        state.cropType || "algae",
+                    );
                     const healthPercent = Math.min(waterBalance / maxHours, 1);
                     const maxWidth = 11; // barWidth(12) - 1
-                    updatedState.healthBarFill.width = Math.max(maxWidth * healthPercent, 1);
+                    updatedState.healthBarFill.width = Math.max(
+                        maxWidth * healthPercent,
+                        1,
+                    );
 
                     // Color gradient: green -> yellow -> red
                     if (healthPercent > 0.6) {
@@ -1334,7 +1507,6 @@ export class FarmingGame extends Scene {
                         updatedState.healthBarFill.setFillStyle(0xef4444); // Red
                     }
                 }
-
             } else {
                 this.removePlant(x, y);
                 state.planted = false;
@@ -1343,7 +1515,6 @@ export class FarmingGame extends Scene {
                 state.plantId = undefined;
             }
         });
-
     }
 
     /**
@@ -1357,7 +1528,7 @@ export class FarmingGame extends Scene {
             this.seedCounts = {
                 algae: 0,
                 mushroom: 0,
-                tree: 0
+                tree: 0,
             };
 
             // Validate that inventory is an array
@@ -1367,13 +1538,14 @@ export class FarmingGame extends Scene {
             }
 
             // Update seed counts from API response
-            inventory.forEach(item => {
+            inventory.forEach((item) => {
                 if (item && item.type) {
-                    const plantType = SeedService.mapSeedTypeToPlantType(item.type);
+                    const plantType = SeedService.mapSeedTypeToPlantType(
+                        item.type,
+                    );
                     this.seedCounts[plantType] = item.quantity;
                 }
             });
-
 
             // Update toolbar to reflect new counts
             this.updateToolbar();
@@ -1395,7 +1567,7 @@ export class FarmingGame extends Scene {
                 common: 0,
                 rare: 0,
                 epic: 0,
-                legendary: 0
+                legendary: 0,
             };
 
             // Validate response
@@ -1405,13 +1577,14 @@ export class FarmingGame extends Scene {
             }
 
             // Update fertilizer counts from API response
-            response.fertilizers.forEach(item => {
+            response.fertilizers.forEach((item) => {
                 if (item && item.type) {
-                    const fertilizerType = FertilizerService.mapFertilizerType(item.type);
+                    const fertilizerType = FertilizerService.mapFertilizerType(
+                        item.type,
+                    );
                     this.fertilizerCounts[fertilizerType] = item.amount;
                 }
             });
-
 
             // Update toolbar to reflect new counts
             this.updateToolbar();
@@ -1436,17 +1609,22 @@ export class FarmingGame extends Scene {
                 if (item.count > 0) {
                     // Split into slots of MAX_PER_SLOT each
                     let remaining = item.count;
-                    while (remaining > 0 && this.chestInventory.length < this.CHEST_SLOTS) {
-                        const slotCount = Math.min(remaining, this.MAX_PER_SLOT);
+                    while (
+                        remaining > 0 &&
+                        this.chestInventory.length < this.CHEST_SLOTS
+                    ) {
+                        const slotCount = Math.min(
+                            remaining,
+                            this.MAX_PER_SLOT,
+                        );
                         this.chestInventory.push({
                             type: item.type,
-                            count: slotCount
+                            count: slotCount,
                         });
                         remaining -= slotCount;
                     }
                 }
             }
-
 
             // Update toolbar to reflect new counts
             this.updateToolbar();
@@ -1461,23 +1639,30 @@ export class FarmingGame extends Scene {
     private async fetchWaterInventory() {
         try {
             const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000'}/inventory`,
+                `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000"}/inventory`,
                 {
                     method: "GET",
                     headers: {
-                        "Authorization": `Bearer ${localStorage.getItem('fam_game_access_token')}`,
+                        Authorization: `Bearer ${localStorage.getItem("fam_game_access_token")}`,
                     },
-                }
+                },
             );
 
             if (response.ok) {
                 const data = await response.json();
                 const allItems = data.inventory || [];
-                const waterItem = allItems.find((item: { itemType: string; location: string; amount: number }) => 
-                    item.itemType === 'WATER' && item.location === 'TOOLS'
+                const waterItem = allItems.find(
+                    (item: {
+                        itemType: string;
+                        location: string;
+                        amount: number;
+                    }) =>
+                        item.itemType === "WATER" && item.location === "TOOLS",
                 );
-                
-                const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
+
+                const wateringCan = this.toolbarItems.find(
+                    (item) => item.name === "wateringCan",
+                );
                 if (wateringCan) {
                     wateringCan.count = waterItem?.amount || 0;
                 }
@@ -1508,7 +1693,8 @@ export class FarmingGame extends Scene {
                 // If hoursRemaining was stored with the last refresh time, check if it's now <= 0
                 const lastRefreshTime = state.lastRefreshTime || now;
                 const hoursElapsed = (now - lastRefreshTime) / (1000 * 60 * 60);
-                const currentHoursRemaining = state.growth.hoursRemaining - hoursElapsed;
+                const currentHoursRemaining =
+                    state.growth.hoursRemaining - hoursElapsed;
 
                 if (currentHoursRemaining <= 0) {
                     needsRefresh = true;
@@ -1533,19 +1719,17 @@ export class FarmingGame extends Scene {
     private async loadGardenData() {
         try {
             const gardenData = await GardenService.getGarden();
-            
 
             // Log first plant details to see all available fields
             if (gardenData && gardenData.length > 0) {
-                const firstPlot = gardenData.find(p => p.plant !== null);
+                const firstPlot = gardenData.find((p) => p.plant !== null);
                 if (firstPlot?.plant) {
                 }
             }
-            
+
             if (!gardenData || gardenData.length === 0) {
                 return;
             }
-
 
             // Update owned plots count based on API response
             // Each plot in the response is an unlocked plot
@@ -1555,10 +1739,12 @@ export class FarmingGame extends Scene {
             }
 
             // Process each plot from API
-            gardenData.forEach(plot => {
+            gardenData.forEach((plot) => {
                 // Convert plot index to tile key
-                const tileKey = GardenService.plotIndexToTileKey(plot.plotIndex);
-                const [x, y] = tileKey.split(',').map(Number);
+                const tileKey = GardenService.plotIndexToTileKey(
+                    plot.plotIndex,
+                );
+                const [x, y] = tileKey.split(",").map(Number);
 
                 // Remove lock overlay if exists (plot is unlocked)
                 this.unlockPlot(tileKey);
@@ -1570,7 +1756,7 @@ export class FarmingGame extends Scene {
                         tilled: true,
                         planted: false,
                         plantStage: 0,
-                        cropType: null
+                        cropType: null,
                     };
                     this.farmLandStates.set(tileKey, state);
                 }
@@ -1582,15 +1768,21 @@ export class FarmingGame extends Scene {
 
                 // If plot has a plant, restore it
                 if (plot.plant) {
-                    const plantType = GardenService.mapPlantTypeToGameType(plot.plant.type);
-                    const plantStage = GardenService.mapStageToGameStage(plot.plant.stage);
+                    const plantType = GardenService.mapPlantTypeToGameType(
+                        plot.plant.type,
+                    );
+                    const plantStage = GardenService.mapStageToGameStage(
+                        plot.plant.stage,
+                    );
 
                     state.planted = true;
                     state.cropType = plantType;
                     state.plantStage = plantStage;
                     state.isDead = false;
                     state.isWilted = false;
-                    state.lastCareTime = new Date(plot.plant.plantedAt).getTime();
+                    state.lastCareTime = new Date(
+                        plot.plant.plantedAt,
+                    ).getTime();
                     state.plantId = plot.plant.id;
 
                     // Store full API data for PlantDetailManager
@@ -1604,53 +1796,63 @@ export class FarmingGame extends Scene {
                         plantedAt: plot.plant.plantedAt,
                         lastWateredAt: (plot.plant as any).lastWateredAt,
                         waterBalance: (plot.plant as any).waterBalance,
-                        waterCount: plot.plant.waterCount
+                        waterCount: plot.plant.waterCount,
                     };
 
                     // Store hydration data (health/water status)
                     const apiHydration = (plot as any).hydration;
-                    state.hydration = apiHydration ? {
-                        hoursToDeath: apiHydration.hoursToDeath,
-                        isDead: apiHydration.isDead,
-                        isWithering: apiHydration.isWithering,
-                        status: apiHydration.status,
-                        message: apiHydration.message,
-                        waterBalance: apiHydration.waterBalance
-                    } : undefined;
+                    state.hydration = apiHydration
+                        ? {
+                              hoursToDeath: apiHydration.hoursToDeath,
+                              isDead: apiHydration.isDead,
+                              isWithering: apiHydration.isWithering,
+                              status: apiHydration.status,
+                              message: apiHydration.message,
+                              waterBalance: apiHydration.waterBalance,
+                          }
+                        : undefined;
 
                     // Store growth data
                     const apiGrowth = (plot as any).growth;
-                    state.growth = apiGrowth ? {
-                        activeGrowthHours: apiGrowth.activeGrowthHours,
-                        currentStage: apiGrowth.currentStage,
-                        hoursRemaining: apiGrowth.hoursRemaining,
-                        progress: apiGrowth.progress,
-                        totalHoursNeeded: apiGrowth.totalHoursNeeded
-                    } : undefined;
+                    state.growth = apiGrowth
+                        ? {
+                              activeGrowthHours: apiGrowth.activeGrowthHours,
+                              currentStage: apiGrowth.currentStage,
+                              hoursRemaining: apiGrowth.hoursRemaining,
+                              progress: apiGrowth.progress,
+                              totalHoursNeeded: apiGrowth.totalHoursNeeded,
+                          }
+                        : undefined;
 
                     // Store refresh timestamp for smart refresh calculation
                     state.lastRefreshTime = Date.now();
 
                     // Store soil quality data
                     const apiSoilQuality = (plot as any).soilQuality;
-                    state.soilQuality = apiSoilQuality ? {
-                        fertility: apiSoilQuality.fertility,
-                        hydration: apiSoilQuality.hydration,
-                        status: apiSoilQuality.status
-                    } : undefined;
+                    state.soilQuality = apiSoilQuality
+                        ? {
+                              fertility: apiSoilQuality.fertility,
+                              hydration: apiSoilQuality.hydration,
+                              status: apiSoilQuality.status,
+                          }
+                        : undefined;
 
-                    state.progress = plot.progress ? {
-                        percentage: plot.progress.percentage,
-                        timeRemaining: plot.progress.timeRemaining,
-                        stage: plot.progress.stage,
-                        canWater: plot.progress.canWater
-                    } : undefined;
-                    state.config = plot.config ? {
-                        diggingTime: plot.config.diggingTime,
-                        growingTime: plot.config.growingTime,
-                        totalTime: plot.config.totalTime,
-                        baseYield: plot.config.baseYield
-                    } : undefined;
+                    state.progress = plot.progress
+                        ? {
+                              percentage: plot.progress.percentage,
+                              timeRemaining: plot.progress.timeRemaining,
+                              stage: plot.progress.stage,
+                              canWater: plot.progress.canWater,
+                          }
+                        : undefined;
+                    state.config = plot.config
+                        ? {
+                              diggingTime: plot.config.diggingTime,
+                              growingTime: plot.config.growingTime,
+                              totalTime: plot.config.totalTime,
+                              baseYield: plot.config.baseYield,
+                          }
+                        : undefined;
 
                     // Update plant status from hydration
                     if (state.hydration) {
@@ -1669,7 +1871,14 @@ export class FarmingGame extends Scene {
                     }
 
                     // Show plant sprite (will remove existing sprite if any)
-                    this.showPlant(x, y, plantType, plantStage, state.isDead, state.isWilted);
+                    this.showPlant(
+                        x,
+                        y,
+                        plantType,
+                        plantStage,
+                        state.isDead,
+                        state.isWilted,
+                    );
 
                     // Create health bar (only if not dead)
                     if (!state.isDead) {
@@ -1680,10 +1889,18 @@ export class FarmingGame extends Scene {
                     const updatedState = this.farmLandStates.get(tileKey);
                     if (updatedState?.healthBarFill && state.hydration) {
                         const waterBalance = state.hydration.waterBalance ?? 0;
-                        const maxHours = getMaxWaterHours(state.cropType || 'algae');
-                        const healthPercent = Math.min(waterBalance / maxHours, 1);
+                        const maxHours = getMaxWaterHours(
+                            state.cropType || "algae",
+                        );
+                        const healthPercent = Math.min(
+                            waterBalance / maxHours,
+                            1,
+                        );
                         const maxWidth = 11; // barWidth(12) - 1
-                        updatedState.healthBarFill.width = Math.max(maxWidth * healthPercent, 1);
+                        updatedState.healthBarFill.width = Math.max(
+                            maxWidth * healthPercent,
+                            1,
+                        );
 
                         // Color gradient: green -> yellow -> red
                         if (healthPercent > 0.6) {
@@ -1694,7 +1911,6 @@ export class FarmingGame extends Scene {
                             updatedState.healthBarFill.setFillStyle(0xef4444); // Red
                         }
                     }
-
                 } else {
                     // Empty plot - remove any existing plant sprite and reset state
                     this.removePlant(x, y);
@@ -1704,9 +1920,7 @@ export class FarmingGame extends Scene {
                     state.plantId = undefined;
                 }
             });
-
-        } catch (error) {
-        }
+        } catch (error) {}
     }
 
     /**
@@ -1729,8 +1943,7 @@ export class FarmingGame extends Scene {
             if (backpackResponse) {
                 this.backpackItems = backpackResponse.backpack;
             }
-        } catch (error) {
-        }
+        } catch (error) {}
     }
 
     /**
@@ -1749,30 +1962,35 @@ export class FarmingGame extends Scene {
                 // Sync local state with fetched user data
                 this.playerGold = userData.balanceGold ?? userData.gold ?? 0;
                 this.playerGems = userData.balanceGem ?? userData.gem ?? 0;
-                
+
                 // Update GameState
                 const gameState = useGameState(this);
                 gameState.setCurrency(this.playerGold, this.playerGems);
 
                 // Update GameDataService cache if possible (partial update)
                 // This ensures other components using GameDataService see the latest data
-                GameDataService.updateCurrency(this.playerGold, this.playerGems);
+                GameDataService.updateCurrency(
+                    this.playerGold,
+                    this.playerGems,
+                );
 
                 // Refresh UI to show updated balances
                 this.createUserProfileUI();
             } else {
             }
-        } catch (error) {
-        }
+        } catch (error) {}
     }
 
     private createWaterAnimation() {
         // Create animated tiles for water (4 frames)
         this.anims.create({
-            key: 'water-anim',
-            frames: this.anims.generateFrameNumbers('water-tileset', { start: 0, end: 3 }),
+            key: "water-anim",
+            frames: this.anims.generateFrameNumbers("water-tileset", {
+                start: 0,
+                end: 3,
+            }),
             frameRate: 4,
-            repeat: -1
+            repeat: -1,
         });
     }
 
@@ -1785,19 +2003,25 @@ export class FarmingGame extends Scene {
             tileWidth: this.TILE_SIZE,
             tileHeight: this.TILE_SIZE,
             width: this.MAP_WIDTH,
-            height: this.MAP_HEIGHT
+            height: this.MAP_HEIGHT,
         });
 
         // Add tileset images
-        const grassTiles = this.map.addTilesetImage('grass', 'grass-tileset');
-        const tilledDirtTiles = this.map.addTilesetImage('tilled-dirt', 'tilled-dirt-tileset');
+        const grassTiles = this.map.addTilesetImage("grass", "grass-tileset");
+        const tilledDirtTiles = this.map.addTilesetImage(
+            "tilled-dirt",
+            "tilled-dirt-tileset",
+        );
 
         if (!grassTiles || !tilledDirtTiles) {
             return;
         }
 
         // Create ground layer (only for land tiles)
-        this.groundLayer = this.map.createBlankLayer('Ground', grassTiles) as Phaser.Tilemaps.TilemapLayer;
+        this.groundLayer = this.map.createBlankLayer(
+            "Ground",
+            grassTiles,
+        ) as Phaser.Tilemaps.TilemapLayer;
 
         if (!this.groundLayer) {
             return;
@@ -1807,7 +2031,10 @@ export class FarmingGame extends Scene {
         this.groundLayer.setDepth(1);
 
         // Create tilled dirt layer (for farm plots)
-        this.tilledDirtLayer = this.map.createBlankLayer('TilledDirt', tilledDirtTiles) as Phaser.Tilemaps.TilemapLayer;
+        this.tilledDirtLayer = this.map.createBlankLayer(
+            "TilledDirt",
+            tilledDirtTiles,
+        ) as Phaser.Tilemaps.TilemapLayer;
 
         if (!this.tilledDirtLayer) {
             return;
@@ -1928,12 +2155,12 @@ export class FarmingGame extends Scene {
                 const water = this.add.sprite(
                     x * this.TILE_SIZE + this.TILE_SIZE / 2,
                     y * this.TILE_SIZE + this.TILE_SIZE / 2,
-                    'water-tileset',
-                    0
+                    "water-tileset",
+                    0,
                 );
                 water.setOrigin(0.5);
                 water.setDepth(0); // Behind everything
-                water.play('water-anim');
+                water.play("water-anim");
             }
         }
     }
@@ -1969,19 +2196,31 @@ export class FarmingGame extends Scene {
             const y = Phaser.Math.Between(12, 38);
 
             // Skip if position is in center exclusion zone
-            const distFromCenter = Math.max(Math.abs(x - centerX), Math.abs(y - centerY));
+            const distFromCenter = Math.max(
+                Math.abs(x - centerX),
+                Math.abs(y - centerY),
+            );
             if (distFromCenter < exclusionRadius) continue;
 
             // Skip if position is in factory exclusion zone
-            const distFromFactory = Math.max(Math.abs(x - factoryX), Math.abs(y - factoryY));
+            const distFromFactory = Math.max(
+                Math.abs(x - factoryX),
+                Math.abs(y - factoryY),
+            );
             if (distFromFactory < factoryExclusionRadius) continue;
 
             // Skip if position is in shop exclusion zone
-            const distFromShop = Math.max(Math.abs(x - shopX), Math.abs(y - shopY));
+            const distFromShop = Math.max(
+                Math.abs(x - shopX),
+                Math.abs(y - shopY),
+            );
             if (distFromShop < shopExclusionRadius) continue;
 
             // Skip if position is in well exclusion zone
-            const distFromWell = Math.max(Math.abs(x - wellX), Math.abs(y - wellY));
+            const distFromWell = Math.max(
+                Math.abs(x - wellX),
+                Math.abs(y - wellY),
+            );
             if (distFromWell < wellExclusionRadius) continue;
 
             // Skip if not on land
@@ -2014,7 +2253,12 @@ export class FarmingGame extends Scene {
         }
     }
 
-    private canPlaceLargeObject(x: number, y: number, width: number, height: number): boolean {
+    private canPlaceLargeObject(
+        x: number,
+        y: number,
+        width: number,
+        height: number,
+    ): boolean {
         const centerX = 25;
         const centerY = 25;
         const exclusionRadius = 4;
@@ -2035,13 +2279,19 @@ export class FarmingGame extends Scene {
                 }
 
                 // Check center exclusion zone
-                const distFromCenter = Math.max(Math.abs(checkX - centerX), Math.abs(checkY - centerY));
+                const distFromCenter = Math.max(
+                    Math.abs(checkX - centerX),
+                    Math.abs(checkY - centerY),
+                );
                 if (distFromCenter < exclusionRadius) {
                     return false;
                 }
 
                 // Check well exclusion zone
-                const distFromWell = Math.max(Math.abs(checkX - wellX), Math.abs(checkY - wellY));
+                const distFromWell = Math.max(
+                    Math.abs(checkX - wellX),
+                    Math.abs(checkY - wellY),
+                );
                 if (distFromWell < wellExclusionRadius) {
                     return false;
                 }
@@ -2058,8 +2308,8 @@ export class FarmingGame extends Scene {
         const topSprite = this.add.sprite(
             x * this.TILE_SIZE + this.TILE_SIZE / 2,
             y * this.TILE_SIZE + this.TILE_SIZE / 2,
-            'basic-plants',
-            0
+            "basic-plants",
+            0,
         );
         topSprite.setOrigin(0.5);
         topSprite.setDepth(baseDepth);
@@ -2067,8 +2317,8 @@ export class FarmingGame extends Scene {
         const bottomSprite = this.add.sprite(
             x * this.TILE_SIZE + this.TILE_SIZE / 2,
             (y + 1) * this.TILE_SIZE + this.TILE_SIZE / 2,
-            'basic-plants',
-            9
+            "basic-plants",
+            9,
         );
         bottomSprite.setOrigin(0.5);
         bottomSprite.setDepth(baseDepth);
@@ -2083,15 +2333,15 @@ export class FarmingGame extends Scene {
             { frame: 1, dx: 0, dy: 0 },
             { frame: 2, dx: 1, dy: 0 },
             { frame: 10, dx: 0, dy: 1 },
-            { frame: 11, dx: 1, dy: 1 }
+            { frame: 11, dx: 1, dy: 1 },
         ];
 
-        sprites.forEach(s => {
+        sprites.forEach((s) => {
             const sprite = this.add.sprite(
                 (x + s.dx) * this.TILE_SIZE + this.TILE_SIZE / 2,
                 (y + s.dy) * this.TILE_SIZE + this.TILE_SIZE / 2,
-                'basic-plants',
-                s.frame
+                "basic-plants",
+                s.frame,
             );
             sprite.setOrigin(0.5);
             sprite.setDepth(baseDepth);
@@ -2107,15 +2357,15 @@ export class FarmingGame extends Scene {
             { frame: 3, dx: 0, dy: 0 },
             { frame: 4, dx: 1, dy: 0 },
             { frame: 12, dx: 0, dy: 1 },
-            { frame: 13, dx: 1, dy: 1 }
+            { frame: 13, dx: 1, dy: 1 },
         ];
 
-        sprites.forEach(s => {
+        sprites.forEach((s) => {
             const sprite = this.add.sprite(
                 (x + s.dx) * this.TILE_SIZE + this.TILE_SIZE / 2,
                 (y + s.dy) * this.TILE_SIZE + this.TILE_SIZE / 2,
-                'basic-plants',
-                s.frame
+                "basic-plants",
+                s.frame,
             );
             sprite.setOrigin(0.5);
             sprite.setDepth(baseDepth);
@@ -2131,8 +2381,8 @@ export class FarmingGame extends Scene {
         const sprite = this.add.sprite(
             x * this.TILE_SIZE + this.TILE_SIZE / 2,
             y * this.TILE_SIZE + this.TILE_SIZE / 2,
-            'basic-plants',
-            mushroomFrame
+            "basic-plants",
+            mushroomFrame,
         );
         sprite.setOrigin(0.5);
         sprite.setDepth(baseDepth);
@@ -2147,8 +2397,8 @@ export class FarmingGame extends Scene {
         const sprite = this.add.sprite(
             x * this.TILE_SIZE + this.TILE_SIZE / 2,
             y * this.TILE_SIZE + this.TILE_SIZE / 2,
-            'basic-plants',
-            bushFrame
+            "basic-plants",
+            bushFrame,
         );
         sprite.setOrigin(0.5);
         sprite.setDepth(baseDepth);
@@ -2162,7 +2412,6 @@ export class FarmingGame extends Scene {
         // Create 4x4 grid of farm plots (16 total)
         // Plots are numbered 0-15, left to right, top to bottom
         const plotPositions = this.getPlotPositions();
-
 
         // Place tilled-dirt tiles for each plot
         plotPositions.forEach((pos, index) => {
@@ -2187,14 +2436,18 @@ export class FarmingGame extends Scene {
             for (let col = 0; col < 4; col++) {
                 positions.push({
                     x: centerX - 1 + col,
-                    y: centerY - 1 + row
+                    y: centerY - 1 + row,
                 });
             }
         }
         return positions;
     }
 
-    private createLockedPlotOverlay(tileX: number, tileY: number, plotIndex: number) {
+    private createLockedPlotOverlay(
+        tileX: number,
+        tileY: number,
+        plotIndex: number,
+    ) {
         const worldX = tileX * this.TILE_SIZE + this.TILE_SIZE / 2;
         const worldY = tileY * this.TILE_SIZE + this.TILE_SIZE / 2;
         const key = `${tileX},${tileY}`;
@@ -2204,13 +2457,13 @@ export class FarmingGame extends Scene {
         container.setDepth(100);
 
         // Lock land image overlay
-        const lockImage = this.add.image(0, 0, 'lock-land');
+        const lockImage = this.add.image(0, 0, "lock-land");
         lockImage.setDisplaySize(this.TILE_SIZE, this.TILE_SIZE);
         container.add(lockImage);
 
         // Make interactive
         lockImage.setInteractive({ useHandCursor: true });
-        lockImage.on('pointerdown', () => {
+        lockImage.on("pointerdown", () => {
             this.showBuyPlotModal(tileX, tileY, plotIndex);
         });
 
@@ -2228,14 +2481,14 @@ export class FarmingGame extends Scene {
         const worldY = tileY * this.TILE_SIZE;
 
         const text = this.add.text(worldX, worldY, message, {
-            fontSize: '10px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
+            fontSize: "10px",
+            fontFamily: "PixelFont",
+            color: "#FFD700",
+            resolution: 2,
         });
         text.setOrigin(0.5);
         text.setDepth(1000);
-        text.setStroke('#000000', 2);
+        text.setStroke("#000000", 2);
 
         // Make UI camera ignore this (prevent double rendering)
         this.uiCamera?.ignore(text);
@@ -2246,10 +2499,10 @@ export class FarmingGame extends Scene {
             y: worldY - 30,
             alpha: 0,
             duration: 1500,
-            ease: 'Power2',
+            ease: "Power2",
             onComplete: () => {
                 text.destroy();
-            }
+            },
         });
     }
 
@@ -2262,7 +2515,7 @@ export class FarmingGame extends Scene {
         let spawnY: number;
 
         // Spawn at station if coming from travel, otherwise spawn at center
-        if (this.navigationData?.spawnAt === 'station') {
+        if (this.navigationData?.spawnAt === "station") {
             // Spawn near station (offset to the left so player doesn't overlap station)
             spawnX = this.STATION_X - 5;
             spawnY = this.STATION_Y;
@@ -2278,29 +2531,35 @@ export class FarmingGame extends Scene {
         const characterType = user?.characterType || 1;
 
         // Map characterType (1-5) to character index (0-4) and get character key
-        const characterIndex = Math.max(0, Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1));
-        this.currentCharacterKey = PLAYABLE_CHARACTERS[characterIndex]?.key || 'bear';
-
+        const characterIndex = Math.max(
+            0,
+            Math.min(characterType - 1, PLAYABLE_CHARACTERS.length - 1),
+        );
+        this.currentCharacterKey =
+            PLAYABLE_CHARACTERS[characterIndex]?.key || "bear";
 
         // Create player sprite with the selected character
         this.player = this.physics.add.sprite(
             spawnX * this.TILE_SIZE,
             spawnY * this.TILE_SIZE,
-            this.currentCharacterKey
+            this.currentCharacterKey,
         );
 
         this.player.setCollideWorldBounds(true);
-        this.player.setOrigin(GAME_CONSTANTS.CHARACTER_ORIGIN_X, GAME_CONSTANTS.CHARACTER_ORIGIN_Y);
+        this.player.setOrigin(
+            GAME_CONSTANTS.CHARACTER_ORIGIN_X,
+            GAME_CONSTANTS.CHARACTER_ORIGIN_Y,
+        );
         this.player.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         this.player.setDepth(this.player.y); // Dynamic depth based on Y position
-        
+
         this.playerShadow = new DynamicShadow(this, this.player, 0, 2);
 
         // Create animations for the selected character
         this.createPlayerAnimations();
 
         // Play idle animation
-        this.player.play('idle-down');
+        this.player.play("idle-down");
     }
 
     private createPlayerAnimations() {
@@ -2318,82 +2577,106 @@ export class FarmingGame extends Scene {
         // Frame 14-15: walk right
 
         // Idle front (down)
-        if (!this.anims.exists('idle-down')) {
+        if (!this.anims.exists("idle-down")) {
             this.anims.create({
-                key: 'idle-down',
-                frames: this.anims.generateFrameNumbers(charKey, { start: 0, end: 1 }),
+                key: "idle-down",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 0,
+                    end: 1,
+                }),
                 frameRate: 2,
-                repeat: -1
+                repeat: -1,
             });
         }
 
         // Walk front (down)
-        if (!this.anims.exists('walk-down')) {
+        if (!this.anims.exists("walk-down")) {
             this.anims.create({
-                key: 'walk-down',
-                frames: this.anims.generateFrameNumbers(charKey, { start: 2, end: 3 }),
+                key: "walk-down",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 2,
+                    end: 3,
+                }),
                 frameRate: frameRate,
-                repeat: -1
+                repeat: -1,
             });
         }
 
         // Idle back (up)
-        if (!this.anims.exists('idle-up')) {
+        if (!this.anims.exists("idle-up")) {
             this.anims.create({
-                key: 'idle-up',
-                frames: this.anims.generateFrameNumbers(charKey, { start: 4, end: 5 }),
+                key: "idle-up",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 4,
+                    end: 5,
+                }),
                 frameRate: 2,
-                repeat: -1
+                repeat: -1,
             });
         }
 
         // Walk back (up)
-        if (!this.anims.exists('walk-up')) {
+        if (!this.anims.exists("walk-up")) {
             this.anims.create({
-                key: 'walk-up',
-                frames: this.anims.generateFrameNumbers(charKey, { start: 6, end: 7 }),
+                key: "walk-up",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 6,
+                    end: 7,
+                }),
                 frameRate: frameRate,
-                repeat: -1
+                repeat: -1,
             });
         }
 
         // Idle left
-        if (!this.anims.exists('idle-left')) {
+        if (!this.anims.exists("idle-left")) {
             this.anims.create({
-                key: 'idle-left',
-                frames: this.anims.generateFrameNumbers(charKey, { start: 8, end: 9 }),
+                key: "idle-left",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 8,
+                    end: 9,
+                }),
                 frameRate: 2,
-                repeat: -1
+                repeat: -1,
             });
         }
 
         // Walk left
-        if (!this.anims.exists('walk-left')) {
+        if (!this.anims.exists("walk-left")) {
             this.anims.create({
-                key: 'walk-left',
-                frames: this.anims.generateFrameNumbers(charKey, { start: 10, end: 11 }),
+                key: "walk-left",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 10,
+                    end: 11,
+                }),
                 frameRate: frameRate,
-                repeat: -1
+                repeat: -1,
             });
         }
 
         // Idle right
-        if (!this.anims.exists('idle-right')) {
+        if (!this.anims.exists("idle-right")) {
             this.anims.create({
-                key: 'idle-right',
-                frames: this.anims.generateFrameNumbers(charKey, { start: 12, end: 13 }),
+                key: "idle-right",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 12,
+                    end: 13,
+                }),
                 frameRate: 2,
-                repeat: -1
+                repeat: -1,
             });
         }
 
         // Walk right
-        if (!this.anims.exists('walk-right')) {
+        if (!this.anims.exists("walk-right")) {
             this.anims.create({
-                key: 'walk-right',
-                frames: this.anims.generateFrameNumbers(charKey, { start: 14, end: 15 }),
+                key: "walk-right",
+                frames: this.anims.generateFrameNumbers(charKey, {
+                    start: 14,
+                    end: 15,
+                }),
                 frameRate: frameRate,
-                repeat: -1
+                repeat: -1,
             });
         }
     }
@@ -2403,32 +2686,46 @@ export class FarmingGame extends Scene {
         this.cursors = this.input.keyboard!.createCursorKeys();
 
         // Number keys for toolbar slots
-        const key1 = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
-        key1.on('down', () => this.selectToolbarSlot(0));
+        const key1 = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.ONE,
+        );
+        key1.on("down", () => this.selectToolbarSlot(0));
 
-        const key2 = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
-        key2.on('down', () => this.selectToolbarSlot(1));
+        const key2 = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.TWO,
+        );
+        key2.on("down", () => this.selectToolbarSlot(1));
 
-        const key3 = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.THREE);
-        key3.on('down', () => this.selectToolbarSlot(2));
+        const key3 = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.THREE,
+        );
+        key3.on("down", () => this.selectToolbarSlot(2));
 
-        const key4 = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR);
-        key4.on('down', () => this.selectToolbarSlot(3));
+        const key4 = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.FOUR,
+        );
+        key4.on("down", () => this.selectToolbarSlot(3));
 
-        const key5 = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.FIVE);
-        key5.on('down', () => this.selectToolbarSlot(4));
+        const key5 = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.FIVE,
+        );
+        key5.on("down", () => this.selectToolbarSlot(4));
 
         // Debug key - press T to view tileset debug
-        const keyT = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.T);
-        keyT.on('down', () => {
-            this.scene.start('TilesetDebug');
+        const keyT = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.T,
+        );
+        keyT.on("down", () => {
+            this.scene.start("TilesetDebug");
         });
 
         // Pet cycle - press O to cycle through pets (Cat → Dino → Dragon → Lion)
-        const keyO = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.O);
-        keyO.on('down', () => {
+        const keyO = this.input.keyboard!.addKey(
+            Phaser.Input.Keyboard.KeyCodes.O,
+        );
+        keyO.on("down", () => {
             const petName = this.petManager.cyclePet();
-            this.showToastMessage(`${petName} summoned!`, 0x8BC34A);
+            this.showToastMessage(`${petName} summoned!`, 0x8bc34a);
         });
     }
 
@@ -2446,7 +2743,7 @@ export class FarmingGame extends Scene {
                 plantStage: 0,
                 cropType: null,
                 locked: !isOwned,
-                plotIndex: index
+                plotIndex: index,
             });
         });
     }
@@ -2456,11 +2753,11 @@ export class FarmingGame extends Scene {
         const uiY = 10;
 
         // Day and Time display (top left)
-        this.timeText = this.add.text(uiX, uiY, '', {
-            fontSize: '16px',
-            color: '#ffffff',
-            backgroundColor: '#00000088',
-            padding: { x: 10, y: 5 }
+        this.timeText = this.add.text(uiX, uiY, "", {
+            fontSize: "16px",
+            color: "#ffffff",
+            backgroundColor: "#00000088",
+            padding: { x: 10, y: 5 },
         });
         this.timeText.setDepth(5005);
         this.cameras.main?.ignore(this.timeText);
@@ -2489,16 +2786,25 @@ export class FarmingGame extends Scene {
         this.miniMapContainer.setDepth(5000);
 
         // Create RenderTexture for mini map background
-        const rt = this.add.renderTexture(mapSize / 2, mapSize / 2, mapSize, mapSize);
+        const rt = this.add.renderTexture(
+            mapSize / 2,
+            mapSize / 2,
+            mapSize,
+            mapSize,
+        );
         rt.setOrigin(0.5);
 
         // Draw water tile as background (tiled)
         const waterTileSize = mapSize / 6;
         for (let y = 0; y < 6; y++) {
             for (let x = 0; x < 6; x++) {
-                const waterTile = this.add.image(0, 0, 'water-tileset', 0);
+                const waterTile = this.add.image(0, 0, "water-tileset", 0);
                 waterTile.setDisplaySize(waterTileSize + 1, waterTileSize + 1);
-                rt.draw(waterTile, x * waterTileSize + waterTileSize / 2, y * waterTileSize + waterTileSize / 2);
+                rt.draw(
+                    waterTile,
+                    x * waterTileSize + waterTileSize / 2,
+                    y * waterTileSize + waterTileSize / 2,
+                );
                 waterTile.destroy();
             }
         }
@@ -2512,9 +2818,13 @@ export class FarmingGame extends Scene {
         for (let y = 0; y < 5; y++) {
             for (let x = 0; x < 5; x++) {
                 // Use frame 12 (center tile) for seamless grass
-                const grassTile = this.add.image(0, 0, 'grass-tileset', 12);
+                const grassTile = this.add.image(0, 0, "grass-tileset", 12);
                 grassTile.setDisplaySize(grassTileSize + 1, grassTileSize + 1);
-                rt.draw(grassTile, islandOffset + x * grassTileSize + grassTileSize / 2, islandOffset + y * grassTileSize + grassTileSize / 2);
+                rt.draw(
+                    grassTile,
+                    islandOffset + x * grassTileSize + grassTileSize / 2,
+                    islandOffset + y * grassTileSize + grassTileSize / 2,
+                );
                 grassTile.destroy();
             }
         }
@@ -2522,57 +2832,82 @@ export class FarmingGame extends Scene {
         this.miniMapContainer.add(rt);
 
         // Border frame around mini map
-        const borderFrame = this.add.rectangle(mapSize / 2, mapSize / 2, mapSize, mapSize, 0x000000, 0);
-        borderFrame.setStrokeStyle(2, 0x5D4037);
+        const borderFrame = this.add.rectangle(
+            mapSize / 2,
+            mapSize / 2,
+            mapSize,
+            mapSize,
+            0x000000,
+            0,
+        );
+        borderFrame.setStrokeStyle(2, 0x5d4037);
         this.miniMapContainer.add(borderFrame);
 
         // Key locations (convert tile coords to minimap coords)
         const tileToMiniMap = (tileX: number, tileY: number) => ({
             x: (tileX / this.MAP_WIDTH) * mapSize,
-            y: (tileY / this.MAP_HEIGHT) * mapSize
+            y: (tileY / this.MAP_HEIGHT) * mapSize,
         });
 
         // Emoji style config
-        const smallEmojiStyle = { fontSize: '8px', resolution: 2 };
+        const smallEmojiStyle = { fontSize: "8px", resolution: 2 };
 
         // Farm area (4x4 grid center at 25.5, 25.5) - single icon
         const farmPos = tileToMiniMap(25.5, 25.5);
-        const farm = this.add.text(farmPos.x, farmPos.y, '🌿', smallEmojiStyle).setOrigin(0.5);
+        const farm = this.add
+            .text(farmPos.x, farmPos.y, "🌿", smallEmojiStyle)
+            .setOrigin(0.5);
         this.miniMapContainer.add(farm);
 
         // Warehouse (at 25, 18) - warehouse emoji
         const warehousePos = tileToMiniMap(25, 18);
-        const warehouse = this.add.text(warehousePos.x, warehousePos.y, '🏠', smallEmojiStyle).setOrigin(0.5);
+        const warehouse = this.add
+            .text(warehousePos.x, warehousePos.y, "🏠", smallEmojiStyle)
+            .setOrigin(0.5);
         this.miniMapContainer.add(warehouse);
 
         // Shop (at 20, 21) - cart emoji
         const shopPos = tileToMiniMap(20, 21);
-        const shop = this.add.text(shopPos.x, shopPos.y, '🛒', smallEmojiStyle).setOrigin(0.5);
+        const shop = this.add
+            .text(shopPos.x, shopPos.y, "🛒", smallEmojiStyle)
+            .setOrigin(0.5);
         this.miniMapContainer.add(shop);
 
         // Mailbox (at 29, 21) - mailbox emoji
         const mailboxPos = tileToMiniMap(29, 21);
-        const mailbox = this.add.text(mailboxPos.x, mailboxPos.y, '📬', smallEmojiStyle).setOrigin(0.5);
+        const mailbox = this.add
+            .text(mailboxPos.x, mailboxPos.y, "📬", smallEmojiStyle)
+            .setOrigin(0.5);
         this.miniMapContainer.add(mailbox);
 
         // Well (at 30, 25) - water drop emoji
         const wellPos = tileToMiniMap(30, 25);
-        const well = this.add.text(wellPos.x, wellPos.y, '💧', smallEmojiStyle).setOrigin(0.5);
+        const well = this.add
+            .text(wellPos.x, wellPos.y, "💧", smallEmojiStyle)
+            .setOrigin(0.5);
         this.miniMapContainer.add(well);
 
         // Station (at 41.5, 24) - ship emoji
         const stationPos = tileToMiniMap(41.5, 24);
-        const station = this.add.text(stationPos.x, stationPos.y, '🚢', smallEmojiStyle).setOrigin(0.5);
+        const station = this.add
+            .text(stationPos.x, stationPos.y, "🚢", smallEmojiStyle)
+            .setOrigin(0.5);
         this.miniMapContainer.add(station);
 
         // Checkin sign (at 23, 21) - calendar emoji
         const checkinPos = tileToMiniMap(23, 21);
-        const checkin = this.add.text(checkinPos.x, checkinPos.y, '📅', smallEmojiStyle).setOrigin(0.5);
+        const checkin = this.add
+            .text(checkinPos.x, checkinPos.y, "📅", smallEmojiStyle)
+            .setOrigin(0.5);
         this.miniMapContainer.add(checkin);
 
         // Player avatar (use character avatar image)
         const avatarKey = `${this.currentCharacterKey}-avatar`;
-        this.miniMapPlayerAvatar = this.add.image(mapSize / 2, mapSize / 2, avatarKey);
+        this.miniMapPlayerAvatar = this.add.image(
+            mapSize / 2,
+            mapSize / 2,
+            avatarKey,
+        );
         this.miniMapPlayerAvatar.setDisplaySize(12, 12);
         this.miniMapPlayerAvatar.setOrigin(0.5);
         this.miniMapContainer.add(this.miniMapPlayerAvatar);
@@ -2603,7 +2938,10 @@ export class FarmingGame extends Scene {
     // Helper methods still needed by game logic:
 
     private getTotalChestItems(): number {
-        return this.chestInventory.reduce((total, slot) => total + (slot?.count || 0), 0);
+        return this.chestInventory.reduce(
+            (total, slot) => total + (slot?.count || 0),
+            0,
+        );
     }
 
     private isChestFull(): boolean {
@@ -2617,27 +2955,27 @@ export class FarmingGame extends Scene {
     private getItemDisplayName(itemType: string): string {
         const nameMap: Record<string, string> = {
             // Seeds
-            'SEED_ALGAE': 'Algae Seed',
-            'SEED_MUSHROOM': 'Mushroom Spore',
-            'SEED_TREE': 'Tree Seed',
-            'SEED_SOCIAL': 'Social Seed',
-            'SEED_TECHNICAL': 'Technical Seed',
-            'SEED_BRANDED': 'Branded Seed',
+            SEED_ALGAE: "Algae Seed",
+            SEED_MUSHROOM: "Mushroom Spore",
+            SEED_TREE: "Tree Seed",
+            SEED_SOCIAL: "Social Seed",
+            SEED_TECHNICAL: "Technical Seed",
+            SEED_BRANDED: "Branded Seed",
             // Fruits
-            'FRUIT_ALGAE': 'Algae',
-            'FRUIT_MUSHROOM': 'Mushroom',
-            'FRUIT_TREE': 'Tree Fruit',
-            'FRUIT_SOCIAL': 'Social Fruit',
-            'FRUIT_TECHNICAL': 'Technical Fruit',
-            'FRUIT_BRANDED': 'Branded Fruit',
+            FRUIT_ALGAE: "Algae",
+            FRUIT_MUSHROOM: "Mushroom",
+            FRUIT_TREE: "Tree Fruit",
+            FRUIT_SOCIAL: "Social Fruit",
+            FRUIT_TECHNICAL: "Technical Fruit",
+            FRUIT_BRANDED: "Branded Fruit",
             // Tools and items
-            'WATER': 'Water',
-            'BUG_GLOVE': 'Bug Glove',
-            'PESTICIDE': 'Pesticide',
-            'FERTILIZER_COMMON': 'Common Fertilizer',
-            'FERTILIZER_RARE': 'Rare Fertilizer',
-            'FERTILIZER_EPIC': 'Epic Fertilizer',
-            'FERTILIZER_LEGENDARY': 'Legend Fertilizer',
+            WATER: "Water",
+            BUG_GLOVE: "Bug Glove",
+            PESTICIDE: "Pesticide",
+            FERTILIZER_COMMON: "Common Fertilizer",
+            FERTILIZER_RARE: "Rare Fertilizer",
+            FERTILIZER_EPIC: "Epic Fertilizer",
+            FERTILIZER_LEGENDARY: "Legend Fertilizer",
         };
         return nameMap[itemType] || itemType;
     }
@@ -2651,7 +2989,11 @@ export class FarmingGame extends Scene {
         // Find existing slot with same type and space available
         for (let i = 0; i < this.chestInventory.length; i++) {
             const slot = this.chestInventory[i];
-            if (slot && slot.type === fruitType && slot.count < this.MAX_PER_SLOT) {
+            if (
+                slot &&
+                slot.type === fruitType &&
+                slot.count < this.MAX_PER_SLOT
+            ) {
                 slot.count++;
                 return true;
             }
@@ -2717,7 +3059,7 @@ export class FarmingGame extends Scene {
     private createWalletDisplay() {
         // Wallet display is now integrated into user profile UI
         // Clear any previous wallet UI elements
-        this.walletUIElements.forEach(el => el.destroy());
+        this.walletUIElements.forEach((el) => el.destroy());
         this.walletUIElements = [];
     }
 
@@ -2732,14 +3074,17 @@ export class FarmingGame extends Scene {
      * Called by GameDataService when data is refreshed
      */
     private refreshAllUI(): void {
-        
         // Sync global state with latest API data (if available)
         const cachedData = GameDataService.getCachedData();
-        
+
         if (cachedData && this.gameState.isReady()) {
             // Update currency from API cache - use user.balanceGold as primary source
-            const apiGold = cachedData.user?.balanceGold ?? cachedData.currencies?.gold ?? 0;
-            const apiGem = cachedData.user?.balanceGem ?? cachedData.currencies?.gem ?? 0;
+            const apiGold =
+                cachedData.user?.balanceGold ??
+                cachedData.currencies?.gold ??
+                0;
+            const apiGem =
+                cachedData.user?.balanceGem ?? cachedData.currencies?.gem ?? 0;
 
             // Sync local state (used by PlotManager and other legacy components)
             this.playerGold = apiGold;
@@ -2747,7 +3092,10 @@ export class FarmingGame extends Scene {
 
             // Only update if different to avoid triggering unnecessary state changes
             const currentState = this.gameState.get();
-            if (currentState.currency.gold !== apiGold || currentState.currency.gem !== apiGem) {
+            if (
+                currentState.currency.gold !== apiGold ||
+                currentState.currency.gem !== apiGem
+            ) {
                 this.gameState.setCurrency(apiGold, apiGem);
                 // Don't return early - still need to update UI
             }
@@ -2758,9 +3106,18 @@ export class FarmingGame extends Scene {
                 for (const item of cachedData.fruits) {
                     if (item.count > 0) {
                         let remaining = item.count;
-                        while (remaining > 0 && this.chestInventory.length < this.CHEST_SLOTS) {
-                            const slotCount = Math.min(remaining, this.MAX_PER_SLOT);
-                            this.chestInventory.push({ type: item.type, count: slotCount });
+                        while (
+                            remaining > 0 &&
+                            this.chestInventory.length < this.CHEST_SLOTS
+                        ) {
+                            const slotCount = Math.min(
+                                remaining,
+                                this.MAX_PER_SLOT,
+                            );
+                            this.chestInventory.push({
+                                type: item.type,
+                                count: slotCount,
+                            });
                             remaining -= slotCount;
                         }
                     }
@@ -2771,7 +3128,7 @@ export class FarmingGame extends Scene {
             if (cachedData.seeds) {
                 // Reset counts first to ensure accurate state
                 this.seedCounts = { algae: 0, mushroom: 0, tree: 0 };
-                cachedData.seeds.forEach(item => {
+                cachedData.seeds.forEach((item) => {
                     if (item.type) {
                         const type = item.type.toLowerCase() as PlantType;
                         if (this.seedCounts[type] !== undefined) {
@@ -2784,10 +3141,21 @@ export class FarmingGame extends Scene {
             // Sync fertilizer counts from cached data
             if (cachedData.fertilizers && cachedData.fertilizers.fertilizers) {
                 // Reset counts first
-                this.fertilizerCounts = { common: 0, rare: 0, epic: 0, legendary: 0 };
-                cachedData.fertilizers.fertilizers.forEach(item => {
+                this.fertilizerCounts = {
+                    common: 0,
+                    rare: 0,
+                    epic: 0,
+                    legendary: 0,
+                };
+                cachedData.fertilizers.fertilizers.forEach((item) => {
                     if (item.type) {
-                        const type = item.type.replace('FERTILIZER_', '').toLowerCase() as 'common' | 'rare' | 'epic' | 'legendary';
+                        const type = item.type
+                            .replace("FERTILIZER_", "")
+                            .toLowerCase() as
+                            | "common"
+                            | "rare"
+                            | "epic"
+                            | "legendary";
                         if (this.fertilizerCounts[type] !== undefined) {
                             this.fertilizerCounts[type] = item.amount;
                         }
@@ -2800,7 +3168,10 @@ export class FarmingGame extends Scene {
 
             // Sync streak data to CheckinManager (fixes notification icon after background refresh)
             if (cachedData.streak) {
-                this.checkinManager.setStreakFromCache(cachedData.streak.status, cachedData.streak.history);
+                this.checkinManager.setStreakFromCache(
+                    cachedData.streak.status,
+                    cachedData.streak.history,
+                );
             }
 
             // Sync missions to MailboxManager
@@ -2814,7 +3185,6 @@ export class FarmingGame extends Scene {
 
         // Update toolbar (seeds, water, fertilizers, etc.)
         this.updateToolbar();
-
     }
 
     /**
@@ -2831,7 +3201,7 @@ export class FarmingGame extends Scene {
         this.plotManager.showBuyPlotModal(tileX, tileY, plotIndex);
     }
 
-    private showToastMessage(text: string, color: number = 0xFFFFFF) {
+    private showToastMessage(text: string, color: number = 0xffffff) {
         // Guard: scene may be destroyed during navigation
         if (!this.cameras || !this.cameras.main) {
             return;
@@ -2840,15 +3210,20 @@ export class FarmingGame extends Scene {
         const screenWidth = this.scale.width;
         const screenHeight = this.scale.height;
 
-        const msgText = this.add.text(screenWidth / 2, screenHeight / 2 + 80, text, {
-            fontSize: '12px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
-        });
+        const msgText = this.add.text(
+            screenWidth / 2,
+            screenHeight / 2 + 80,
+            text,
+            {
+                fontSize: "12px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
+            },
+        );
         msgText.setOrigin(0.5);
         msgText.setDepth(5600);
-        msgText.setStroke('#000000', 2);
+        msgText.setStroke("#000000", 2);
         msgText.setTint(color);
         this.cameras.main?.ignore(msgText);
 
@@ -2857,10 +3232,10 @@ export class FarmingGame extends Scene {
             y: screenHeight / 2 + 60,
             alpha: 0,
             duration: 5000, // 5 seconds for readability
-            ease: 'Cubic.easeOut',
+            ease: "Cubic.easeOut",
             onComplete: () => {
                 msgText.destroy();
-            }
+            },
         });
     }
 
@@ -2868,7 +3243,9 @@ export class FarmingGame extends Scene {
         // UI camera should only render UI elements (those with depth >= 5000)
         // Make it ignore all other game objects
         this.children.list.forEach((child) => {
-            const gameObj = child as Phaser.GameObjects.GameObject & { depth?: number };
+            const gameObj = child as Phaser.GameObjects.GameObject & {
+                depth?: number;
+            };
             if (gameObj.depth === undefined || gameObj.depth < 5000) {
                 this.uiCamera.ignore(child);
             }
@@ -2886,20 +3263,28 @@ export class FarmingGame extends Scene {
         const marqueeWidth = 400; // Wider marquee box
         const marqueeHeight = 18;
         const marqueeX = screenWidth / 2; // Center of screen
-        const message = '🎉 Cardano Meetup in First January 2026 with many gifts waiting for you! 🎁';
+        const message =
+            "🎉 Cardano Meetup in First January 2026 with many gifts waiting for you! 🎁";
 
         // Background bar (centered)
-        const marqueeBg = this.add.rectangle(marqueeX, marqueeY, marqueeWidth, marqueeHeight, 0x000000, 0.7);
+        const marqueeBg = this.add.rectangle(
+            marqueeX,
+            marqueeY,
+            marqueeWidth,
+            marqueeHeight,
+            0x000000,
+            0.7,
+        );
         marqueeBg.setDepth(5100);
         this.cameras.main?.ignore(marqueeBg);
 
         // Create text (starts from right edge of the box)
         const startX = marqueeX + marqueeWidth / 2;
         this.marqueeText = this.add.text(startX, marqueeY, message, {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
+            fontSize: "9px",
+            fontFamily: "PixelFont",
+            color: "#FFD700",
+            resolution: 2,
         });
         this.marqueeText.setOrigin(0, 0.5);
         this.marqueeText.setDepth(5101);
@@ -2908,7 +3293,12 @@ export class FarmingGame extends Scene {
         // Create mask to hide text outside the box
         const maskShape = this.make.graphics({ x: 0, y: 0 });
         maskShape.fillStyle(0xffffff);
-        maskShape.fillRect(marqueeX - marqueeWidth / 2, marqueeY - marqueeHeight / 2, marqueeWidth, marqueeHeight);
+        maskShape.fillRect(
+            marqueeX - marqueeWidth / 2,
+            marqueeY - marqueeHeight / 2,
+            marqueeWidth,
+            marqueeHeight,
+        );
         const mask = maskShape.createGeometryMask();
         this.marqueeText.setMask(mask);
 
@@ -2926,7 +3316,7 @@ export class FarmingGame extends Scene {
                 targets: this.marqueeText,
                 x: endX,
                 duration: 12000, // 12 seconds to scroll across
-                ease: 'Linear',
+                ease: "Linear",
                 onComplete: () => {
                     // Hide marquee after text finishes
                     marqueeBg.setVisible(false);
@@ -2936,7 +3326,7 @@ export class FarmingGame extends Scene {
                     this.time.delayedCall(300000, () => {
                         animateMarquee();
                     });
-                }
+                },
             });
         };
         animateMarquee();
@@ -2950,13 +3340,25 @@ export class FarmingGame extends Scene {
         const thumbRadius = 25;
 
         // Joystick base
-        this.joystickBase = this.add.circle(joystickX, joystickY, baseRadius, 0x888888, 0.3);
+        this.joystickBase = this.add.circle(
+            joystickX,
+            joystickY,
+            baseRadius,
+            0x888888,
+            0.3,
+        );
         this.joystickBase.setStrokeStyle(2, 0xffffff, 0.5);
         this.joystickBase.setDepth(5010);
         this.cameras.main?.ignore(this.joystickBase);
 
         // Joystick thumb
-        this.joystickThumb = this.add.circle(joystickX, joystickY, thumbRadius, 0xffffff, 0.8);
+        this.joystickThumb = this.add.circle(
+            joystickX,
+            joystickY,
+            thumbRadius,
+            0xffffff,
+            0.8,
+        );
         this.joystickThumb.setDepth(5011);
         this.cameras.main?.ignore(this.joystickThumb);
 
@@ -2964,12 +3366,12 @@ export class FarmingGame extends Scene {
         this.joystickBase.setInteractive();
 
         // Joystick events
-        this.joystickBase.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        this.joystickBase.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
             this.joystickActive = true;
             this.joystickPointer = pointer;
         });
 
-        this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
             if (this.joystickPointer === pointer) {
                 this.joystickActive = false;
                 this.joystickPointer = null;
@@ -2978,7 +3380,7 @@ export class FarmingGame extends Scene {
             }
         });
 
-        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+        this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
             if (this.joystickActive && this.joystickPointer === pointer) {
                 const dx = pointer.x - joystickX;
                 const dy = pointer.y - joystickY;
@@ -2989,7 +3391,7 @@ export class FarmingGame extends Scene {
                     const angle = Math.atan2(dy, dx);
                     this.joystickThumb.setPosition(
                         joystickX + Math.cos(angle) * baseRadius,
-                        joystickY + Math.sin(angle) * baseRadius
+                        joystickY + Math.sin(angle) * baseRadius,
                     );
                 } else {
                     this.joystickThumb.setPosition(pointer.x, pointer.y);
@@ -3003,7 +3405,7 @@ export class FarmingGame extends Scene {
             this.scale.height - 80,
             40,
             0xff6b6b,
-            0.8
+            0.8,
         );
         this.actionButton.setStrokeStyle(3, 0xffffff, 0.9);
         this.actionButton.setDepth(5010);
@@ -3014,21 +3416,21 @@ export class FarmingGame extends Scene {
         this.actionButtonText = this.add.text(
             this.scale.width - 80,
             this.scale.height - 80,
-            '⚒',
-            { fontSize: '32px' }
+            "⚒",
+            { fontSize: "32px" },
         );
         this.actionButtonText.setOrigin(0.5);
         this.actionButtonText.setDepth(5011);
         this.cameras.main?.ignore(this.actionButtonText);
 
-        this.actionButton.on('pointerdown', () => {
+        this.actionButton.on("pointerdown", () => {
             this.performAction();
         });
     }
 
     private setupInteractions() {
         // Handle clicks for UI interactions (close selectors, etc.)
-        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
             if (pointer.rightButtonDown()) {
                 return;
             }
@@ -3078,7 +3480,9 @@ export class FarmingGame extends Scene {
         // If it selects the tile below, we need to shift the detection point UP (negative Y)
         const yOffset = -6;
         const playerTileX = Math.floor(this.player.x / this.TILE_SIZE);
-        const playerTileY = Math.floor((this.player.y + yOffset) / this.TILE_SIZE);
+        const playerTileY = Math.floor(
+            (this.player.y + yOffset) / this.TILE_SIZE,
+        );
 
         const tileKey = `${playerTileX},${playerTileY}`;
 
@@ -3091,26 +3495,30 @@ export class FarmingGame extends Scene {
         // Check if plot is locked
         if (state.locked) {
             if (state.plotIndex !== undefined) {
-                this.showBuyPlotModal(playerTileX, playerTileY, state.plotIndex);
+                this.showBuyPlotModal(
+                    playerTileX,
+                    playerTileY,
+                    state.plotIndex,
+                );
             }
             return;
         }
 
         const selectedItem = this.toolbarItems[this.selectedToolIndex];
 
-        if (selectedItem.type === 'seed') {
+        if (selectedItem.type === "seed") {
             // Plant seed using selected seed type
             this.plantSeed(tileKey, playerTileX, playerTileY);
-        } else if (selectedItem.name === 'wateringCan') {
+        } else if (selectedItem.name === "wateringCan") {
             // Water plant
             this.waterCrop(tileKey, playerTileX, playerTileY);
-        } else if (selectedItem.name === 'hand') {
+        } else if (selectedItem.name === "hand") {
             // Harvest crop
             this.harvestCrop(tileKey, playerTileX, playerTileY);
-        } else if (selectedItem.name === 'fertilizer') {
+        } else if (selectedItem.name === "fertilizer") {
             // Fertilize plant (grows 2 stages)
             this.fertilizeCrop(tileKey, playerTileX, playerTileY);
-        } else if (selectedItem.name === 'digest') {
+        } else if (selectedItem.name === "digest") {
             // Remove/digest plant
             this.digestCrop(tileKey, playerTileX, playerTileY);
         }
@@ -3137,16 +3545,20 @@ export class FarmingGame extends Scene {
 
                 // OPTIMISTIC UPDATE: Initialize plant info for details modal
                 state.plantInfo = {
-                    id: 'temp-' + Date.now(),
+                    id: "temp-" + Date.now(),
                     type: selectedPlantType.toUpperCase(),
-                    typeName: this.getItemDisplayName(`SEED_${selectedPlantType.toUpperCase()}`),
-                    name: this.getItemDisplayName(`FRUIT_${selectedPlantType.toUpperCase()}`),
-                    stage: 'DIGGING',
-                    stageName: 'Digging',
+                    typeName: this.getItemDisplayName(
+                        `SEED_${selectedPlantType.toUpperCase()}`,
+                    ),
+                    name: this.getItemDisplayName(
+                        `FRUIT_${selectedPlantType.toUpperCase()}`,
+                    ),
+                    stage: "DIGGING",
+                    stageName: "Digging",
                     plantedAt: new Date().toISOString(),
                     lastWateredAt: new Date().toISOString(),
                     waterBalance: 48,
-                    waterCount: 0
+                    waterCount: 0,
                 };
 
                 // OPTIMISTIC UPDATE: Initialize hydration info
@@ -3154,9 +3566,9 @@ export class FarmingGame extends Scene {
                     hoursToDeath: 48,
                     isDead: false,
                     isWithering: false,
-                    status: 'HEALTHY',
-                    message: 'Growing well',
-                    waterBalance: 48
+                    status: "HEALTHY",
+                    message: "Growing well",
+                    waterBalance: 48,
                 };
 
                 // Decrease seed count for this specific type
@@ -3174,7 +3586,8 @@ export class FarmingGame extends Scene {
 
                 // Use landId from state if available, otherwise use tileKey
                 const landId = state.landId || tileKey;
-                const seedType = SeedService.mapPlantTypeToApiSeedType(selectedPlantType);
+                const seedType =
+                    SeedService.mapPlantTypeToApiSeedType(selectedPlantType);
 
                 // Try WebSocket first, fallback to REST API
                 const socketService = getSocketService();
@@ -3183,13 +3596,17 @@ export class FarmingGame extends Scene {
                     this.pendingPlantAction = {
                         tileKey,
                         landId,
-                        seedType: selectedPlantType
+                        seedType: selectedPlantType,
                     };
-                    
+
                     const emitted = socketService.plantSeed(landId, seedType);
                     if (!emitted) {
                         // WebSocket failed, fallback to REST
-                        this.plantSeedViaRest(tileKey, landId, selectedPlantType);
+                        this.plantSeedViaRest(
+                            tileKey,
+                            landId,
+                            selectedPlantType,
+                        );
                     }
                     // Response will come via action_success or action_error events
                 } else {
@@ -3204,7 +3621,11 @@ export class FarmingGame extends Scene {
     /**
      * Plant seed via REST API (fallback when WebSocket not available)
      */
-    private async plantSeedViaRest(tileKey: string, landId: string, plantType: 'algae' | 'mushroom' | 'tree'): Promise<void> {
+    private async plantSeedViaRest(
+        tileKey: string,
+        landId: string,
+        plantType: "algae" | "mushroom" | "tree",
+    ): Promise<void> {
         try {
             const plantId = await SeedService.plantSeed(landId, plantType);
             if (plantId) {
@@ -3214,30 +3635,36 @@ export class FarmingGame extends Scene {
                 }
             }
         } catch (error) {
-            console.error('[FarmingGame] Error planting seed via REST:', error);
+            console.error("[FarmingGame] Error planting seed via REST:", error);
         }
     }
 
     private async waterCrop(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
-        const wateringCan = this.toolbarItems.find(item => item.name === 'wateringCan');
+        const wateringCan = this.toolbarItems.find(
+            (item) => item.name === "wateringCan",
+        );
 
         // Check if we have water
-        if (!wateringCan || wateringCan.count === undefined || wateringCan.count <= 0) {
-            this.showToastMessage('No water left!', 0xef4444);
+        if (
+            !wateringCan ||
+            wateringCan.count === undefined ||
+            wateringCan.count <= 0
+        ) {
+            this.showToastMessage("No water left!", 0xef4444);
             return;
         }
 
         if (state && state.planted && state.cropType) {
             // Cannot water dead plants
             if (state.isDead) {
-                this.showToastMessage('This plant is dead!', 0xef4444);
+                this.showToastMessage("This plant is dead!", 0xef4444);
                 return;
             }
 
             // If no plantId, plant is not synced with backend
             if (!state.plantId) {
-                this.showToastMessage('Plant not synced yet', 0xfbbf24);
+                this.showToastMessage("Plant not synced yet", 0xfbbf24);
                 return;
             }
 
@@ -3249,7 +3676,7 @@ export class FarmingGame extends Scene {
             this.pendingWaterAction = {
                 tileKey,
                 previousWaterBalance: state.hydration?.waterBalance ?? 0,
-                previousWaterCount: wateringCan.count
+                previousWaterCount: wateringCan.count,
             };
 
             // Immediately update local state
@@ -3267,58 +3694,71 @@ export class FarmingGame extends Scene {
 
             // Update toolbar immediately
             this.updateToolbar();
-            this.showToastMessage('Watered!', 0x4ade80);
+            this.showToastMessage("Watered!", 0x4ade80);
 
             // Send WebSocket event (fire-and-forget)
             // UI updates will come via plant_update and inventory_update events
             const plantId = state.plantId;
             const usedWebSocket = GardenService.waterPlantWS(plantId);
-            
+
             // If WebSocket not available, fall back to REST API
             if (!usedWebSocket) {
-                GardenService.waterPlant(plantId).then(result => {
-                    if (result.success) {
-                        this.loadGardenData();
-                    } else {
-                        this.showToastMessage(result.message || 'Water failed!', 0xef4444);
-                    }
-                }).catch(error => {
-                    this.showToastMessage('Network error!', 0xef4444);
-                });
+                GardenService.waterPlant(plantId)
+                    .then((result) => {
+                        if (result.success) {
+                            this.loadGardenData();
+                        } else {
+                            this.showToastMessage(
+                                result.message || "Water failed!",
+                                0xef4444,
+                            );
+                        }
+                    })
+                    .catch((error) => {
+                        this.showToastMessage("Network error!", 0xef4444);
+                    });
             }
         }
     }
 
     private fertilizeCrop(tileKey: string, x: number, y: number) {
         const state = this.farmLandStates.get(tileKey);
-        
+
         // Get selected fertilizer type
-        const fertilizerTypes: ('common' | 'rare' | 'epic' | 'legendary')[] = ['common', 'rare', 'epic', 'legendary'];
-        const selectedFertilizerType = fertilizerTypes[this.selectedFertilizerIndex];
-        const currentFertilizerCount = this.fertilizerCounts[selectedFertilizerType];
+        const fertilizerTypes: ("common" | "rare" | "epic" | "legendary")[] = [
+            "common",
+            "rare",
+            "epic",
+            "legendary",
+        ];
+        const selectedFertilizerType =
+            fertilizerTypes[this.selectedFertilizerIndex];
+        const currentFertilizerCount =
+            this.fertilizerCounts[selectedFertilizerType];
 
         // Check if we have fertilizer of the selected type
         if (currentFertilizerCount <= 0) {
-            this.showToastMessage('No fertilizer!', 0xfbbf24);
+            this.showToastMessage("No fertilizer!", 0xfbbf24);
             return;
         }
 
         if (state && state.planted && state.cropType) {
             // Cannot fertilize dead plants
             if (state.isDead) {
-                this.showToastMessage('Plant is dead!', 0xef4444);
+                this.showToastMessage("Plant is dead!", 0xef4444);
                 return;
             }
 
             // Check if landId is available for API call
             if (!state.landId) {
-                this.showToastMessage('Plant not synced yet', 0xfbbf24);
+                this.showToastMessage("Plant not synced yet", 0xfbbf24);
                 return;
             }
 
             // === OPTIMISTIC UI UPDATE ===
             // Store previous values for potential rollback
-            const previousFertilizerCount = this.fertilizerCounts[selectedFertilizerType];
+            const previousFertilizerCount =
+                this.fertilizerCounts[selectedFertilizerType];
             const previousLastCareTime = state.lastCareTime;
             const previousPlantStage = state.plantStage;
             const wasWilted = state.isWilted;
@@ -3338,44 +3778,58 @@ export class FarmingGame extends Scene {
 
             // Play success sound immediately
             this.soundManager.playSuccessSound();
-            this.showToastMessage('Fertilized!', 0x4ade80);
-
+            this.showToastMessage("Fertilized!", 0x4ade80);
 
             // Call API in background
             const landId = state.landId;
-            const apiFertilizerType = FertilizerService.mapToApiFertilizerType(selectedFertilizerType);
-            
-            FertilizerService.applyFertilizer(landId, apiFertilizerType).then(result => {
-                if (!result || !result.success) {
-                    // API failed - rollback optimistic update
-                    this.fertilizerCounts[selectedFertilizerType] = previousFertilizerCount;
+            const apiFertilizerType = FertilizerService.mapToApiFertilizerType(
+                selectedFertilizerType,
+            );
+
+            FertilizerService.applyFertilizer(landId, apiFertilizerType)
+                .then((result) => {
+                    if (!result || !result.success) {
+                        // API failed - rollback optimistic update
+                        this.fertilizerCounts[selectedFertilizerType] =
+                            previousFertilizerCount;
+                        state.lastCareTime = previousLastCareTime;
+                        state.plantStage = previousPlantStage;
+                        state.isWilted = wasWilted;
+                        this.updateToolbar();
+                        this.showToastMessage("Fertilize failed!", 0xef4444);
+                    } else {
+                        // API succeeded - update with actual data from server
+
+                        // Update plant stage if changed
+                        if (result.stageChanged) {
+                            const newStage = GardenService.mapStageToGameStage(
+                                result.newStage,
+                            );
+                            state.plantStage = newStage;
+                            this.updatePlantSprite(
+                                x,
+                                y,
+                                state.cropType!,
+                                newStage,
+                                false,
+                                false,
+                            );
+                        }
+
+                        // Refresh garden data to get updated state
+                        this.loadGardenData();
+                    }
+                })
+                .catch((error) => {
+                    // Network error - rollback
+                    this.fertilizerCounts[selectedFertilizerType] =
+                        previousFertilizerCount;
                     state.lastCareTime = previousLastCareTime;
                     state.plantStage = previousPlantStage;
                     state.isWilted = wasWilted;
                     this.updateToolbar();
-                    this.showToastMessage('Fertilize failed!', 0xef4444);
-                } else {
-                    // API succeeded - update with actual data from server
-                    
-                    // Update plant stage if changed
-                    if (result.stageChanged) {
-                        const newStage = GardenService.mapStageToGameStage(result.newStage);
-                        state.plantStage = newStage;
-                        this.updatePlantSprite(x, y, state.cropType!, newStage, false, false);
-                    }
-
-                    // Refresh garden data to get updated state
-                    this.loadGardenData();
-                }
-            }).catch(error => {
-                // Network error - rollback
-                this.fertilizerCounts[selectedFertilizerType] = previousFertilizerCount;
-                state.lastCareTime = previousLastCareTime;
-                state.plantStage = previousPlantStage;
-                state.isWilted = wasWilted;
-                this.updateToolbar();
-                this.showToastMessage('Network error!', 0xef4444);
-            });
+                    this.showToastMessage("Network error!", 0xef4444);
+                });
         }
     }
 
@@ -3437,15 +3891,16 @@ export class FarmingGame extends Scene {
                 // UI updates will come via land_update and inventory_update events
                 if (plantId) {
                     const usedWebSocket = GardenService.harvestPlantWS(plantId);
-                    
+
                     // If WebSocket not available, fall back to REST API
                     if (!usedWebSocket) {
-                        GardenService.harvestPlant(plantId).then(success => {
-                            if (success) {
-                                GameDataService.refreshAfterGardenAction();
-                            }
-                        }).catch(error => {
-                        });
+                        GardenService.harvestPlant(plantId)
+                            .then((success) => {
+                                if (success) {
+                                    GameDataService.refreshAfterGardenAction();
+                                }
+                            })
+                            .catch((error) => {});
                     }
                 } else {
                 }
@@ -3476,15 +3931,20 @@ export class FarmingGame extends Scene {
 
                 // Call API to clear land on backend
                 if (landId) {
-                    GardenService.clearLand(landId).then(result => {
-                        if (result?.success) {
-                            // Success
-                        } else {
-                            console.error('Failed to clear land:', result?.message);
-                        }
-                    }).catch(error => {
-                        console.error('Failed to clear land:', error);
-                    });
+                    GardenService.clearLand(landId)
+                        .then((result) => {
+                            if (result?.success) {
+                                // Success
+                            } else {
+                                console.error(
+                                    "Failed to clear land:",
+                                    result?.message,
+                                );
+                            }
+                        })
+                        .catch((error) => {
+                            console.error("Failed to clear land:", error);
+                        });
                 }
             });
         }
@@ -3497,7 +3957,7 @@ export class FarmingGame extends Scene {
         // Find tile with this plantId
         for (const [tileKey, state] of this.farmLandStates.entries()) {
             if (state.plantId === plantId) {
-                const [xStr, yStr] = tileKey.split(',');
+                const [xStr, yStr] = tileKey.split(",");
                 const x = parseInt(xStr, 10);
                 const y = parseInt(yStr, 10);
                 this.waterCrop(tileKey, x, y);
@@ -3513,7 +3973,7 @@ export class FarmingGame extends Scene {
         // Find tile with this plantId
         for (const [tileKey, state] of this.farmLandStates.entries()) {
             if (state.plantId === plantId) {
-                const [xStr, yStr] = tileKey.split(',');
+                const [xStr, yStr] = tileKey.split(",");
                 const x = parseInt(xStr, 10);
                 const y = parseInt(yStr, 10);
                 this.harvestCrop(tileKey, x, y);
@@ -3529,7 +3989,7 @@ export class FarmingGame extends Scene {
         // Find tile with this landId
         for (const [tileKey, state] of this.farmLandStates.entries()) {
             if (state.landId === landId) {
-                const [xStr, yStr] = tileKey.split(',');
+                const [xStr, yStr] = tileKey.split(",");
                 const x = parseInt(xStr, 10);
                 const y = parseInt(yStr, 10);
                 this.digestCrop(tileKey, x, y);
@@ -3538,7 +3998,14 @@ export class FarmingGame extends Scene {
         }
     }
 
-    private showPlant(x: number, y: number, cropType: PlantType, stage: number, isDead: boolean = false, isWilted: boolean = false) {
+    private showPlant(
+        x: number,
+        y: number,
+        cropType: PlantType,
+        stage: number,
+        isDead: boolean = false,
+        isWilted: boolean = false,
+    ) {
         // IMPORTANT: Remove existing plant sprite first to prevent duplicates
         const existingPlant = this.children.getByName(`plant-${x}-${y}`);
         if (existingPlant) {
@@ -3546,7 +4013,9 @@ export class FarmingGame extends Scene {
         }
 
         // Remove existing shadow
-        const existingShadow = this.children.getByName(`plant-shadow-${x}-${y}`);
+        const existingShadow = this.children.getByName(
+            `plant-shadow-${x}-${y}`,
+        );
         if (existingShadow) {
             existingShadow.destroy();
         }
@@ -3558,15 +4027,18 @@ export class FarmingGame extends Scene {
 
         if (isDead) {
             imageKey = cropDef.deathImage;
-            stageDescription = 'DEAD';
+            stageDescription = "DEAD";
         } else if (stage === PLANT_STAGES.MATURE) {
             imageKey = cropDef.fruitImage; // Ready to harvest (mature stage)
-            stageDescription = 'MATURE (5)';
-        } else if (stage >= PLANT_STAGES.DIGGING && stage <= PLANT_STAGES.BLOOM) {
+            stageDescription = "MATURE (5)";
+        } else if (
+            stage >= PLANT_STAGES.DIGGING &&
+            stage <= PLANT_STAGES.BLOOM
+        ) {
             // Check if plant uses spritesheet or individual images
             if (cropDef.spritesheet) {
                 imageKey = cropDef.spritesheet;
-                
+
                 if (cropDef.stageCount === 2) {
                     // 2-stage plants (spritesheet): map 6 API stages to 2 visual frames
                     // DIGGING(0), SEED(1), SPROUT(2) -> frame 0 (seedling)
@@ -3592,16 +4064,16 @@ export class FarmingGame extends Scene {
                 // SPROUT(2) -> image 1
                 // GROWING(3) -> image 2
                 // BLOOM(4) -> image 3
-                
+
                 // Mushroom/Algae (3 stages):
                 // DIGGING(0), SEED(1) -> image 0
                 // SPROUT(2) -> image 1
                 // GROWING(3), BLOOM(4) -> image 2
-                
+
                 let imageIndex: number;
-                
+
                 if (cropDef.stageCount === 4) {
-                     if (stage <= PLANT_STAGES.SEED) {
+                    if (stage <= PLANT_STAGES.SEED) {
                         imageIndex = 0;
                     } else if (stage <= PLANT_STAGES.SPROUT) {
                         imageIndex = 1;
@@ -3620,17 +4092,20 @@ export class FarmingGame extends Scene {
                         imageIndex = 2;
                     }
                 }
-                
-                imageIndex = Math.min(imageIndex, cropDef.growthImages.length - 1);
+
+                imageIndex = Math.min(
+                    imageIndex,
+                    cropDef.growthImages.length - 1,
+                );
                 imageKey = cropDef.growthImages[imageIndex];
             }
 
             const stageNames: Record<number, string> = {
-                [PLANT_STAGES.DIGGING]: 'DIGGING (0)',
-                [PLANT_STAGES.SEED]: 'SEED (1)',
-                [PLANT_STAGES.SPROUT]: 'SPROUT (2)',
-                [PLANT_STAGES.GROWING]: 'GROWING (3)',
-                [PLANT_STAGES.BLOOM]: 'BLOOM (4)',
+                [PLANT_STAGES.DIGGING]: "DIGGING (0)",
+                [PLANT_STAGES.SEED]: "SEED (1)",
+                [PLANT_STAGES.SPROUT]: "SPROUT (2)",
+                [PLANT_STAGES.GROWING]: "GROWING (3)",
+                [PLANT_STAGES.BLOOM]: "BLOOM (4)",
             };
             stageDescription = stageNames[stage] || `STAGE ${stage}`;
         } else {
@@ -3640,7 +4115,8 @@ export class FarmingGame extends Scene {
                 // Use last visual frame: frame 2 for both 2-stage and 3-stage spritesheets
                 frameIndex = 2;
             } else {
-                imageKey = cropDef.growthImages[cropDef.growthImages.length - 1];
+                imageKey =
+                    cropDef.growthImages[cropDef.growthImages.length - 1];
             }
             stageDescription = `UNKNOWN (${stage})`;
         }
@@ -3653,18 +4129,19 @@ export class FarmingGame extends Scene {
         const plantSize = 16;
 
         // Create plant image - use frame index for spritesheets
-        const plant = frameIndex !== undefined
-            ? this.add.image(
-                x * this.TILE_SIZE + this.TILE_SIZE / 2,
-                y * this.TILE_SIZE + this.TILE_SIZE / 2,
-                imageKey,
-                frameIndex
-            )
-            : this.add.image(
-                x * this.TILE_SIZE + this.TILE_SIZE / 2,
-                y * this.TILE_SIZE + this.TILE_SIZE / 2,
-                imageKey
-            );
+        const plant =
+            frameIndex !== undefined
+                ? this.add.image(
+                      x * this.TILE_SIZE + this.TILE_SIZE / 2,
+                      y * this.TILE_SIZE + this.TILE_SIZE / 2,
+                      imageKey,
+                      frameIndex,
+                  )
+                : this.add.image(
+                      x * this.TILE_SIZE + this.TILE_SIZE / 2,
+                      y * this.TILE_SIZE + this.TILE_SIZE / 2,
+                      imageKey,
+                  );
         plant.setDisplaySize(plantSize, plantSize);
         plant.setOrigin(0.5, 0.5); // Center on tile
         plant.setDepth(y * this.TILE_SIZE + 5);
@@ -3683,7 +4160,7 @@ export class FarmingGame extends Scene {
             // However, DynamicShadow.preUpdate forces depth 2.
             // If plants overlap, depth 2 is fine as long as all plants are > 2.
             // Plants are y * 16 + 5. Min y=0 -> depth 5. So > 2. Correct.
-            
+
             this.uiCamera.ignore(shadow);
         }
 
@@ -3694,7 +4171,7 @@ export class FarmingGame extends Scene {
 
         // Make plant clickable to show details
         plant.setInteractive({ useHandCursor: true });
-        plant.on('pointerdown', () => {
+        plant.on("pointerdown", () => {
             const tileKey = `${x},${y}`;
             const state = this.farmLandStates.get(tileKey);
             if (state && state.planted) {
@@ -3703,14 +4180,15 @@ export class FarmingGame extends Scene {
                 if (state.healthBarFill && state.healthBarBg) {
                     const bgWidth = state.healthBarBg.width;
                     const fillWidth = state.healthBarFill.width;
-                    healthPercentage = bgWidth > 0 ? (fillWidth / (bgWidth - 2)) * 100 : 100;
+                    healthPercentage =
+                        bgWidth > 0 ? (fillWidth / (bgWidth - 2)) * 100 : 100;
                 }
 
                 this.plantDetailManager.open({
                     tileState: state,
                     tileX: x,
                     tileY: y,
-                    healthPercentage
+                    healthPercentage,
                 });
             }
         });
@@ -3765,36 +4243,36 @@ export class FarmingGame extends Scene {
 
         // Case 1: Plant is DEAD
         if (state.isDead) {
-             const deathText = this.add.text(textX, textY, 'DEATH', {
-                 fontSize: '10px',
-                 fontFamily: 'Arial',
-                 color: '#ef4444', // Red
-                 stroke: '#000000',
-                 strokeThickness: 2,
-                 fontStyle: 'bold'
-             });
-             deathText.setOrigin(0.5);
-             deathText.setDepth(depth + 2);
-             deathText.setName(`healthbar-text-${x}-${y}`);
-             this.uiCamera.ignore(deathText);
-             return;
+            const deathText = this.add.text(textX, textY, "DEATH", {
+                fontSize: "10px",
+                fontFamily: "Arial",
+                color: "#ef4444", // Red
+                stroke: "#000000",
+                strokeThickness: 2,
+                fontStyle: "bold",
+            });
+            deathText.setOrigin(0.5);
+            deathText.setDepth(depth + 2);
+            deathText.setName(`healthbar-text-${x}-${y}`);
+            this.uiCamera.ignore(deathText);
+            return;
         }
 
         // Case 2: Plant is MATURE (Harvestable)
         if (state.plantStage === PLANT_STAGES.MATURE) {
-             const harvestText = this.add.text(textX, textY, 'HARVEST', {
-                 fontSize: '10px',
-                 fontFamily: 'Arial',
-                 color: '#facc15', // Yellow/Gold
-                 stroke: '#000000',
-                 strokeThickness: 2,
-                 fontStyle: 'bold'
-             });
-             harvestText.setOrigin(0.5);
-             harvestText.setDepth(depth + 2);
-             harvestText.setName(`healthbar-text-${x}-${y}`);
-             this.uiCamera.ignore(harvestText);
-             return;
+            const harvestText = this.add.text(textX, textY, "HARVEST", {
+                fontSize: "10px",
+                fontFamily: "Arial",
+                color: "#facc15", // Yellow/Gold
+                stroke: "#000000",
+                strokeThickness: 2,
+                fontStyle: "bold",
+            });
+            harvestText.setOrigin(0.5);
+            harvestText.setDepth(depth + 2);
+            harvestText.setName(`healthbar-text-${x}-${y}`);
+            this.uiCamera.ignore(harvestText);
+            return;
         }
 
         // Health bar dimensions - with thin border and rounded corners
@@ -3812,20 +4290,33 @@ export class FarmingGame extends Scene {
         // Draw black border (thin stroke)
         bgGraphics.lineStyle(0.5, 0x000000, 1);
         bgGraphics.fillStyle(0x333333, 1);
-        bgGraphics.fillRoundedRect(barX, barY - barHeight / 2, barWidth, barHeight, cornerRadius);
-        bgGraphics.strokeRoundedRect(barX, barY - barHeight / 2, barWidth, barHeight, cornerRadius);
+        bgGraphics.fillRoundedRect(
+            barX,
+            barY - barHeight / 2,
+            barWidth,
+            barHeight,
+            cornerRadius,
+        );
+        bgGraphics.strokeRoundedRect(
+            barX,
+            barY - barHeight / 2,
+            barWidth,
+            barHeight,
+            cornerRadius,
+        );
 
         this.uiCamera.ignore(bgGraphics);
 
         // Store as any since healthBarBg expects Rectangle but we use Graphics
-        state.healthBarBg = bgGraphics as unknown as Phaser.GameObjects.Rectangle;
+        state.healthBarBg =
+            bgGraphics as unknown as Phaser.GameObjects.Rectangle;
 
         // Fill bar (green, will be resized based on health)
         const currentWaterBalance = state.hydration?.waterBalance ?? 0;
-        const plantType = state.cropType || 'algae';
+        const plantType = state.cropType || "algae";
         const maxWaterHours = getMaxWaterHours(plantType);
         const healthPercent = Math.min(currentWaterBalance / maxWaterHours, 1);
-        
+
         // Calculate initial width based on current health
         const maxWidth = barWidth - 1;
         const initialWidth = Math.max(maxWidth * healthPercent, 1);
@@ -3833,20 +4324,20 @@ export class FarmingGame extends Scene {
         state.healthBarFill = this.add.rectangle(
             barX + 0.5,
             barY,
-            initialWidth, 
+            initialWidth,
             barHeight - 1,
             0x4ade80,
-            1
+            1,
         );
-        
+
         // Fix origin to 0, 0.5 so it grows/shrinks from left
         state.healthBarFill.setOrigin(0, 0.5);
         state.healthBarFill.setPosition(barX + 0.5, barY); // +0.5 for border offset
-        
+
         state.healthBarFill.setDepth(depth + 1);
         state.healthBarFill.setName(`healthbar-fill-${x}-${y}`);
         this.uiCamera.ignore(state.healthBarFill);
-        
+
         // Set initial color
         if (healthPercent > 0.6) {
             state.healthBarFill.setFillStyle(0x4ade80, 1); // Green
@@ -3862,7 +4353,6 @@ export class FarmingGame extends Scene {
         // The health bar is set when loading garden data from the backend
         // We don't recalculate it based on local time anymore
         // The backend provides progress.percentage which is the source of truth
-        
         // This method is kept for compatibility but does nothing
         // Health bar updates happen in loadGardenData() when fresh data is fetched
     }
@@ -3876,12 +4366,15 @@ export class FarmingGame extends Scene {
         if (!state || !state.healthBarFill) return;
 
         const WATER_DROP_HOURS = 3;
-        const plantType = state.cropType || 'algae';
+        const plantType = state.cropType || "algae";
         const maxWaterHours = getMaxWaterHours(plantType);
 
         // Calculate new waterBalance (current + 3, capped at max)
         const currentWaterBalance = state.hydration?.waterBalance ?? 0;
-        const newWaterBalance = Math.min(currentWaterBalance + WATER_DROP_HOURS, maxWaterHours);
+        const newWaterBalance = Math.min(
+            currentWaterBalance + WATER_DROP_HOURS,
+            maxWaterHours,
+        );
 
         // Update local state so WebSocket update doesn't flash
         if (state.hydration) {
@@ -3904,10 +4397,16 @@ export class FarmingGame extends Scene {
         } else {
             state.healthBarFill.setFillStyle(0xef4444, 1); // Red
         }
-
     }
 
-    private updatePlantSprite(x: number, y: number, cropType: PlantType, stage: number, isDead: boolean = false, isWilted: boolean = false) {
+    private updatePlantSprite(
+        x: number,
+        y: number,
+        cropType: PlantType,
+        stage: number,
+        isDead: boolean = false,
+        isWilted: boolean = false,
+    ) {
         this.removePlant(x, y);
         this.showPlant(x, y, cropType, stage, isDead, isWilted);
 
@@ -3922,7 +4421,7 @@ export class FarmingGame extends Scene {
         const hours = now.getHours();
         const minutes = now.getMinutes();
         const seconds = now.getSeconds();
-        const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        const timeStr = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 
         this.timeText.setText(timeStr);
     }
@@ -3947,7 +4446,7 @@ export class FarmingGame extends Scene {
         // The backend tracks plant stages, watering, and death through the /garden endpoint
         // We only update the health bar display here based on local state
         // The actual plant state (stage, isDead, etc.) is synced from the backend
-        
+
         this.farmLandStates.forEach((state, tileKey) => {
             if (!state.planted || !state.cropType) return;
 
@@ -3959,14 +4458,20 @@ export class FarmingGame extends Scene {
         });
     }
 
-    private onNewDay() {
-    }
+    private onNewDay() {}
 
     update(time: number, delta: number) {
         // Don't allow movement when any modal is open
-        if (this.factoryModalOpen || this.chestOpen || this.seedSelectorOpen ||
-            this.mailboxModalOpen || this.shopModalOpen || this.checkinModalOpen ||
-            this.userProfileModalOpen || this.buyPlotModalOpen) {
+        if (
+            this.factoryModalOpen ||
+            this.chestOpen ||
+            this.seedSelectorOpen ||
+            this.mailboxModalOpen ||
+            this.shopModalOpen ||
+            this.checkinModalOpen ||
+            this.userProfileModalOpen ||
+            this.buyPlotModalOpen
+        ) {
             this.player.setVelocity(0, 0);
             return;
         }
@@ -3997,7 +4502,8 @@ export class FarmingGame extends Scene {
             const dy = this.joystickThumb.y - joystickY;
             const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (distance > 5) { // Deadzone
+            if (distance > 5) {
+                // Deadzone
                 const normalizedX = dx / distance;
                 const normalizedY = dy / distance;
                 velocityX = normalizedX * speed;
@@ -4008,8 +4514,8 @@ export class FarmingGame extends Scene {
         // Check if the new position would be on land (not water)
         // Check multiple points of the player sprite for better collision
         if (velocityX !== 0 || velocityY !== 0) {
-            const nextX = this.player.x + (velocityX * 0.02);
-            const nextY = this.player.y + (velocityY * 0.02);
+            const nextX = this.player.x + velocityX * 0.02;
+            const nextY = this.player.y + velocityY * 0.02;
 
             // Check 5 points: center, top-left, top-right, bottom-left, bottom-right
             const halfWidth = this.player.width * 0.3; // Smaller hitbox for smoother movement
@@ -4052,16 +4558,16 @@ export class FarmingGame extends Scene {
             if (Math.abs(velocityX) > Math.abs(velocityY)) {
                 // Horizontal movement
                 if (velocityX < 0) {
-                    this.player.play('walk-left', true);
+                    this.player.play("walk-left", true);
                 } else {
-                    this.player.play('walk-right', true);
+                    this.player.play("walk-right", true);
                 }
             } else {
                 // Vertical movement
                 if (velocityY < 0) {
-                    this.player.play('walk-up', true);
+                    this.player.play("walk-up", true);
                 } else {
-                    this.player.play('walk-down', true);
+                    this.player.play("walk-down", true);
                 }
             }
         } else {
@@ -4071,14 +4577,14 @@ export class FarmingGame extends Scene {
             // Idle
             const currentAnim = this.player.anims.currentAnim;
             if (currentAnim) {
-                if (currentAnim.key.includes('left')) {
-                    this.player.play('idle-left', true);
-                } else if (currentAnim.key.includes('right')) {
-                    this.player.play('idle-right', true);
-                } else if (currentAnim.key.includes('up')) {
-                    this.player.play('idle-up', true);
+                if (currentAnim.key.includes("left")) {
+                    this.player.play("idle-left", true);
+                } else if (currentAnim.key.includes("right")) {
+                    this.player.play("idle-right", true);
+                } else if (currentAnim.key.includes("up")) {
+                    this.player.play("idle-up", true);
                 } else {
-                    this.player.play('idle-down', true);
+                    this.player.play("idle-down", true);
                 }
             }
         }
@@ -4097,7 +4603,6 @@ export class FarmingGame extends Scene {
     }
 
     shutdown() {
-
         // Cleanup socket connection and event listeners
         if (this.plantUpdateHandler) {
             this.plantUpdateHandler.destroy();
@@ -4108,16 +4613,16 @@ export class FarmingGame extends Scene {
         if (this.missionSocketService) {
             this.missionSocketService.disconnect();
         }
-        EventBus.off('socket:connected', this.onSocketConnected, this);
-        EventBus.off('socket:disconnected', this.onSocketDisconnected, this);
-        EventBus.off('socket:inventory_update', this.onInventoryUpdate, this);
-        EventBus.off('socket:land_update', this.onLandUpdate, this);
-        EventBus.off('socket:currency_update', this.onCurrencyUpdate, this);
-        EventBus.off('socket:action_success', this.onActionSuccess, this);
-        EventBus.off('socket:action_error', this.onActionError, this);
+        EventBus.off("socket:connected", this.onSocketConnected, this);
+        EventBus.off("socket:disconnected", this.onSocketDisconnected, this);
+        EventBus.off("socket:inventory_update", this.onInventoryUpdate, this);
+        EventBus.off("socket:land_update", this.onLandUpdate, this);
+        EventBus.off("socket:currency_update", this.onCurrencyUpdate, this);
+        EventBus.off("socket:action_success", this.onActionSuccess, this);
+        EventBus.off("socket:action_error", this.onActionError, this);
 
-        EventBus.off('wallet-connected', this.onWalletConnected, this);
-        this.scale.off('resize', this.onResize, this);
+        EventBus.off("wallet-connected", this.onWalletConnected, this);
+        this.scale.off("resize", this.onResize, this);
 
         // Cleanup managers
         this.soundManager?.destroy();

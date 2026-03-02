@@ -70,9 +70,9 @@ export class MapSelection extends Scene {
                 bgImage: "place-farm",
             },
             {
-                id: "petfarm",
-                name: "Pet Farm",
-                icon: "🐾",
+                id: "cyberhome",
+                name: "Cyber-Home",
+                icon: "🏠",
                 scene: "PetFarm",
                 bgImage: "place-pethome",
             },

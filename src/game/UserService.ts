@@ -43,18 +43,21 @@ interface LoginResponse {
     isNewUser?: boolean;
 }
 
-const STORAGE_KEY_TOKEN = 'fam_game_access_token';
-const STORAGE_KEY_USER = 'fam_game_user_data';
+const STORAGE_KEY_TOKEN = "fam_game_access_token";
+const STORAGE_KEY_USER = "fam_game_user_data";
 
 export class UserService {
     private static API_BASE_URL =
         process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000"; // New backend base URL, fallback for development
 
+    // 🎭 MOCK MODE for development (set to false when backend is ready)
+    private static MOCK_MODE = true; // TODO: Set to false in production
+
     /**
      * Gets the stored access token
      */
     static getAccessToken(): string | null {
-        if (typeof window === 'undefined') return null;
+        if (typeof window === "undefined") return null;
         return localStorage.getItem(STORAGE_KEY_TOKEN);
     }
 
@@ -62,7 +65,7 @@ export class UserService {
      * Gets the stored user data
      */
     static getStoredUser(): UserData | null {
-        if (typeof window === 'undefined') return null;
+        if (typeof window === "undefined") return null;
         const data = localStorage.getItem(STORAGE_KEY_USER);
         if (data) {
             try {
@@ -78,7 +81,7 @@ export class UserService {
      * Saves access token and user data to localStorage
      */
     private static saveAuthData(token: string, user: UserData): void {
-        if (typeof window === 'undefined') return;
+        if (typeof window === "undefined") return;
         localStorage.setItem(STORAGE_KEY_TOKEN, token);
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
     }
@@ -87,13 +90,13 @@ export class UserService {
      * Clears auth data from localStorage
      */
     static clearAuthData(): void {
-        if (typeof window === 'undefined') return;
+        if (typeof window === "undefined") return;
         localStorage.removeItem(STORAGE_KEY_TOKEN);
         localStorage.removeItem(STORAGE_KEY_USER);
         // Also clear badges data
-        localStorage.removeItem('fam_game_user_badges');
+        localStorage.removeItem("fam_game_user_badges");
         // Clear new user flag
-        localStorage.removeItem('fam_game_is_new_user');
+        localStorage.removeItem("fam_game_is_new_user");
     }
 
     /**
@@ -112,7 +115,7 @@ export class UserService {
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({ walletAddress }), // Use walletAddress as per backend
-                }
+                },
             );
 
             if (response.ok) {
@@ -162,8 +165,40 @@ export class UserService {
     static async registerUser(
         walletAddress: string,
         username: string,
-        characterType: number = 1
+        characterType: number = 1,
     ): Promise<UserData | null> {
+        // 🎭 MOCK MODE: Skip backend, use localStorage
+        if (UserService.MOCK_MODE) {
+            console.log(
+                "🎭 MOCK MODE: Registering user locally (no backend needed)",
+            );
+            const mockUser: UserData = {
+                id: `mock_${Date.now()}`,
+                address: walletAddress,
+                walletAddress: walletAddress,
+                username: username,
+                avatar: null,
+                characterType: characterType,
+                xp: 0,
+                reputationScore: 0,
+                gold: 1000,
+                gem: 50,
+                landsCount: 4, // Start with 4 plots unlocked
+                plantsCount: 0,
+                network: "mock",
+                balanceGold: 1000,
+                balanceGem: 50,
+            };
+
+            // Save to localStorage
+            const mockToken = "mock_token_" + Date.now();
+            UserService.saveAuthData(mockToken, mockUser);
+
+            console.log("✅ Mock user registered:", mockUser);
+            return mockUser;
+        }
+
+        // Original backend code
         try {
             const response = await fetch(
                 `${UserService.API_BASE_URL}/auth/register`,
@@ -177,7 +212,7 @@ export class UserService {
                         username,
                         characterType,
                     }),
-                }
+                },
             );
 
             if (response.ok) {
@@ -230,9 +265,9 @@ export class UserService {
                 {
                     method: "GET",
                     headers: {
-                        "Authorization": `Bearer ${token}`,
+                        Authorization: `Bearer ${token}`,
                     },
-                }
+                },
             );
 
             if (response.ok) {
@@ -243,7 +278,8 @@ export class UserService {
 
                 // For characterType: prefer existingUser (from register/login) over profile API
                 // because profile API may return default value (1) even if user selected different character
-                const characterType = existingUser?.characterType || data.characterType || 1;
+                const characterType =
+                    existingUser?.characterType || data.characterType || 1;
 
                 // Map API response to UserData, preserving wallet addresses from login
                 const userData: UserData = {
@@ -251,9 +287,14 @@ export class UserService {
                     address: data.walletAddress,
                     walletAddress: data.walletAddress,
                     // Preserve wallet addresses from existing stored user (from login)
-                    walletAddressSui: data.walletAddressSui || existingUser?.walletAddressSui,
-                    walletAddressAptos: data.walletAddressAptos || existingUser?.walletAddressAptos,
-                    walletAddressCardano: data.walletAddressCardano || existingUser?.walletAddressCardano,
+                    walletAddressSui:
+                        data.walletAddressSui || existingUser?.walletAddressSui,
+                    walletAddressAptos:
+                        data.walletAddressAptos ||
+                        existingUser?.walletAddressAptos,
+                    walletAddressCardano:
+                        data.walletAddressCardano ||
+                        existingUser?.walletAddressCardano,
                     username: data.username,
                     avatar: data.avatar,
                     characterType,
@@ -262,14 +303,19 @@ export class UserService {
                     gold: data.gold,
                     gem: data.gem,
                     landsCount: data._count?.lands || 0,
-                    plantsCount: data.lands?.filter((land: any) => land.plant).length || 0,
+                    plantsCount:
+                        data.lands?.filter((land: any) => land.plant).length ||
+                        0,
                     network: data.network,
                     balanceGold: data.balanceGold || data.gold || 0,
                     balanceGem: data.balanceGem || data.gem || 0,
                 };
 
                 // Update stored user data
-                localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userData));
+                localStorage.setItem(
+                    STORAGE_KEY_USER,
+                    JSON.stringify(userData),
+                );
 
                 return userData;
             } else {
@@ -285,7 +331,11 @@ export class UserService {
      * @param updates Object containing fields to update
      * @returns Updated user data or null on failure
      */
-    static async updateUser(updates: { username?: string; avatar?: string; characterType?: number }): Promise<UserData | null> {
+    static async updateUser(updates: {
+        username?: string;
+        avatar?: string;
+        characterType?: number;
+    }): Promise<UserData | null> {
         const token = UserService.getAccessToken();
         if (!token) {
             return null;
@@ -298,10 +348,10 @@ export class UserService {
                     method: "PATCH",
                     headers: {
                         "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`,
+                        Authorization: `Bearer ${token}`,
                     },
                     body: JSON.stringify(updates),
-                }
+                },
             );
 
             if (response.ok) {
@@ -314,13 +364,19 @@ export class UserService {
                         ...currentUser,
                         username: data.username ?? currentUser.username,
                         avatar: data.avatar ?? currentUser.avatar,
-                        characterType: data.characterType ?? currentUser.characterType,
+                        characterType:
+                            data.characterType ?? currentUser.characterType,
                         xp: data.xp ?? currentUser.xp,
-                        reputationScore: data.reputationScore ?? currentUser.reputationScore,
-                        balanceGold: data.balanceGold ?? currentUser.balanceGold,
+                        reputationScore:
+                            data.reputationScore ?? currentUser.reputationScore,
+                        balanceGold:
+                            data.balanceGold ?? currentUser.balanceGold,
                         balanceGem: data.balanceGem ?? currentUser.balanceGem,
                     };
-                    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
+                    localStorage.setItem(
+                        STORAGE_KEY_USER,
+                        JSON.stringify(updatedUser),
+                    );
                     return updatedUser;
                 }
                 return null;
