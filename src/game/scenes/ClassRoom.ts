@@ -698,6 +698,14 @@ export class ClassRoom extends Scene {
                     border: 1px solid #003311; padding: 3px 6px; font-size: 0.9em;
                 }
                 .lesson-md th { background: #0a1a0a; color: #66ff66; }
+                .lesson-md img {
+                    max-width: 100%;
+                    height: auto;
+                    border: 1px solid #003311;
+                    border-radius: 4px;
+                    margin: 6px 0;
+                    display: block;
+                }
             `;
             this.lessonContentElement.appendChild(lessonStyle);
             document.body.appendChild(this.lessonContentElement);
