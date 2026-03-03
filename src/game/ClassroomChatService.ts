@@ -26,6 +26,26 @@ export interface LessonResponse {
     error?: string;
 }
 
+export interface LessonSummary {
+    title: string;
+    slug: string;
+    updatedAt?: string;
+}
+
+export interface LessonPagination {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+}
+
+export interface LessonListResponse {
+    success: boolean;
+    lessons?: LessonSummary[];
+    pagination?: LessonPagination;
+    error?: string;
+}
+
 export class ClassroomChatService {
     private static instance: ClassroomChatService | null = null;
     private readonly baseUrl = process.env.NEXT_PUBLIC_AGENT_API_URL || 'http://54.255.174.8:3001';
@@ -70,6 +90,48 @@ export class ClassroomChatService {
     public async getLatestLesson(): Promise<LessonResponse> {
         try {
             const response = await fetch(`${this.baseUrl}/api/lesson/latest`);
+
+            if (!response.ok) {
+                throw new Error(`Lesson API error: ${response.status}`);
+            }
+
+            return await response.json() as LessonResponse;
+        } catch (error) {
+            console.error('ClassroomChatService lesson error:', error);
+            return {
+                success: false,
+                error: 'Could not load lesson. Please try again later.',
+            };
+        }
+    }
+
+    /**
+     * Fetch lessons list with pagination
+     */
+    public async getLessons(page: number = 1, limit: number = 10): Promise<LessonListResponse> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/lessons?page=${page}&limit=${limit}`);
+
+            if (!response.ok) {
+                throw new Error(`Lessons API error: ${response.status}`);
+            }
+
+            return await response.json() as LessonListResponse;
+        } catch (error) {
+            console.error('ClassroomChatService lessons error:', error);
+            return {
+                success: false,
+                error: 'Could not load lessons list.',
+            };
+        }
+    }
+
+    /**
+     * Fetch a specific lesson by slug
+     */
+    public async getLessonBySlug(slug: string): Promise<LessonResponse> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/lesson/${slug}`);
 
             if (!response.ok) {
                 throw new Error(`Lesson API error: ${response.status}`);
