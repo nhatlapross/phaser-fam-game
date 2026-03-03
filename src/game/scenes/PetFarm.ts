@@ -664,7 +664,12 @@ export class PetFarm extends Scene {
         );
 
         // Make UI camera ignore these game world objects
-        this.uiCamera.ignore([this.maidCatSprite, this.maidCatShadow!, this.maidCatLabel, this.maidCatHitArea]);
+        this.uiCamera.ignore([
+            this.maidCatSprite,
+            this.maidCatShadow!,
+            this.maidCatLabel,
+            this.maidCatHitArea,
+        ]);
     }
 
     // Commented out - Not used (animal character)
@@ -1655,7 +1660,9 @@ export class PetFarm extends Scene {
                 petScale = 0.35;
                 petColor = 0x9b59b6;
                 this.createMaidCatAnimations();
-                petSprite.play("npc-maidcat-idle-down");
+                if (this.anims.exists("npc-maidcat-idle-down")) {
+                    petSprite.play("npc-maidcat-idle-down");
+                }
                 break;
             case "kungfu-master":
                 petSprite = this.add.sprite(x, y, "kungfu-master", 0);
@@ -1663,7 +1670,9 @@ export class PetFarm extends Scene {
                 petScale = 0.35;
                 petColor = 0xe91e63;
                 this.createKungfuMasterAnimations();
-                petSprite.play("kungfu-master-idle-down");
+                if (this.anims.exists("kungfu-master-idle-down")) {
+                    petSprite.play("kungfu-master-idle-down");
+                }
                 break;
             case "cowboy":
                 petSprite = this.add.sprite(x, y, "cowboy", 0);
@@ -1671,7 +1680,9 @@ export class PetFarm extends Scene {
                 petScale = 0.35;
                 petColor = 0x8b4513;
                 this.createCowboyAnimations();
-                petSprite.play("cowboy-idle-down");
+                if (this.anims.exists("cowboy-idle-down")) {
+                    petSprite.play("cowboy-idle-down");
+                }
                 break;
             case "explorer":
                 petSprite = this.add.sprite(x, y, "explorer", 0);
@@ -1679,7 +1690,9 @@ export class PetFarm extends Scene {
                 petScale = 0.35;
                 petColor = 0xff5722;
                 this.createExplorerAnimations();
-                petSprite.play("explorer-idle-down");
+                if (this.anims.exists("explorer-idle-down")) {
+                    petSprite.play("explorer-idle-down");
+                }
                 break;
             case "bullfighter":
                 petSprite = this.add.sprite(x, y, "bullfighter", 0);
@@ -1687,7 +1700,9 @@ export class PetFarm extends Scene {
                 petScale = 0.35;
                 petColor = 0xd32f2f;
                 this.createBullfighterAnimations();
-                petSprite.play("bullfighter-idle-down");
+                if (this.anims.exists("bullfighter-idle-down")) {
+                    petSprite.play("bullfighter-idle-down");
+                }
                 break;
             case "soccer-player":
                 petSprite = this.add.sprite(x, y, "soccer-player", 0);
@@ -1695,7 +1710,9 @@ export class PetFarm extends Scene {
                 petScale = 0.35;
                 petColor = 0x4caf50;
                 this.createSoccerPlayerAnimations();
-                petSprite.play("soccer-player-idle-down");
+                if (this.anims.exists("soccer-player-idle-down")) {
+                    petSprite.play("soccer-player-idle-down");
+                }
                 break;
             case "ninja":
                 petSprite = this.add.sprite(x, y, "ninja", 0);
@@ -1703,7 +1720,9 @@ export class PetFarm extends Scene {
                 petScale = 0.35;
                 petColor = 0x424242;
                 this.createNinjaAnimations();
-                petSprite.play("ninja-idle-down");
+                if (this.anims.exists("ninja-idle-down")) {
+                    petSprite.play("ninja-idle-down");
+                }
                 break;
             case "nurse":
                 petSprite = this.add.sprite(x, y, "nurse", 0);
@@ -1711,7 +1730,9 @@ export class PetFarm extends Scene {
                 petScale = 0.35;
                 petColor = 0xf06292;
                 this.createNurseAnimations();
-                petSprite.play("nurse-idle-down");
+                if (this.anims.exists("nurse-idle-down")) {
+                    petSprite.play("nurse-idle-down");
+                }
                 break;
             // Commented out - Animal characters
             // case "pet-cat":
@@ -2831,8 +2852,8 @@ export class PetFarm extends Scene {
     }
 
     private setupDebugHelpers() {
-            // Debug helpers removed for production
-        }
+        // Debug helpers removed for production
+    }
 
     update() {
         const speed = 100;

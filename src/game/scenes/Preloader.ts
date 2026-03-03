@@ -144,10 +144,14 @@ export class Preloader extends Scene {
         );
 
         // Classroom tileset (176x111, 11 cols x ~6 rows of 16x16 tiles)
-        this.load.spritesheet('classroom-tileset', `tilesets/class-room.png${this.ASSET_VERSION}`, {
-            frameWidth: 16,
-            frameHeight: 16
-        });
+        this.load.spritesheet(
+            "classroom-tileset",
+            `tilesets/class-room.png${this.ASSET_VERSION}`,
+            {
+                frameWidth: 16,
+                frameHeight: 16,
+            },
+        );
 
         // Fountain spritesheet (5 frames, 713x235 total, each frame 142.6x235)
         this.load.spritesheet(
@@ -373,17 +377,34 @@ export class Preloader extends Scene {
         this.load.image("default-avatar", "characters/avatar.png");
 
         // Classroom door, furniture & board
-        this.load.image('door', `objects/door/door.png${this.ASSET_VERSION}`);
-        this.load.image('classroom-table', `objects/class-room/table.png${this.ASSET_VERSION}`);
-        this.load.image('classroom-chair', `objects/class-room/chair.png${this.ASSET_VERSION}`);
-        this.load.image('classroom-board', `objects/class-room/board.png${this.ASSET_VERSION}`);
-        this.load.spritesheet('teacher1', `objects/class-room/teacher1.png${this.ASSET_VERSION}`, { frameWidth: 125, frameHeight: 125 });
-        this.load.spritesheet('teacher2', `objects/class-room/teacher2.png${this.ASSET_VERSION}`, { frameWidth: 125, frameHeight: 125 });
+        this.load.image("door", `objects/door/door.png${this.ASSET_VERSION}`);
+        this.load.image(
+            "classroom-table",
+            `objects/class-room/table.png${this.ASSET_VERSION}`,
+        );
+        this.load.image(
+            "classroom-chair",
+            `objects/class-room/chair.png${this.ASSET_VERSION}`,
+        );
+        this.load.image(
+            "classroom-board",
+            `objects/class-room/board.png${this.ASSET_VERSION}`,
+        );
+        this.load.spritesheet(
+            "teacher1",
+            `objects/class-room/teacher1.png${this.ASSET_VERSION}`,
+            { frameWidth: 125, frameHeight: 125 },
+        );
+        this.load.spritesheet(
+            "teacher2",
+            `objects/class-room/teacher2.png${this.ASSET_VERSION}`,
+            { frameWidth: 125, frameHeight: 125 },
+        );
         // Lesson files are in public/lesson/ (not under assets/)
-        this.load.setPath('');
-        this.load.text('lesson1-text', 'lesson/lesson1/text.md');
-        this.load.image('lesson1-img', 'lesson/lesson1/lesson1.jpg');
-        this.load.setPath('assets');
+        this.load.setPath("");
+        this.load.text("lesson1-text", "lesson/lesson1/text.md");
+        this.load.image("lesson1-img", "lesson/lesson1/lesson1.jpg");
+        this.load.setPath("assets");
 
         // Check-in icon
         this.load.image("icon-checkin", "icons/checkin.png");
@@ -488,14 +509,10 @@ export class Preloader extends Scene {
                 frameHeight: 125,
             },
         );
-        this.load.spritesheet(
-            "soccer-player",
-            "pet/soccer-player/soccer-player.png",
-            {
-                frameWidth: 125,
-                frameHeight: 125,
-            },
-        );
+        this.load.spritesheet("soccer-player", "pet/soccer-player/soccer.png", {
+            frameWidth: 125,
+            frameHeight: 125,
+        });
         this.load.spritesheet("ninja", "pet/ninja/ninja.png", {
             frameWidth: 125,
             frameHeight: 125,
