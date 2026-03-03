@@ -1,7 +1,7 @@
-import Phaser from 'phaser';
-import { DynamicShadow } from '../objects/DynamicShadow';
-import { BaseManager } from './BaseManager';
-import { showAccessKeyPrompt, isAccessVerified } from '../utils/AccessKeyUtils';
+import Phaser from "phaser";
+import { DynamicShadow } from "../objects/DynamicShadow";
+import { BaseManager } from "./BaseManager";
+import { showAccessKeyPrompt, isAccessVerified } from "../utils/AccessKeyUtils";
 
 // Location destination data
 interface LocationDestination {
@@ -17,51 +17,61 @@ interface LocationDestination {
 }
 
 // Station locations (base data without isCurrent - will be set dynamically)
-const DESTINATIONS_DATA: Omit<LocationDestination, 'isCurrent'>[] = [
+const DESTINATIONS_DATA: Omit<LocationDestination, "isCurrent">[] = [
     {
-        id: 'farm',
-        name: 'Farm',
-        nameVi: 'Nong Trai',
-        description: 'Your cozy home farm',
-        icon: '🏡',
-        bgImage: 'place-farm',
+        id: "farm",
+        name: "Farm",
+        nameVi: "Nong Trai",
+        description: "Your cozy home farm",
+        icon: "🏡",
+        bgImage: "place-farm",
         enabled: true,
-        sceneKey: 'FarmingGame'
+        sceneKey: "FarmingGame",
     },
     {
-        id: 'square',
-        name: 'Town Square',
-        nameVi: 'Quang Truong',
-        description: 'The bustling center of town',
-        icon: '🏛️',
-        bgImage: 'place-townsquare',
+        id: "cyberhome",
+        name: "Cyber-Home",
+        nameVi: "Nha Cyber",
+        description: "Your personal cyber space",
+        icon: "🏠",
+        bgImage: "place-pethome",
         enabled: true,
-        sceneKey: 'TownSquare'
+        sceneKey: "PetFarm",
     },
     {
-        id: 'forest',
-        name: 'Forest',
-        nameVi: 'Khu Rung',
-        description: 'A mysterious forest awaits...',
-        icon: '🌲',
-        bgImage: 'place-forest',
+        id: "square",
+        name: "Town Square",
+        nameVi: "Quang Truong",
+        description: "The bustling center of town",
+        icon: "🏛️",
+        bgImage: "place-townsquare",
+        enabled: true,
+        sceneKey: "TownSquare",
+    },
+    {
+        id: "forest",
+        name: "Forest",
+        nameVi: "Khu Rung",
+        description: "A mysterious forest awaits...",
+        icon: "🌲",
+        bgImage: "place-forest",
         enabled: false,
-        sceneKey: 'Forest'
-    }
+        sceneKey: "Forest",
+    },
 ];
 
 // Station configuration options
 interface StationConfig {
-    x: number;          // Tile X position
-    y: number;          // Tile Y position
-    flipX?: boolean;    // Flip sprite horizontally
-    currentLocationId: string;  // ID of current location (farm, square, forest)
+    x: number; // Tile X position
+    y: number; // Tile Y position
+    flipX?: boolean; // Flip sprite horizontally
+    currentLocationId: string; // ID of current location (farm, square, forest)
 }
 
 // Data passed when navigating to a new scene
 export interface NavigationData {
-    fromLocation: string;  // ID of origin location
-    spawnAt: 'station' | 'classroom';  // Where to spawn in destination
+    fromLocation: string; // ID of origin location
+    spawnAt: "station"; // Where to spawn in destination
 }
 
 interface StationCallbacks {
@@ -87,18 +97,22 @@ export class StationManager extends BaseManager {
         x: 41.5,
         y: 24,
         flipX: false,
-        currentLocationId: 'farm'
+        currentLocationId: "farm",
     };
 
-    constructor(scene: Phaser.Scene, callbacks: StationCallbacks = {}, config?: Partial<StationConfig>) {
+    constructor(
+        scene: Phaser.Scene,
+        callbacks: StationCallbacks = {},
+        config?: Partial<StationConfig>,
+    ) {
         super(scene);
         this.callbacks = callbacks;
         this.config = { ...StationManager.DEFAULT_CONFIG, ...config };
 
         // Generate destinations with correct isCurrent based on config
-        this.destinations = DESTINATIONS_DATA.map(dest => ({
+        this.destinations = DESTINATIONS_DATA.map((dest) => ({
             ...dest,
-            isCurrent: dest.id === this.config.currentLocationId
+            isCurrent: dest.id === this.config.currentLocationId,
         }));
     }
 
@@ -110,44 +124,52 @@ export class StationManager extends BaseManager {
         const pixelY = this.config.y * this.TILE_SIZE;
 
         // Create station animation if not exists
-        if (!this.scene.anims.exists('station-idle')) {
+        if (!this.scene.anims.exists("station-idle")) {
             this.scene.anims.create({
-                key: 'station-idle',
-                frames: this.scene.anims.generateFrameNumbers('station', { start: 0, end: 3 }),
+                key: "station-idle",
+                frames: this.scene.anims.generateFrameNumbers("station", {
+                    start: 0,
+                    end: 3,
+                }),
                 frameRate: 4,
-                repeat: -1
+                repeat: -1,
             });
         }
 
         // Create station sprite
-        this.stationSprite = this.scene.add.sprite(pixelX, pixelY, 'station', 0);
+        this.stationSprite = this.scene.add.sprite(
+            pixelX,
+            pixelY,
+            "station",
+            0,
+        );
         this.stationSprite.setOrigin(0.5, 0.5);
         this.stationSprite.setDisplaySize(60, 46); // Adjusted size
         if (this.config.flipX) {
             this.stationSprite.setFlipX(true);
         }
         this.stationSprite.setDepth(pixelY + 10);
-        this.stationSprite.setName('station');
+        this.stationSprite.setName("station");
 
         // No shadow for station
 
         // Play idle animation
-        this.stationSprite.play('station-idle');
+        this.stationSprite.play("station-idle");
 
         // Make interactive
         this.stationSprite.setInteractive({ useHandCursor: true });
 
         // Hover effects
-        this.stationSprite.on('pointerover', () => {
+        this.stationSprite.on("pointerover", () => {
             this.stationSprite?.setTint(0xffff88);
         });
 
-        this.stationSprite.on('pointerout', () => {
+        this.stationSprite.on("pointerout", () => {
             this.stationSprite?.clearTint();
         });
 
         // Click to open travel modal
-        this.stationSprite.on('pointerdown', () => {
+        this.stationSprite.on("pointerdown", () => {
             this.open();
         });
 
@@ -156,12 +178,19 @@ export class StationManager extends BaseManager {
         const collisionHeight = this.stationSprite.displayHeight * 0.35;
         const bottomY = pixelY + this.stationSprite.displayHeight / 2;
         const collisionY = bottomY - collisionHeight / 2 - 4;
-        this.stationCollider = this.scene.add.rectangle(pixelX, collisionY, collisionWidth, collisionHeight);
+        this.stationCollider = this.scene.add.rectangle(
+            pixelX,
+            collisionY,
+            collisionWidth,
+            collisionHeight,
+        );
         this.stationCollider.setVisible(false);
         this.scene.physics.add.existing(this.stationCollider, true);
 
         // Ignore by UI camera (game object, not UI)
-        const uiCamera = this.scene.cameras.cameras.find(cam => cam.name === 'uiCamera');
+        const uiCamera = this.scene.cameras.cameras.find(
+            (cam) => cam.name === "uiCamera",
+        );
         if (uiCamera) {
             uiCamera.ignore(this.stationSprite);
         }
@@ -177,30 +206,46 @@ export class StationManager extends BaseManager {
         const screenWidth = this.scene.scale.width;
         const screenHeight = this.scene.scale.height;
         const modalWidth = 280;
-        const modalHeight = 280; // Increased for 3 destinations
+        const modalHeight = 340; // Increased for 4 destinations (was 280)
         const modalX = screenWidth / 2;
         const modalY = screenHeight / 2;
 
         // Dark overlay
         const overlay = this.scene.add.rectangle(
-            screenWidth / 2, screenHeight / 2,
-            screenWidth, screenHeight,
-            0x000000, 0.6
+            screenWidth / 2,
+            screenHeight / 2,
+            screenWidth,
+            screenHeight,
+            0x000000,
+            0.6,
         );
         overlay.setDepth(5300);
         overlay.setInteractive();
-        overlay.on('pointerdown', () => this.close());
+        overlay.on("pointerdown", () => this.close());
         this.scene.cameras.main.ignore(overlay);
         this.addElement(overlay);
 
         // Modal background
-        const modalBg = this.scene.add.sprite(modalX, modalY, 'settings-panel', 1);
+        const modalBg = this.scene.add.sprite(
+            modalX,
+            modalY,
+            "settings-panel",
+            1,
+        );
         modalBg.setDisplaySize(modalWidth, modalHeight);
         modalBg.setDepth(5301);
         modalBg.setInteractive();
-        modalBg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
-            event.stopPropagation();
-        });
+        modalBg.on(
+            "pointerdown",
+            (
+                _pointer: Phaser.Input.Pointer,
+                _localX: number,
+                _localY: number,
+                event: Phaser.Types.Input.EventData,
+            ) => {
+                event.stopPropagation();
+            },
+        );
         this.scene.cameras.main.ignore(modalBg);
         this.addElement(modalBg);
 
@@ -211,7 +256,7 @@ export class StationManager extends BaseManager {
             scaleX: modalWidth / 125,
             scaleY: modalHeight / 140,
             duration: 200,
-            ease: 'Back.easeOut'
+            ease: "Back.easeOut",
         });
 
         // Create content after animation
@@ -231,56 +276,74 @@ export class StationManager extends BaseManager {
     /**
      * Create modal content with destinations
      */
-    private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
+    private createModalContent(
+        modalX: number,
+        modalY: number,
+        modalWidth: number,
+        modalHeight: number,
+    ): void {
         const modalTop = modalY - modalHeight / 2;
 
         // Close button
         const closeBtnX = modalX + modalWidth / 2 - 30;
         const closeBtnY = modalTop + 35;
 
-        const closeBtnBg = this.scene.add.sprite(closeBtnX, closeBtnY, 'square-buttons', 7);
+        const closeBtnBg = this.scene.add.sprite(
+            closeBtnX,
+            closeBtnY,
+            "square-buttons",
+            7,
+        );
         closeBtnBg.setDisplaySize(24, 24);
         closeBtnBg.setDepth(5302);
         closeBtnBg.setInteractive({ useHandCursor: true });
         this.scene.cameras.main.ignore(closeBtnBg);
         this.addElement(closeBtnBg);
 
-        const closeText = this.scene.add.text(closeBtnX, closeBtnY, 'X', {
-            fontSize: '10px', fontFamily: 'PixelFont', color: '#FFFFFF', resolution: 2
+        const closeText = this.scene.add.text(closeBtnX, closeBtnY, "X", {
+            fontSize: "10px",
+            fontFamily: "PixelFont",
+            color: "#FFFFFF",
+            resolution: 2,
         });
         closeText.setOrigin(0.5);
         closeText.setDepth(5303);
-        closeText.setStroke('#5D4037', 1);
+        closeText.setStroke("#5D4037", 1);
         this.scene.cameras.main.ignore(closeText);
         this.addElement(closeText);
 
-        closeBtnBg.on('pointerdown', () => this.close());
-        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
-        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
+        closeBtnBg.on("pointerdown", () => this.close());
+        closeBtnBg.on("pointerover", () => closeBtnBg.setTint(0xcccccc));
+        closeBtnBg.on("pointerout", () => closeBtnBg.clearTint());
 
         // Title
-        const title = this.scene.add.text(modalX, modalTop + 40, 'TRAVEL', {
-            fontSize: '14px',
-            fontFamily: 'PixelFont',
-            color: '#FFD700',
-            resolution: 2
+        const title = this.scene.add.text(modalX, modalTop + 40, "TRAVEL", {
+            fontSize: "14px",
+            fontFamily: "PixelFont",
+            color: "#FFD700",
+            resolution: 2,
         });
         title.setOrigin(0.5);
         title.setDepth(5302);
-        title.setStroke('#5D4037', 3);
+        title.setStroke("#5D4037", 3);
         this.scene.cameras.main.ignore(title);
         this.addElement(title);
 
         // Subtitle
-        const subtitle = this.scene.add.text(modalX, modalTop + 58, 'Choose destination', {
-            fontSize: '9px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
-        });
+        const subtitle = this.scene.add.text(
+            modalX,
+            modalTop + 58,
+            "Choose destination",
+            {
+                fontSize: "9px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
+            },
+        );
         subtitle.setOrigin(0.5);
         subtitle.setDepth(5302);
-        subtitle.setStroke('#5D4037', 2);
+        subtitle.setStroke("#5D4037", 2);
         this.scene.cameras.main.ignore(subtitle);
         this.addElement(subtitle);
 
@@ -291,7 +354,13 @@ export class StationManager extends BaseManager {
 
         this.destinations.forEach((dest, index) => {
             const buttonY = startY + index * (buttonHeight + buttonSpacing);
-            this.createDestinationButton(modalX + 10, buttonY, modalWidth - 60, buttonHeight, dest);
+            this.createDestinationButton(
+                modalX + 10,
+                buttonY,
+                modalWidth - 60,
+                buttonHeight,
+                dest,
+            );
         });
     }
 
@@ -303,7 +372,7 @@ export class StationManager extends BaseManager {
         y: number,
         width: number,
         height: number,
-        destination: LocationDestination
+        destination: LocationDestination,
     ): void {
         // Background image
         const bgImage = this.scene.add.image(x, y, destination.bgImage);
@@ -321,7 +390,11 @@ export class StationManager extends BaseManager {
         }
 
         // Border frame
-        const borderColor = destination.isCurrent ? 0x2196F3 : (destination.enabled ? 0x4a7c59 : 0x333333);
+        const borderColor = destination.isCurrent
+            ? 0x2196f3
+            : destination.enabled
+              ? 0x4a7c59
+              : 0x333333;
         const border = this.scene.add.rectangle(x, y, width, height);
         border.setStrokeStyle(3, borderColor);
         border.setFillStyle(0x000000, 0); // Transparent fill
@@ -333,47 +406,64 @@ export class StationManager extends BaseManager {
         if (destination.enabled && !destination.isCurrent) {
             bgImage.setInteractive({ useHandCursor: true });
 
-            bgImage.on('pointerover', () => {
+            bgImage.on("pointerover", () => {
                 bgImage.setTint(0xffffaa);
-                border.setStrokeStyle(3, 0xFFD700);
+                border.setStrokeStyle(3, 0xffd700);
             });
 
-            bgImage.on('pointerout', () => {
+            bgImage.on("pointerout", () => {
                 bgImage.clearTint();
                 border.setStrokeStyle(3, borderColor);
             });
 
-            bgImage.on('pointerdown', () => {
+            bgImage.on("pointerdown", () => {
                 this.onDestinationSelect(destination);
             });
         }
 
         // Semi-transparent overlay at bottom for text
-        const textBg = this.scene.add.rectangle(x, y + height / 2 - 15, width, 30, 0x000000, 0.6);
+        const textBg = this.scene.add.rectangle(
+            x,
+            y + height / 2 - 15,
+            width,
+            30,
+            0x000000,
+            0.6,
+        );
         textBg.setDepth(5304);
         this.scene.cameras.main.ignore(textBg);
         this.addElement(textBg);
 
         // Name
-        const nameText = this.scene.add.text(x - width / 2 + 10, y + height / 2 - 20, destination.name.toUpperCase(), {
-            fontSize: '10px',
-            fontFamily: 'PixelFont',
-            color: '#FFFFFF',
-            resolution: 2
-        });
+        const nameText = this.scene.add.text(
+            x - width / 2 + 10,
+            y + height / 2 - 20,
+            destination.name.toUpperCase(),
+            {
+                fontSize: "10px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
+            },
+        );
         nameText.setOrigin(0, 0.5);
         nameText.setDepth(5305);
-        nameText.setStroke('#000000', 2);
+        nameText.setStroke("#000000", 2);
         this.scene.cameras.main.ignore(nameText);
         this.addElement(nameText);
 
         // Description
-        const descText = this.scene.add.text(x - width / 2 + 10, y + height / 2 - 6, destination.description, {
-            fontSize: '7px',
-            fontFamily: 'PixelFont',
-            color: '#CCCCCC',
-            resolution: 2
-        });
+        const descText = this.scene.add.text(
+            x - width / 2 + 10,
+            y + height / 2 - 6,
+            destination.description,
+            {
+                fontSize: "7px",
+                fontFamily: "PixelFont",
+                color: "#CCCCCC",
+                resolution: 2,
+            },
+        );
         descText.setOrigin(0, 0.5);
         descText.setDepth(5305);
         this.scene.cameras.main.ignore(descText);
@@ -381,18 +471,29 @@ export class StationManager extends BaseManager {
 
         // Current place badge
         if (destination.isCurrent) {
-            const currentBadge = this.scene.add.rectangle(x + width / 2 - 35, y - height / 2 + 12, 60, 16, 0x2196F3);
+            const currentBadge = this.scene.add.rectangle(
+                x + width / 2 - 35,
+                y - height / 2 + 12,
+                60,
+                16,
+                0x2196f3,
+            );
             currentBadge.setDepth(5305);
-            currentBadge.setStrokeStyle(1, 0x1976D2);
+            currentBadge.setStrokeStyle(1, 0x1976d2);
             this.scene.cameras.main.ignore(currentBadge);
             this.addElement(currentBadge);
 
-            const currentText = this.scene.add.text(x + width / 2 - 35, y - height / 2 + 12, 'CURRENT', {
-                fontSize: '8px',
-                fontFamily: 'PixelFont',
-                color: '#FFFFFF',
-                resolution: 2
-            });
+            const currentText = this.scene.add.text(
+                x + width / 2 - 35,
+                y - height / 2 + 12,
+                "CURRENT",
+                {
+                    fontSize: "8px",
+                    fontFamily: "PixelFont",
+                    color: "#FFFFFF",
+                    resolution: 2,
+                },
+            );
             currentText.setOrigin(0.5);
             currentText.setDepth(5306);
             this.scene.cameras.main.ignore(currentText);
@@ -406,20 +507,20 @@ export class StationManager extends BaseManager {
             this.scene.cameras.main.ignore(lockBg);
             this.addElement(lockBg);
 
-            const lockIcon = this.scene.add.text(x, y - 5, '🔒', {
-                fontSize: '18px',
-                resolution: 2
+            const lockIcon = this.scene.add.text(x, y - 5, "🔒", {
+                fontSize: "18px",
+                resolution: 2,
             });
             lockIcon.setOrigin(0.5);
             lockIcon.setDepth(5306);
             this.scene.cameras.main.ignore(lockIcon);
             this.addElement(lockIcon);
 
-            const comingSoon = this.scene.add.text(x, y + 12, 'SOON', {
-                fontSize: '7px',
-                fontFamily: 'PixelFont',
-                color: '#FFFFFF',
-                resolution: 2
+            const comingSoon = this.scene.add.text(x, y + 12, "SOON", {
+                fontSize: "7px",
+                fontFamily: "PixelFont",
+                color: "#FFFFFF",
+                resolution: 2,
             });
             comingSoon.setOrigin(0.5);
             comingSoon.setDepth(5306);
@@ -431,9 +532,11 @@ export class StationManager extends BaseManager {
     /**
      * Handle destination selection
      */
-    private async onDestinationSelect(destination: LocationDestination): Promise<void> {
+    private async onDestinationSelect(
+        destination: LocationDestination,
+    ): Promise<void> {
         // Check access key for Farm
-        if (destination.id === 'farm') {
+        if (destination.id === "farm") {
             if (!isAccessVerified()) {
                 const verified = await showAccessKeyPrompt();
                 if (!verified) return;
@@ -441,7 +544,10 @@ export class StationManager extends BaseManager {
         }
 
         if (this.callbacks.showToastMessage) {
-            this.callbacks.showToastMessage(`Traveling to ${destination.nameVi}...`, 0x4CAF50);
+            this.callbacks.showToastMessage(
+                `Traveling to ${destination.nameVi}...`,
+                0x4caf50,
+            );
         }
 
         this.close();
@@ -450,7 +556,7 @@ export class StationManager extends BaseManager {
         if (destination.sceneKey && this.callbacks.onNavigate) {
             const navData: NavigationData = {
                 fromLocation: this.config.currentLocationId,
-                spawnAt: 'station'
+                spawnAt: "station",
             };
             this.callbacks.onNavigate(destination.sceneKey, navData);
         }
@@ -478,3 +584,4 @@ export class StationManager extends BaseManager {
         super.destroy();
     }
 }
+
