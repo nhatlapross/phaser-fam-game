@@ -1,8 +1,11 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { passport } from '@imtbl/sdk';
-import { getPassportInstance } from '@/config/passport';
+import React, { createContext, useContext, ReactNode } from 'react';
+import { PrivyProvider, usePrivy, useWallets } from '@privy-io/react-auth';
+import { PRIVY_APP_ID, privyConfig } from '@/config/privy';
+
+// ─── Context interface ────────────────────────────────────────────────────────
+// Giữ nguyên interface cũ để các consumer (App.tsx, ...) không cần thay đổi
 
 interface PassportContextType {
     isLoggedIn: boolean;
@@ -12,7 +15,10 @@ interface PassportContextType {
     login: () => Promise<string | null>;
     loginWithGoogle: () => Promise<string | null>;
     logout: () => Promise<void>;
-    passportInstance: passport.Passport | null;
+    /** @deprecated Passport đã được thay bằng Privy, luôn trả về null */
+    passportInstance: null;
+    /** Lấy EIP-1193 provider để call contract trên bất kỳ chain nào */
+    getEthereumProvider: () => Promise<unknown>;
 }
 
 const PassportContext = createContext<PassportContextType>({
@@ -24,187 +30,74 @@ const PassportContext = createContext<PassportContextType>({
     loginWithGoogle: async () => null,
     logout: async () => {},
     passportInstance: null,
+    getEthereumProvider: async () => { throw new Error('No wallet connected'); },
 });
 
 export const usePassport = () => useContext(PassportContext);
 
-interface PassportProviderProps {
-    children: ReactNode;
-}
+// ─── Inner bridge (phải nằm bên trong PrivyProvider) ─────────────────────────
 
-export function PassportProvider({ children }: PassportProviderProps) {
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    const [walletAddress, setWalletAddress] = useState<string | null>(null);
-    const [userEmail, setUserEmail] = useState<string | null>(null);
-    const [passportInst, setPassportInst] = useState<passport.Passport | null>(null);
+function PrivyContextBridge({ children }: { children: ReactNode }) {
+    const { ready, authenticated, user, login, logout } = usePrivy();
+    const { wallets } = useWallets();
 
-    // Initialize passport on mount
-    useEffect(() => {
-        const instance = getPassportInstance();
-        setPassportInst(instance);
+    // Ưu tiên embedded wallet, fallback sang wallet ngoài (MetaMask, v.v.)
+    const activeWallet =
+        wallets.find((w) => w.walletClientType === 'privy') ?? wallets[0] ?? null;
 
-        // Check if user is already logged in
-        const checkExistingSession = async () => {
-            if (!instance) {
-                setIsLoading(false);
-                return;
-            }
+    const walletAddress = activeWallet?.address ?? null;
+    const userEmail = user?.email?.address ?? null;
 
-            try {
-                // First check if we have an ID token (indicates existing session)
-                const idToken = await instance.getIdToken();
+    const handleLogin = async (): Promise<string | null> => {
+        // Privy mở modal, resolve khi modal đóng (login xong hoặc bị tắt)
+        login();
+        // Sau login, wallets được populate qua useWallets reactive
+        return activeWallet?.address ?? null;
+    };
 
-                if (idToken) {
-                    // Get user info
-                    try {
-                        const userInfo = await instance.getUserInfo();
-                        if (userInfo) {
-                            setUserEmail(userInfo.email || null);
-                        }
-                    } catch {
-                        // User info not available
-                    }
+    const handleLogout = async (): Promise<void> => {
+        await logout();
+    };
 
-                    // Connect EVM to get wallet address (uses cached session)
-                    try {
-                        const provider = await instance.connectEvm();
-                        const accounts = await provider.request({ method: 'eth_accounts' });
-
-                        if (accounts && accounts.length > 0) {
-                            setWalletAddress(accounts[0]);
-                            setIsLoggedIn(true);
-                        } else {
-                            // Try requesting accounts
-                            const requestedAccounts = await provider.request({ method: 'eth_requestAccounts' });
-                            if (requestedAccounts && requestedAccounts.length > 0) {
-                                setWalletAddress(requestedAccounts[0]);
-                                setIsLoggedIn(true);
-                            }
-                        }
-                    } catch (evmError) {
-                    }
-                } else {
-                }
-            } catch (error) {
-                // User not logged in - this is expected
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        checkExistingSession();
-    }, []);
-
-    // Standard login (shows all options)
-    const login = useCallback(async (): Promise<string | null> => {
-        if (!passportInst) {
-            return null;
-        }
-
-        try {
-            setIsLoading(true);
-
-            // Connect EVM and request accounts
-            const provider = await passportInst.connectEvm();
-            const accounts = await provider.request({ method: 'eth_requestAccounts' });
-
-            if (accounts && accounts.length > 0) {
-                const address = accounts[0];
-                setWalletAddress(address);
-                setIsLoggedIn(true);
-
-                // Get user info for email
-                try {
-                    const userInfo = await passportInst.getUserInfo();
-                    setUserEmail(userInfo?.email || null);
-                } catch {
-                    // Email not available
-                }
-
-                return address;
-            }
-
-            return null;
-        } catch (error) {
-            return null;
-        } finally {
-            setIsLoading(false);
-        }
-    }, [passportInst]);
-
-    // Direct Google login
-    const loginWithGoogle = useCallback(async (): Promise<string | null> => {
-        if (!passportInst) {
-            return null;
-        }
-
-        try {
-            setIsLoading(true);
-
-            // Login with Google directly
-            await passportInst.login({
-                useCachedSession: false,
-            });
-
-            // After login, connect EVM to get wallet address
-            const provider = await passportInst.connectEvm();
-            const accounts = await provider.request({ method: 'eth_requestAccounts' });
-
-            if (accounts && accounts.length > 0) {
-                const address = accounts[0];
-                setWalletAddress(address);
-                setIsLoggedIn(true);
-
-                // Get user info for email
-                try {
-                    const userInfo = await passportInst.getUserInfo();
-                    setUserEmail(userInfo?.email || null);
-                } catch {
-                    // Email not available
-                }
-
-                return address;
-            }
-
-            return null;
-        } catch (error) {
-            return null;
-        } finally {
-            setIsLoading(false);
-        }
-    }, [passportInst]);
-
-    // Logout
-    const logout = useCallback(async (): Promise<void> => {
-        if (!passportInst) {
-            return;
-        }
-
-        try {
-            await passportInst.logout();
-        } catch (error) {
-        } finally {
-            setIsLoggedIn(false);
-            setWalletAddress(null);
-            setUserEmail(null);
-        }
-    }, [passportInst]);
+    const getEthereumProvider = async (): Promise<unknown> => {
+        if (!activeWallet) throw new Error('No wallet connected');
+        return activeWallet.getEthereumProvider();
+    };
 
     const value: PassportContextType = {
-        isLoggedIn,
-        isLoading,
+        isLoggedIn: authenticated,
+        isLoading: !ready,
         walletAddress,
         userEmail,
-        login,
-        loginWithGoogle,
-        logout,
-        passportInstance: passportInst,
+        login: handleLogin,
+        loginWithGoogle: handleLogin, // Privy hiện modal, user chọn Google
+        logout: handleLogout,
+        passportInstance: null,
+        getEthereumProvider,
     };
 
     return (
         <PassportContext.Provider value={value}>
             {children}
         </PassportContext.Provider>
+    );
+}
+
+// ─── Public Provider ──────────────────────────────────────────────────────────
+
+export function PassportProvider({ children }: { children: ReactNode }) {
+    if (!PRIVY_APP_ID) {
+        console.warn('[Privy] NEXT_PUBLIC_PRIVY_APP_ID is not set');
+    }
+
+    return (
+        <PrivyProvider
+            appId={PRIVY_APP_ID}
+            config={privyConfig}
+        >
+            <PrivyContextBridge>
+                {children}
+            </PrivyContextBridge>
+        </PrivyProvider>
     );
 }
