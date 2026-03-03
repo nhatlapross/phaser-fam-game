@@ -115,7 +115,7 @@ function App() {
     const [registrationAddress, setRegistrationAddress] = useState('');
 
     // Use Passport hooks instead of wagmi
-    const { isLoggedIn, isLoading, walletAddress, login, logout } = usePassport();
+    const { isLoggedIn, isLoading, walletAddress, login, logout, getEthereumProvider } = usePassport();
 
     const logoutRef = useRef(logout);
     useEffect(() => {
@@ -155,12 +155,23 @@ function App() {
             }
         };
 
+        // Bridge wallet provider to Phaser (for contract calls)
+        const handleRequestEthProvider = async () => {
+            try {
+                const provider = await getEthereumProvider();
+                EventBus.emit('eth-provider-response', provider);
+            } catch {
+                EventBus.emit('eth-provider-response', null);
+            }
+        };
+
         EventBus.on('check-wallet-connection', handleCheckConnection);
         EventBus.on('disconnect-wallet', handleDisconnectWallet);
         EventBus.on('current-scene-ready', handleSceneReady);
         EventBus.on('show-registration-form', handleShowRegistrationForm);
         EventBus.on('hide-registration-form', handleHideRegistrationForm);
         EventBus.on('request-login', handleRequestLogin);
+        EventBus.on('request-eth-provider', handleRequestEthProvider);
 
         return () => {
             EventBus.off('check-wallet-connection', handleCheckConnection);
@@ -169,8 +180,9 @@ function App() {
             EventBus.off('show-registration-form', handleShowRegistrationForm);
             EventBus.off('hide-registration-form', handleHideRegistrationForm);
             EventBus.off('request-login', handleRequestLogin);
+            EventBus.off('request-eth-provider', handleRequestEthProvider);
         };
-    }, [isLoggedIn, walletAddress, login]);
+    }, [isLoggedIn, walletAddress, login, getEthereumProvider]);
 
     useEffect(() => {
         if (isLoggedIn && walletAddress) {

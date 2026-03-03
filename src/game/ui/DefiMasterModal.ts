@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 import { DefiMasterService, DEFI_TOPICS } from '../DefiMasterService';
+import { ContractService } from '../ContractService';
 
 type DefiStep = 'ask' | 'loading' | 'answer';
 
@@ -18,6 +19,7 @@ export class DefiMasterModal {
     private answer: string = '';
     private displayedAnswer: string = '';
     private typingInterval: number | null = null;
+    private loadingMessage: string = '';
 
     // Styles
     private readonly COLORS = {
@@ -366,7 +368,18 @@ export class DefiMasterModal {
                 alert('Vui lòng nhập câu hỏi!');
                 return;
             }
+
+            // Intercept "register the agent" command
+            if (this.question.trim().toLowerCase() === 'register the agent') {
+                this.currentStep = 'loading';
+                this.loadingMessage = 'Registering agent on-chain...';
+                this.renderContent();
+                await this.handleRegisterAgent();
+                return;
+            }
+
             this.currentStep = 'loading';
+            this.loadingMessage = '';
             this.renderContent();
             await this.submitQuestion();
         });
@@ -400,7 +413,7 @@ export class DefiMasterModal {
         // Loading text
         const loadingText = document.createElement('p');
         loadingText.className = 'defi-glow-text';
-        loadingText.innerHTML = 'DeFi Master đang suy nghĩ...';
+        loadingText.innerHTML = this.loadingMessage || 'DeFi Master đang suy nghĩ...';
         Object.assign(loadingText.style, {
             color: this.COLORS.accent,
             fontSize: '16px',
@@ -432,7 +445,9 @@ export class DefiMasterModal {
 
         // Hint text
         const hint = document.createElement('p');
-        hint.innerText = 'Đang phân tích câu hỏi của bạn...';
+        hint.innerText = this.loadingMessage
+            ? 'Please confirm the transaction in your wallet...'
+            : 'Đang phân tích câu hỏi của bạn...';
         Object.assign(hint.style, {
             color: this.COLORS.textMuted,
             fontSize: '12px',
@@ -561,6 +576,32 @@ export class DefiMasterModal {
         } catch (error) {
             console.error('DefiMaster error:', error);
             this.answer = 'Không thể kết nối đến DeFi Master. Vui lòng thử lại sau!';
+            this.displayedAnswer = this.answer;
+            this.currentStep = 'answer';
+            this.renderContent();
+        }
+    }
+
+    private async handleRegisterAgent() {
+        try {
+            const result = await ContractService.registerAgent();
+
+            if (result.success) {
+                this.answer =
+                    `**Agent registered successfully!** 🎉\n\n` +
+                    (result.agentId ? `**Agent ID:** ${result.agentId}\n` : '') +
+                    `**TX Hash:** ${result.txHash}\n\n` +
+                    `Your agent identity has been recorded on Arbitrum Sepolia.`;
+            } else {
+                this.answer = `**Registration failed**\n\n${result.error || 'Unknown error'}`;
+            }
+
+            this.displayedAnswer = this.answer;
+            this.currentStep = 'answer';
+            this.renderContent();
+        } catch (error) {
+            console.error('Register agent error:', error);
+            this.answer = 'Failed to register agent. Please try again.';
             this.displayedAnswer = this.answer;
             this.currentStep = 'answer';
             this.renderContent();
