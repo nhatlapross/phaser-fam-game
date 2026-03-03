@@ -16,7 +16,7 @@ import { UserService } from '../UserService';
 import { useGameState } from '../hooks/useGameState';
 import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacterKey } from '../config/CharacterConfig';
 import { DynamicShadow } from '../objects/DynamicShadow';
-import { ClassroomChatService, LessonResponse } from '../ClassroomChatService';
+import { ClassroomChatService, LessonResponse, LessonSummary } from '../ClassroomChatService';
 import { marked } from 'marked';
 
 /**
@@ -91,6 +91,7 @@ export class ClassRoom extends Scene {
     private activeNpcKey: string = '';
     private readonly NPC_INTERACTION_DISTANCE = 40;
     private lessonContentElement: HTMLDivElement | null = null;
+    private lessonListElement: HTMLDivElement | null = null;
 
     // Managers
     private soundManager!: SoundManager;
@@ -472,7 +473,11 @@ export class ClassRoom extends Scene {
 
             // Monitor dimensions
             const monW = 560, monH = 380;
-            const monX = W / 2, monY = H / 2 - 15;
+            const listPanelW = 200;
+            const totalW = monW + listPanelW + 10; // 10px gap
+            const startX = (W - totalW) / 2;
+            const monX = startX + listPanelW + 10 + monW / 2;
+            const monY = H / 2 - 15;
 
             // Bezel
             const bezel = this.add.graphics();
@@ -693,6 +698,14 @@ export class ClassRoom extends Scene {
                     border: 1px solid #003311; padding: 3px 6px; font-size: 0.9em;
                 }
                 .lesson-md th { background: #0a1a0a; color: #66ff66; }
+                .lesson-md img {
+                    max-width: 100%;
+                    height: auto;
+                    border: 1px solid #003311;
+                    border-radius: 4px;
+                    margin: 6px 0;
+                    display: block;
+                }
             `;
             this.lessonContentElement.appendChild(lessonStyle);
             document.body.appendChild(this.lessonContentElement);
@@ -756,13 +769,179 @@ export class ClassRoom extends Scene {
             btnBg.on('pointerout', () => btnBg.setFillStyle(0x5D4037));
             btnBg.on('pointerdown', () => this.stopStudying());
 
+            // ─── Lesson List Sidebar (left of monitor) ───────────────────────────
+            const lpX = startX;
+            const lpY = monY - monH / 2;
+            const lpW = listPanelW;
+            const lpH = monH;
+
+            // Panel background
+            const listBg = this.add.graphics();
+            listBg.fillStyle(0x111111, 0.95);
+            listBg.fillRoundedRect(lpX, lpY, lpW, lpH, 8);
+            listBg.lineStyle(1, 0x333333, 1);
+            listBg.strokeRoundedRect(lpX, lpY, lpW, lpH, 8);
+            container.add(listBg);
+
+            // Panel header
+            const listHeader = this.add.text(lpX + lpW / 2, lpY + 16, '📚 Lessons', {
+                fontSize: '11px', fontFamily: 'monospace', color: '#66ff66', resolution: 2,
+                fontStyle: 'bold',
+            }).setOrigin(0.5);
+            container.add(listHeader);
+
+            const listSep = this.add.graphics();
+            listSep.lineStyle(1, 0x003311, 1);
+            listSep.lineBetween(lpX + 8, lpY + 30, lpX + lpW - 8, lpY + 30);
+            container.add(listSep);
+
+            // Create HTML lesson list element
+            const canvasEl = this.game.canvas;
+            const canvasRect2 = canvasEl.getBoundingClientRect();
+            const scaleXR2 = canvasRect2.width / W;
+            const scaleYR2 = canvasRect2.height / H;
+
+            this.lessonListElement = document.createElement('div');
+            this.lessonListElement.style.cssText = `
+                position: fixed;
+                left: ${canvasRect2.left + (lpX + 6) * scaleXR2}px;
+                top: ${canvasRect2.top + (lpY + 34) * scaleYR2}px;
+                width: ${(lpW - 12) * scaleXR2}px;
+                height: ${(lpH - 42) * scaleYR2}px;
+                overflow-y: auto;
+                padding: 4px;
+                box-sizing: border-box;
+                z-index: 10000;
+                font-family: monospace;
+                font-size: ${Math.max(10, 11 * scaleYR2)}px;
+                color: #33ff33;
+                background: transparent;
+                scrollbar-width: thin;
+                scrollbar-color: #006622 transparent;
+            `;
+
+            const listStyle = document.createElement('style');
+            listStyle.textContent = `
+                .lesson-list-item {
+                    padding: 6px 8px;
+                    margin: 2px 0;
+                    border: 1px solid #002211;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    transition: background 0.15s, border-color 0.15s;
+                    background: #0a0a0a;
+                }
+                .lesson-list-item:hover {
+                    background: #0a1a0a;
+                    border-color: #006622;
+                }
+                .lesson-list-item.active {
+                    background: #001a0a;
+                    border-color: #33ff33;
+                    box-shadow: 0 0 6px rgba(51, 255, 51, 0.15);
+                }
+                .lesson-list-item .lesson-title {
+                    font-size: 0.92em;
+                    color: #33ff33;
+                    line-height: 1.3;
+                    word-break: break-word;
+                }
+                .lesson-list-item .lesson-date {
+                    font-size: 0.75em;
+                    color: #006622;
+                    margin-top: 2px;
+                }
+                .lesson-list-item .lesson-badge {
+                    display: inline-block;
+                    font-size: 0.7em;
+                    color: #000;
+                    background: #33ff33;
+                    padding: 1px 5px;
+                    border-radius: 3px;
+                    margin-bottom: 3px;
+                    font-weight: bold;
+                }
+                .lesson-list-loading {
+                    text-align: center;
+                    color: #006622;
+                    padding: 20px 0;
+                    font-size: 0.9em;
+                }
+            `;
+            this.lessonListElement.appendChild(listStyle);
+
+            // Loading state
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'lesson-list-loading';
+            loadingDiv.textContent = '> loading...';
+            this.lessonListElement.appendChild(loadingDiv);
+
+            document.body.appendChild(this.lessonListElement);
+
+            // Helper: load a lesson by slug and update screens
+            const loadLesson = (slug: string) => {
+                // Reset screens
+                currentScreen = 1;
+                showScreen(1);
+                updateNav();
+                prompt1.setText('> loading...');
+                titleText.setText('');
+                tocText.setText('');
+                cursor.setPosition(sX + 10, sY + 68);
+
+                // Reset scroll positions
+                tocScrollY = 0;
+                scrollContent.setY(0);
+                if (this.lessonContentElement) {
+                    this.lessonContentElement.scrollTop = 0;
+                    const styleTag = this.lessonContentElement.querySelector('style');
+                    const styleHTML = styleTag ? styleTag.outerHTML : '';
+                    this.lessonContentElement.innerHTML = styleHTML + '<div class="lesson-md" style="text-align:center;padding:20px;color:#006622;">Loading...</div>';
+                }
+
+                this.chatService.getLessonBySlug(slug).then((lesson: LessonResponse) => {
+                    if (!this.isSitting) return;
+                    if (lesson.success && lesson.toc && lesson.content) {
+                        const fileName = `${lesson.slug || 'lesson'}.md`;
+                        prompt1.setText(`> ${fileName}`);
+                        prompt2.setText(`> ${fileName}`);
+                        titleText.setText(lesson.title || 'Lesson');
+
+                        const tocLines = lesson.toc.map((item: string) => `• ${item}`);
+                        const fullTocText = tocLines.join('\n');
+                        tocText.setText(fullTocText);
+                        cursor.setPosition(sX + 10, tocText.y + tocText.height + 6);
+
+                        if (this.lessonContentElement) {
+                            const styleTag = this.lessonContentElement.querySelector('style');
+                            const styleHTML = styleTag ? styleTag.outerHTML : '';
+                            const contentHTML = marked.parse(lesson.content, { async: false, breaks: true }) as string;
+                            this.lessonContentElement.innerHTML = styleHTML + `<div class="lesson-md">${contentHTML}</div>`;
+                        }
+                    } else {
+                        prompt1.setText('> error');
+                        tocText.setText(lesson.error || 'Could not load lesson.');
+                        cursor.setPosition(sX + 10, tocText.y + tocText.height + 6);
+                    }
+                });
+
+                // Update active state in list
+                if (this.lessonListElement) {
+                    this.lessonListElement.querySelectorAll('.lesson-list-item').forEach((el) => {
+                        el.classList.toggle('active', (el as HTMLElement).dataset.slug === slug);
+                    });
+                }
+            };
+
             this.studyingOverlay = container;
 
             // Fetch lesson from API and populate screens
+            let currentLessonSlug = '';
             this.chatService.getLatestLesson().then((lesson: LessonResponse) => {
                 if (!this.isSitting) return; // user already stood up
 
                 if (lesson.success && lesson.toc && lesson.content) {
+                    currentLessonSlug = lesson.slug || '';
                     const fileName = `${lesson.slug || 'lesson'}.md`;
                     prompt1.setText(`> ${fileName}`);
                     prompt2.setText(`> ${fileName}`);
@@ -834,6 +1013,98 @@ export class ClassRoom extends Scene {
                     cursor.setPosition(sX + 10, sY + 28 + tocText.height + 6);
                 }
             });
+
+            // Fetch lesson list with pagination and populate sidebar
+            let lessonPage = 1;
+            let lessonTotalPages = 1;
+            let isLoadingMore = false;
+            const LESSONS_PER_PAGE = 10;
+
+            const renderLessonItems = (lessons: LessonSummary[], isFirstPage: boolean) => {
+                if (!this.lessonListElement) return;
+
+                lessons.forEach((item: LessonSummary, index: number) => {
+                    const div = document.createElement('div');
+                    div.className = 'lesson-list-item';
+                    // First item on first page = latest, mark active by default
+                    if (isFirstPage && index === 0) {
+                        div.classList.add('active');
+                    }
+                    div.dataset.slug = item.slug;
+
+                    let html = '';
+                    if (isFirstPage && index === 0) {
+                        html += '<span class="lesson-badge">LATEST</span><br>';
+                    }
+                    html += `<span class="lesson-title">${item.title}</span>`;
+                    if (item.updatedAt) {
+                        const date = new Date(item.updatedAt);
+                        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        html += `<div class="lesson-date">${dateStr}</div>`;
+                    }
+                    div.innerHTML = html;
+
+                    div.addEventListener('click', () => {
+                        loadLesson(item.slug);
+                    });
+
+                    this.lessonListElement!.appendChild(div);
+                });
+            };
+
+            const loadMoreLessons = () => {
+                if (isLoadingMore || lessonPage >= lessonTotalPages || !this.lessonListElement) return;
+                isLoadingMore = true;
+
+                // Show loading indicator at bottom
+                const loader = document.createElement('div');
+                loader.className = 'lesson-list-loading';
+                loader.textContent = '> loading...';
+                this.lessonListElement.appendChild(loader);
+
+                lessonPage++;
+                this.chatService.getLessons(lessonPage, LESSONS_PER_PAGE).then((result) => {
+                    if (!this.isSitting || !this.lessonListElement) return;
+                    loader.remove();
+                    isLoadingMore = false;
+
+                    if (result.success && result.lessons && result.lessons.length > 0) {
+                        if (result.pagination) {
+                            lessonTotalPages = result.pagination.totalPages;
+                        }
+                        renderLessonItems(result.lessons, false);
+                    }
+                });
+            };
+
+            // Scroll-to-bottom triggers load more
+            this.lessonListElement.addEventListener('scroll', () => {
+                if (!this.lessonListElement) return;
+                const el = this.lessonListElement;
+                const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
+                if (nearBottom) loadMoreLessons();
+            });
+
+            // Initial fetch
+            this.chatService.getLessons(1, LESSONS_PER_PAGE).then((result) => {
+                if (!this.isSitting || !this.lessonListElement) return;
+
+                // Remove loading indicator
+                const loadingEl = this.lessonListElement.querySelector('.lesson-list-loading');
+                if (loadingEl) loadingEl.remove();
+
+                if (result.success && result.lessons && result.lessons.length > 0) {
+                    if (result.pagination) {
+                        lessonTotalPages = result.pagination.totalPages;
+                    }
+                    renderLessonItems(result.lessons, true);
+                } else {
+                    const emptyDiv = document.createElement('div');
+                    emptyDiv.style.cssText = 'text-align:center;color:#006622;padding:20px 0;font-size:0.9em;';
+                    emptyDiv.textContent = result.error || 'No lessons available.';
+                    this.lessonListElement.appendChild(emptyDiv);
+                }
+            });
         }
 
     /** Removes the studying overlay and restores player movement. */
@@ -847,6 +1118,10 @@ export class ClassRoom extends Scene {
             if (this.lessonContentElement) {
                 this.lessonContentElement.remove();
                 this.lessonContentElement = null;
+            }
+            if (this.lessonListElement) {
+                this.lessonListElement.remove();
+                this.lessonListElement = null;
             }
             this.isSitting = false;
         }
