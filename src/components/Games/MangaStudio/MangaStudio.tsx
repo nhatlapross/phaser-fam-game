@@ -5,13 +5,24 @@ import {
     MangaStyle, 
     MangaStory, 
     MangaPage,
-    MANGA_STYLES 
+    ComicFormat,
+    COMIC_FORMATS,
+    getGenresByFormat,
+    GenreInfo,
 } from '@/services/geminiService';
 import { uploadToShelby, listShelbyImages, ShelbyBlob } from '@/services/shelbyService';
 
-type View = 'home' | 'create' | 'gallery' | 'viewer';
+type View = 'home' | 'select-format' | 'create' | 'gallery' | 'viewer';
 
-// Separate MangaViewer component to properly use useState
+// Helper to stop key propagation to Phaser
+const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.nativeEvent && typeof e.nativeEvent.stopImmediatePropagation === 'function') {
+        e.nativeEvent.stopImmediatePropagation();
+    }
+};
+
+// Separate MangaViewer component
 interface MangaViewerProps {
     story: MangaStory;
     username: string;
@@ -27,16 +38,15 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
     const [uploadFilename, setUploadFilename] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string; url?: string } | null>(null);
-    const [uploadedPages, setUploadedPages] = useState<Set<string>>(new Set()); // Track uploaded pages
+    const [uploadedPages, setUploadedPages] = useState<Set<string>>(new Set());
     const currentPage = story.pages[pageIndex];
     const isCurrentPageUploaded = uploadedPages.has(currentPage.id);
 
-    // Hiệu ứng vẽ từng phần khi chuyển trang hoặc load lần đầu
     React.useEffect(() => {
         setIsRevealing(true);
         setRevealProgress(0);
         
-        const duration = 2000; // 2 giây
+        const duration = 2000;
         const steps = 50;
         const stepTime = duration / steps;
         let currentStep = 0;
@@ -60,7 +70,6 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
         setIsUploading(true);
         setUploadResult(null);
         
-        // Add extension if not present
         let filename = uploadFilename.trim();
         if (!filename.match(/\.(png|jpg|jpeg)$/i)) {
             filename += '.png';
@@ -70,11 +79,11 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
         
         setIsUploading(false);
         if (result.success) {
-            setUploadedPages(prev => new Set(prev).add(currentPage.id)); // Mark as uploaded
+            setUploadedPages(prev => new Set(prev).add(currentPage.id));
             setUploadResult({ 
                 success: true, 
                 message: 'Uploaded successfully!',
-                url: result.blobUrl 
+                url: result.explorerUrl 
             });
         } else {
             setUploadResult({ 
@@ -90,7 +99,6 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
                 {story.title}
             </h3>
 
-            {/* Manga Image với hiệu ứng reveal */}
             <div style={{
                 width: '100%',
                 maxWidth: '350px',
@@ -104,14 +112,9 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
                 <img
                     src={currentPage.imageBase64}
                     alt={`Page ${pageIndex + 1}`}
-                    style={{ 
-                        width: '100%', 
-                        height: '100%', 
-                        objectFit: 'contain',
-                    }}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
                 
-                {/* Overlay che ảnh - reveal từ trên xuống */}
                 {isRevealing && (
                     <div style={{
                         position: 'absolute',
@@ -125,7 +128,6 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
                     }} />
                 )}
                 
-                {/* Hiệu ứng bút vẽ */}
                 {isRevealing && (
                     <div style={{
                         position: 'absolute',
@@ -142,7 +144,6 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
                 )}
             </div>
             
-            {/* Progress bar khi đang reveal */}
             {isRevealing && (
                 <div style={{
                     width: '100%',
@@ -161,7 +162,6 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
                 </div>
             )}
 
-            {/* Page Navigation */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <button
                     onClick={() => setPageIndex(Math.max(0, pageIndex - 1))}
@@ -182,7 +182,6 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
                 </button>
             </div>
 
-            {/* Actions */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
                 <button onClick={onContinue} disabled={isRevealing} style={{...buttonStyle, opacity: isRevealing ? 0.5 : 1}}>
                     ➕ Add Page
@@ -203,14 +202,10 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
                 </button>
             </div>
 
-            {/* Upload Modal */}
             {showUploadModal && (
                 <div style={{
                     position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
+                    top: 0, left: 0, right: 0, bottom: 0,
                     background: 'rgba(0,0,0,0.8)',
                     display: 'flex',
                     alignItems: 'center',
@@ -237,19 +232,9 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
                                 type="text"
                                 value={uploadFilename}
                                 onChange={(e) => setUploadFilename(e.target.value)}
-                                placeholder="my-manga-page"
-                                style={{
-                                    width: '100%',
-                                    background: '#1a1a2e',
-                                    border: '2px solid #5D4037',
-                                    borderRadius: '6px',
-                                    padding: '10px',
-                                    color: 'white',
-                                    fontFamily: 'PixelFont, Arial, sans-serif',
-                                    fontSize: '12px',
-                                    outline: 'none',
-                                    boxSizing: 'border-box',
-                                }}
+                                onKeyDown={handleInputKeyDown}
+                                placeholder="my-comic-page"
+                                style={inputStyle}
                             />
                             <div style={{ color: '#888', fontSize: '10px', marginTop: '4px' }}>
                                 Will be saved as: {username}/images/{uploadFilename || 'filename'}.png
@@ -304,7 +289,6 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
                 </div>
             )}
             
-            {/* CSS Animation cho bút vẽ */}
             <style>{`
                 @keyframes pencilWiggle {
                     0%, 100% { transform: translate(-50%, -50%) rotate(-5deg); }
@@ -317,7 +301,9 @@ const MangaViewer: React.FC<MangaViewerProps> = ({ story, username, onContinue, 
 
 const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }) => {
     const [view, setView] = useState<View>('home');
-    const [selectedStyle, setSelectedStyle] = useState<MangaStyle>('shounen');
+    const [selectedFormat, setSelectedFormat] = useState<ComicFormat>('manhwa');
+    const [selectedGenre, setSelectedGenre] = useState<MangaStyle>('action');
+    const [availableGenres, setAvailableGenres] = useState<GenreInfo[]>(getGenresByFormat('manhwa'));
     const [characterImage, setCharacterImage] = useState<string | null>(null);
     const [characterDesc, setCharacterDesc] = useState('');
     const [storyContext, setStoryContext] = useState('');
@@ -331,9 +317,17 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
 
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 500;
 
-    // Load images from Shelby
+    // Update genres when format changes
+    const handleFormatSelect = (format: ComicFormat) => {
+        setSelectedFormat(format);
+        const genres = getGenresByFormat(format);
+        setAvailableGenres(genres);
+        setSelectedGenre(genres[0].id as MangaStyle);
+        setView('create');
+    };
+
     const loadGallery = useCallback(async () => {
-        if (isLoadingGallery) return; // Prevent duplicate calls
+        if (isLoadingGallery) return;
         setIsLoadingGallery(true);
         const result = await listShelbyImages(username);
         if (result.success && result.blobs) {
@@ -342,7 +336,6 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
         setIsLoadingGallery(false);
     }, [username, isLoadingGallery]);
 
-    // Handle image upload
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -354,7 +347,6 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
         reader.readAsDataURL(file);
     };
 
-    // Generate manga page
     const handleGenerate = async () => {
         if (!storyContext.trim()) {
             setError('Please enter a story context');
@@ -369,7 +361,8 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
                 characterImage: characterImage || undefined,
                 characterDescription: characterDesc,
                 storyContext: storyContext,
-                style: selectedStyle,
+                style: selectedGenre,
+                format: selectedFormat,
                 previousPages: currentStory?.pages.map(p => p.imageBase64),
             });
 
@@ -391,25 +384,24 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
                 story = {
                     id: `story_${Date.now()}`,
                     title: storyContext.substring(0, 30) + '...',
-                    style: selectedStyle,
+                    style: selectedGenre,
+                    format: selectedFormat,
                     pages: [newPage],
                     createdAt: Date.now(),
                     updatedAt: Date.now(),
                 };
             }
 
-            // Story chỉ giữ trong memory, user upload lên Shelby khi muốn lưu
             setCurrentStory(story);
             setView('viewer');
-            setStoryContext(''); // Clear for next page
+            setStoryContext('');
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to generate manga');
+            setError(err instanceof Error ? err.message : 'Failed to generate');
         } finally {
             setIsGenerating(false);
         }
     };
 
-    // Continue story
     const handleContinue = () => {
         setView('create');
     };
@@ -419,17 +411,17 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
             <div style={{ fontSize: '48px', marginBottom: '8px' }}>🎨</div>
             <h2 style={{ color: '#FFD700', fontSize: '20px', margin: 0, textShadow: '2px 2px 0 #000' }}>
-                Manga Studio
+                Comic Studio
             </h2>
             <p style={{ color: '#AAA', fontSize: '12px', textAlign: 'center', margin: 0 }}>
-                Create your own manga with AI!
+                Create Comics, Manhwa, or Manhua with AI!
             </p>
             
             <button
-                onClick={() => { setCurrentStory(null); setView('create'); }}
+                onClick={() => { setCurrentStory(null); setView('select-format'); }}
                 style={buttonStyle}
             >
-                ✨ Create New Manga
+                ✨ Create New
             </button>
             
             <button
@@ -441,193 +433,233 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
         </div>
     );
 
-    // Render create view
-    const renderCreate = () => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+    // Render format selection view
+    const renderFormatSelection = () => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center', width: '100%' }}>
             <h3 style={{ color: '#FFD700', fontSize: '16px', margin: 0, textAlign: 'center' }}>
-                {currentStory ? `Continue: ${currentStory.title}` : 'Create New Manga'}
+                Choose Your Style
             </h3>
-
-            {/* Character Image Upload */}
-            {!currentStory && (
-                <div style={sectionStyle}>
-                    <label style={labelStyle}>Character Image (optional)</label>
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        style={{ display: 'none' }}
-                    />
-                    <div 
-                        onClick={() => fileInputRef.current?.click()}
+            <p style={{ color: '#AAA', fontSize: '11px', textAlign: 'center', margin: 0 }}>
+                Select the comic format you want to create
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+                {COMIC_FORMATS.map(format => (
+                    <button
+                        key={format.id}
+                        onClick={() => handleFormatSelect(format.id)}
                         style={{
-                            ...inputStyle,
-                            height: '80px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            backgroundImage: characterImage ? `url(${characterImage})` : 'none',
-                            backgroundSize: 'contain',
-                            backgroundPosition: 'center',
-                            backgroundRepeat: 'no-repeat',
+                            ...formatButtonStyle,
+                            border: selectedFormat === format.id ? '3px solid #FFD700' : '2px solid #5D4037',
                         }}
                     >
-                        {!characterImage && <span style={{ color: '#888' }}>📷 Tap to upload</span>}
-                    </div>
-                    {characterImage && (
-                        <button 
-                            onClick={() => setCharacterImage(null)}
-                            style={{ ...smallButtonStyle, background: '#c62828' }}
-                        >
-                            Remove Image
-                        </button>
-                    )}
-                </div>
-            )}
-
-            {/* Character Description */}
-            {!currentStory && (
-                <div style={sectionStyle}>
-                    <label style={labelStyle}>Character Description</label>
-                    <input
-                        type="text"
-                        value={characterDesc}
-                        onChange={(e) => setCharacterDesc(e.target.value)}
-                        placeholder="e.g., A young ninja with spiky hair..."
-                        style={inputStyle}
-                    />
-                </div>
-            )}
-
-            {/* Style Selection */}
-            {!currentStory && (
-                <div style={sectionStyle}>
-                    <label style={labelStyle}>Manga Style</label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {MANGA_STYLES.map(style => (
-                            <button
-                                key={style.id}
-                                onClick={() => setSelectedStyle(style.id)}
-                                style={{
-                                    ...smallButtonStyle,
-                                    background: selectedStyle === style.id ? '#7BC043' : '#3D1A1A',
-                                    border: selectedStyle === style.id ? '2px solid #5D9B3A' : '2px solid #5D4037',
-                                }}
-                            >
-                                {style.emoji} {style.name}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Story Context */}
-            <div style={sectionStyle}>
-                <label style={labelStyle}>
-                    {currentStory ? 'What happens next?' : 'Story / Scene'}
-                </label>
-                <textarea
-                    value={storyContext}
-                    onChange={(e) => setStoryContext(e.target.value)}
-                    placeholder={currentStory 
-                        ? "Describe what happens in the next page..."
-                        : "e.g., The hero discovers a hidden temple in the forest..."
-                    }
-                    style={{ ...inputStyle, height: '80px', resize: 'none' }}
-                />
+                        <div style={{ fontSize: '32px', marginBottom: '8px' }}>{format.emoji}</div>
+                        <div style={{ color: '#FFD700', fontSize: '14px', fontWeight: 'bold', marginBottom: '4px' }}>{format.name}</div>
+                        <div style={{ color: '#AAA', fontSize: '10px' }}>{format.description}</div>
+                    </button>
+                ))}
             </div>
-
-            {/* Error message */}
-            {error && (
-                <div style={{ color: '#ff5252', fontSize: '12px', textAlign: 'center' }}>
-                    {error}
-                </div>
-            )}
-
-            {/* Generate Button - centered with loading effect */}
-            <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column',
-                alignItems: 'center', 
-                gap: '12px',
-                marginTop: '8px',
-            }}>
-                {isGenerating && (
-                    <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '8px',
-                    }}>
-                        <div style={{
-                            fontSize: '32px',
-                            animation: 'pencilDraw 0.5s ease-in-out infinite',
-                        }}>
-                            ✏️
-                        </div>
-                        <div style={{
-                            color: '#FFD700',
-                            fontSize: '12px',
-                            textAlign: 'center',
-                        }}>
-                            AI is drawing your manga...
-                        </div>
-                        <div style={{
-                            width: '200px',
-                            height: '6px',
-                            background: '#3D1A1A',
-                            borderRadius: '3px',
-                            overflow: 'hidden',
-                        }}>
-                            <div style={{
-                                width: '30%',
-                                height: '100%',
-                                background: 'linear-gradient(90deg, #FFD700, #FFA500)',
-                                borderRadius: '3px',
-                                animation: 'loadingBar 1.5s ease-in-out infinite',
-                            }} />
-                        </div>
-                    </div>
-                )}
-                
-                <button
-                    onClick={handleGenerate}
-                    disabled={isGenerating}
-                    style={{
-                        ...buttonStyle,
-                        opacity: isGenerating ? 0.5 : 1,
-                        cursor: isGenerating ? 'not-allowed' : 'pointer',
-                    }}
-                >
-                    {isGenerating ? '⏳ Generating...' : '🎨 Generate Manga Page'}
-                </button>
-            </div>
-
-            {/* CSS Animations */}
-            <style>{`
-                @keyframes pencilDraw {
-                    0%, 100% { transform: rotate(-10deg) translateY(0); }
-                    25% { transform: rotate(5deg) translateY(-3px); }
-                    50% { transform: rotate(-5deg) translateY(0); }
-                    75% { transform: rotate(10deg) translateY(-3px); }
-                }
-                @keyframes loadingBar {
-                    0% { transform: translateX(-100%); }
-                    50% { transform: translateX(250%); }
-                    100% { transform: translateX(-100%); }
-                }
-            `}</style>
-
+            
             <button
-                onClick={() => setView(currentStory ? 'viewer' : 'home')}
-                style={{ ...smallButtonStyle, alignSelf: 'center' }}
+                onClick={() => setView('home')}
+                style={{ ...smallButtonStyle, marginTop: '8px' }}
             >
                 ← Back
             </button>
         </div>
     );
+
+    // Render create view
+    const renderCreate = () => {
+        const formatInfo = COMIC_FORMATS.find(f => f.id === selectedFormat);
+        
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+                <h3 style={{ color: '#FFD700', fontSize: '16px', margin: 0, textAlign: 'center' }}>
+                    {currentStory ? `Continue: ${currentStory.title}` : `Create ${formatInfo?.name || 'Comic'}`}
+                </h3>
+
+                {/* Character Image Upload */}
+                {!currentStory && (
+                    <div style={sectionStyle}>
+                        <label style={labelStyle}>Character Image (optional)</label>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                            style={{ display: 'none' }}
+                        />
+                        <div 
+                            onClick={() => fileInputRef.current?.click()}
+                            style={{
+                                ...inputStyle,
+                                height: '80px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                backgroundImage: characterImage ? `url(${characterImage})` : 'none',
+                                backgroundSize: 'contain',
+                                backgroundPosition: 'center',
+                                backgroundRepeat: 'no-repeat',
+                            }}
+                        >
+                            {!characterImage && <span style={{ color: '#888' }}>📷 Tap to upload</span>}
+                        </div>
+                        {characterImage && (
+                            <button 
+                                onClick={() => setCharacterImage(null)}
+                                style={{ ...smallButtonStyle, background: '#c62828' }}
+                            >
+                                Remove Image
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* Character Description */}
+                {!currentStory && (
+                    <div style={sectionStyle}>
+                        <label style={labelStyle}>Character Description</label>
+                        <input
+                            type="text"
+                            value={characterDesc}
+                            onChange={(e) => setCharacterDesc(e.target.value)}
+                            onKeyDown={handleInputKeyDown}
+                            placeholder="e.g., A young warrior with long black hair..."
+                            style={inputStyle}
+                        />
+                    </div>
+                )}
+
+                {/* Genre Selection */}
+                {!currentStory && (
+                    <div style={sectionStyle}>
+                        <label style={labelStyle}>Genre</label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {availableGenres.map(genre => (
+                                <button
+                                    key={genre.id}
+                                    onClick={() => setSelectedGenre(genre.id as MangaStyle)}
+                                    style={{
+                                        ...smallButtonStyle,
+                                        background: selectedGenre === genre.id ? '#7BC043' : '#3D1A1A',
+                                        border: selectedGenre === genre.id ? '2px solid #5D9B3A' : '2px solid #5D4037',
+                                    }}
+                                >
+                                    {genre.emoji} {genre.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Story Context */}
+                <div style={sectionStyle}>
+                    <label style={labelStyle}>
+                        {currentStory ? 'What happens next?' : 'Story / Scene'}
+                    </label>
+                    <textarea
+                        value={storyContext}
+                        onChange={(e) => setStoryContext(e.target.value)}
+                        onKeyDown={handleInputKeyDown}
+                        placeholder={currentStory 
+                            ? "Describe what happens in the next page..."
+                            : "e.g., The hero discovers a hidden power within..."
+                        }
+                        style={{ ...inputStyle, height: '80px', resize: 'none' }}
+                    />
+                </div>
+
+                {error && (
+                    <div style={{ color: '#ff5252', fontSize: '12px', textAlign: 'center' }}>
+                        {error}
+                    </div>
+                )}
+
+                {/* Generate Button */}
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    alignItems: 'center', 
+                    gap: '12px',
+                    marginTop: '8px',
+                }}>
+                    {isGenerating && (
+                        <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '8px',
+                        }}>
+                            <div style={{
+                                fontSize: '32px',
+                                animation: 'pencilDraw 0.5s ease-in-out infinite',
+                            }}>
+                                ✏️
+                            </div>
+                            <div style={{
+                                color: '#FFD700',
+                                fontSize: '12px',
+                                textAlign: 'center',
+                            }}>
+                                AI is drawing your {formatInfo?.name.toLowerCase()}...
+                            </div>
+                            <div style={{
+                                width: '200px',
+                                height: '6px',
+                                background: '#3D1A1A',
+                                borderRadius: '3px',
+                                overflow: 'hidden',
+                            }}>
+                                <div style={{
+                                    width: '30%',
+                                    height: '100%',
+                                    background: 'linear-gradient(90deg, #FFD700, #FFA500)',
+                                    borderRadius: '3px',
+                                    animation: 'loadingBar 1.5s ease-in-out infinite',
+                                }} />
+                            </div>
+                        </div>
+                    )}
+                    
+                    <button
+                        onClick={handleGenerate}
+                        disabled={isGenerating}
+                        style={{
+                            ...buttonStyle,
+                            opacity: isGenerating ? 0.5 : 1,
+                            cursor: isGenerating ? 'not-allowed' : 'pointer',
+                        }}
+                    >
+                        {isGenerating ? '⏳ Generating...' : `🎨 Generate ${formatInfo?.name || 'Comic'} Page`}
+                    </button>
+                </div>
+
+                <style>{`
+                    @keyframes pencilDraw {
+                        0%, 100% { transform: rotate(-10deg) translateY(0); }
+                        25% { transform: rotate(5deg) translateY(-3px); }
+                        50% { transform: rotate(-5deg) translateY(0); }
+                        75% { transform: rotate(10deg) translateY(-3px); }
+                    }
+                    @keyframes loadingBar {
+                        0% { transform: translateX(-100%); }
+                        50% { transform: translateX(250%); }
+                        100% { transform: translateX(-100%); }
+                    }
+                `}</style>
+
+                <button
+                    onClick={() => setView(currentStory ? 'viewer' : 'select-format')}
+                    style={{ ...smallButtonStyle, alignSelf: 'center' }}
+                >
+                    ← Back
+                </button>
+            </div>
+        );
+    };
 
     // Download image helper
     const handleDownload = async (blob: ShelbyBlob) => {
@@ -637,7 +669,7 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
             const url = window.URL.createObjectURL(data);
             const a = document.createElement('a');
             a.href = url;
-            a.download = blob.name.split('/').pop() || 'manga.png';
+            a.download = blob.name.split('/').pop() || 'comic.png';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -647,7 +679,7 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
         }
     };
 
-    // Render gallery view - images from Shelby
+    // Render gallery view
     const renderGallery = () => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
             <h3 style={{ color: '#FFD700', fontSize: '16px', margin: 0, textAlign: 'center' }}>
@@ -660,7 +692,7 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
                 </div>
             ) : galleryImages.length === 0 ? (
                 <div style={{ color: '#888', textAlign: 'center', padding: '20px' }}>
-                    No images uploaded yet. Create manga and upload to Shelby!
+                    No images uploaded yet. Create comics and upload to Shelby!
                 </div>
             ) : (
                 <div style={{ 
@@ -709,16 +741,12 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
                 </div>
             )}
 
-            {/* Image Preview Modal */}
             {previewImage && (
                 <div 
                     onClick={() => setPreviewImage(null)}
                     style={{
                         position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
+                        top: 0, left: 0, right: 0, bottom: 0,
                         background: 'rgba(0,0,0,0.9)',
                         display: 'flex',
                         flexDirection: 'column',
@@ -788,6 +816,7 @@ const MangaStudio: React.FC<{ username?: string }> = ({ username = 'anonymous' }
             fontFamily: 'PixelFont, Arial, sans-serif',
         }}>
             {view === 'home' && renderHome()}
+            {view === 'select-format' && renderFormatSelection()}
             {view === 'create' && renderCreate()}
             {view === 'gallery' && renderGallery()}
             {view === 'viewer' && currentStory && (
@@ -829,6 +858,19 @@ const smallButtonStyle: React.CSSProperties = {
     touchAction: 'manipulation',
 };
 
+const formatButtonStyle: React.CSSProperties = {
+    background: 'linear-gradient(135deg, #2D1B1B 0%, #3D2A2A 100%)',
+    color: 'white',
+    padding: '16px',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    fontFamily: 'PixelFont, Arial, sans-serif',
+    touchAction: 'manipulation',
+    width: '100%',
+    textAlign: 'center',
+    transition: 'all 0.2s ease',
+};
+
 const sectionStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
@@ -846,9 +888,14 @@ const inputStyle: React.CSSProperties = {
     borderRadius: '6px',
     padding: '10px',
     color: 'white',
-    fontFamily: 'PixelFont, Arial, sans-serif',
+    fontFamily: 'Arial, sans-serif',
     fontSize: '12px',
     outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+    textTransform: 'none', // Ensure mixed case
+    userSelect: 'text', // Allow text selection
+    WebkitUserSelect: 'text',
 };
 
 export default MangaStudio;

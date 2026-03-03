@@ -8,6 +8,10 @@ import { LobbySocketService } from '../LobbySocketService';
 import { LobbyChatPayload, UserLobbyState, LobbyStatePayload, UserJoinedPayload, UserLeftPayload, UserMovedPayload } from '../types/LobbyTypes';
 import { useGameState } from '../hooks/useGameState';
 import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacterKey, getCharacterByKey } from '../config/CharacterConfig';
+import { DynamicShadow } from '../objects/DynamicShadow';
+import { HoroscopeModal } from '../ui/HoroscopeModal';
+import { TarotModal } from '../ui/TarotModal';
+import { DefiMasterModal } from '../ui/DefiMasterModal';
 
 /**
  * Town Square Scene - A larger public space for social interactions
@@ -15,7 +19,12 @@ import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacte
  */
 export class TownSquare extends Scene {
     private player!: Phaser.Physics.Arcade.Sprite;
+    private playerShadow!: DynamicShadow;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+    private horoscopeModal!: HoroscopeModal;
+    private tarotModal!: TarotModal;
+    private defiMasterModal!: DefiMasterModal;
+
 
     // World configuration
     private readonly TILE_SIZE = 16;
@@ -71,11 +80,28 @@ export class TownSquare extends Scene {
     // Pet manager
     private petManager!: PetManager;
 
+    // Merlin NPCs
+    private merlins: Array<{
+        sprite: Phaser.GameObjects.Sprite;
+        shadow: DynamicShadow;
+        name: string;
+        label: Phaser.GameObjects.Container | null;
+        id: string;
+    }> = [];
+    private readonly MERLIN_LABEL_DISTANCE = 70;
+
+    // DeFi Master NPC
+    private defiMaster: {
+        sprite: Phaser.GameObjects.Image;
+        label: Phaser.GameObjects.Container | null;
+    } | null = null;
+
     // Game house manager
     private gameHouseManager!: GameHouseManager;
 
     // Manga studio manager
     private mangaStudioManager!: MangaStudioManager;
+    private fountainSprite!: Phaser.GameObjects.Sprite;
 
     // Toolbar items (same as FarmingGame)
     private toolbarItems: ToolbarItem[] = [
@@ -131,6 +157,7 @@ export class TownSquare extends Scene {
     // Multiplayer - other players
     private otherPlayers: Map<string, {
         sprite: Phaser.GameObjects.Sprite;
+        shadow: DynamicShadow;
         nameText: Phaser.GameObjects.Text;
         speechBubble: Phaser.GameObjects.Container | null;
         targetX: number;
@@ -153,6 +180,16 @@ export class TownSquare extends Scene {
 
     // House colliders for collision with player
     private houseColliders: Phaser.GameObjects.Rectangle[] = [];
+
+    // House info for proximity labels
+    private houses: Array<{
+        id: number;
+        x: number;
+        y: number;
+        name: string;
+        label: Phaser.GameObjects.Text | null;
+    }> = [];
+    private readonly HOUSE_LABEL_DISTANCE = 70; // pixels
 
     constructor() {
         super('TownSquare');
@@ -315,6 +352,8 @@ export class TownSquare extends Scene {
         // Play theme music
         this.soundManager.playRandomTheme();
 
+        this.events.on('postupdate', this.updatePlayerUI, this);
+
         EventBus.emit('current-scene-ready', this);
     }
 
@@ -448,6 +487,12 @@ export class TownSquare extends Scene {
         // Create fountain at center of map
         this.createFountain();
 
+        // Create Merlin NPCs in front of fountain
+        this.createMerlinNPCs();
+
+        // Create DeFi Master
+        this.createDeFiMaster();
+
         // Add trees, lamps, and chairs based on reference layout
         this.createTrees();
         this.createLamps();
@@ -464,6 +509,10 @@ export class TownSquare extends Scene {
         decoration.setOrigin(0.5, 0.85);  // Bottom-center origin for depth sorting
         decoration.setScale(scale);
         decoration.setDepth(y);
+
+        // Add shadow for decoration
+        new DynamicShadow(this, decoration, 0, 0);
+
         return decoration;
     }
 
@@ -574,10 +623,38 @@ export class TownSquare extends Scene {
         const y = tileY * this.TILE_SIZE;
         const scale = 0.3; // x2 size (was 0.15)
 
+        // House names
+        const houseNames: Record<number, string> = {
+            1: '🎮 Arcade',
+            2: '🎨 Comic Studio',
+            3: 'Dog House',
+            4: 'Bird House',
+            5: '🏫 Class Room',
+            6: 'Rabbit House',
+            7: 'Hamster House',
+            8: 'Turtle House',
+            9: 'Snake House',
+            10: 'Frog House',
+            11: 'Lizard House',
+            12: 'Spider House'
+        };
+
         const house = this.add.image(x, y, `house-${houseId}`);
         house.setOrigin(0.5, 0.85); // Bottom-center origin for depth sorting
         house.setScale(scale);
         house.setDepth(y);
+
+        // Add shadow for house
+        new DynamicShadow(this, house, 0, 0);
+
+        // Store house info for proximity labels
+        this.houses.push({
+            id: houseId,
+            x: x,
+            y: y - house.displayHeight / 2, // Center of house
+            name: houseNames[houseId] || `House ${houseId}`,
+            label: null
+        });
 
         // Create collision body for the base of the house (invisible)
         const collisionWidth = house.displayWidth * 0.6;
@@ -615,28 +692,23 @@ export class TownSquare extends Scene {
             });
         });
 
-        // Click handler - house #1 (Mouse House) opens game modal, house #2 (Cat House) opens manga studio
+        // Click handler
         house.on('pointerdown', () => {
             if (houseId === 1) {
-                // House #1 - Mouse House: Mini Games
+                // House #1 - Arcade: Mini Games
                 this.gameHouseManager.openGameModal(houseId);
             } else if (houseId === 2) {
-                // House #2 - Cat House: Manga Studio
+                // House #2 - Manga Studio
                 this.mangaStudioManager.openModal();
+            } else if (houseId === 5) {
+                // House #5 - Class Room
+                this.soundManager?.destroy();
+                this.cameras.main.fadeOut(500, 0, 0, 0);
+                this.time.delayedCall(500, () => {
+                    this.scene.start('ClassRoom');
+                });
             } else {
-                // Other houses: Coming soon with specific messages
-                const houseNames: Record<number, string> = {
-                    3: 'Dog House',
-                    4: 'Bird House',
-                    5: 'Fish House',
-                    6: 'Rabbit House',
-                    7: 'Hamster House',
-                    8: 'Turtle House',
-                    9: 'Snake House',
-                    10: 'Frog House',
-                    11: 'Lizard House',
-                    12: 'Spider House'
-                };
+                // Other houses: Coming soon
                 this.showToastMessage(`Coming soon...`, 0xf59e0b);
             }
         });
@@ -652,6 +724,100 @@ export class TownSquare extends Scene {
         });
     }
 
+    /**
+     * Update house labels based on player proximity
+     */
+    private updateHouseLabels() {
+        if (!this.player) return;
+
+        const playerX = this.player.x;
+        const playerY = this.player.y;
+
+        this.houses.forEach(house => {
+            const distance = Phaser.Math.Distance.Between(playerX, playerY, house.x, house.y);
+            
+            if (distance < this.HOUSE_LABEL_DISTANCE) {
+                // Player is near - show label
+                if (!house.label) {
+                    // Create bubble style label (similar to chat speech bubble)
+                    const container = this.add.container(house.x, house.y - 30);
+                    
+                    // Measure text first
+                    const tempText = this.add.text(0, 0, house.name, {
+                        fontSize: '6px',
+                        fontFamily: 'PixelFont',
+                        color: '#000000',
+                        resolution: 2
+                    });
+                    const textWidth = tempText.width;
+                    const textHeight = tempText.height;
+                    tempText.destroy();
+                    
+                    const bubbleWidth = textWidth + 8;
+                    const bubbleHeight = textHeight + 6;
+                    
+                    // Draw bubble background
+                    const bubbleGraphics = new Phaser.GameObjects.Graphics(this);
+                    bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                    bubbleGraphics.lineStyle(1, 0x555555, 1);
+                    bubbleGraphics.fillRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                    bubbleGraphics.strokeRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                    
+                    // Speech bubble tail
+                    bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                    bubbleGraphics.fillTriangle(-3, bubbleHeight / 2 - 1, 3, bubbleHeight / 2 - 1, 0, bubbleHeight / 2 + 4);
+                    bubbleGraphics.lineStyle(1, 0x555555, 1);
+                    bubbleGraphics.lineBetween(-3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                    bubbleGraphics.lineBetween(3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                    
+                    // Text
+                    const textObj = new Phaser.GameObjects.Text(this, 0, 0, house.name, {
+                        fontSize: '6px',
+                        fontFamily: 'PixelFont',
+                        color: '#000000',
+                        resolution: 2
+                    });
+                    textObj.setOrigin(0.5);
+                    
+                    container.add([bubbleGraphics, textObj]);
+                    container.setDepth(house.y + 100);
+                    
+                    // Ignore by UI camera
+                    if (this.uiCamera) {
+                        this.uiCamera.ignore(container);
+                    }
+                    
+                    // Store as any since we're using container
+                    house.label = container as unknown as Phaser.GameObjects.Text;
+                    
+                    // Fade in
+                    container.setAlpha(0);
+                    this.tweens.add({
+                        targets: container,
+                        alpha: 1,
+                        duration: 150,
+                        ease: 'Quad.easeOut'
+                    });
+                }
+            } else {
+                // Player is far - hide label
+                if (house.label) {
+                    const labelToRemove = house.label;
+                    house.label = null;
+                    
+                    // Fade out and destroy
+                    this.tweens.add({
+                        targets: labelToRemove,
+                        alpha: 0,
+                        duration: 150,
+                        ease: 'Quad.easeIn',
+                        onComplete: () => labelToRemove.destroy()
+                    });
+                }
+            }
+        });
+    }
+
     private createFountain() {
         const centerX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
         const centerY = this.MAP_HEIGHT / 2 * this.TILE_SIZE;
@@ -660,28 +826,402 @@ export class TownSquare extends Scene {
         if (!this.anims.exists('fountain-anim')) {
             this.anims.create({
                 key: 'fountain-anim',
-                frames: this.anims.generateFrameNumbers('fountain', { start: 0, end: 3 }),
+                frames: this.anims.generateFrameNumbers('fountain', { start: 0, end: 4 }),
                 frameRate: 3,  // Slower animation
                 repeat: -1
             });
         }
 
-        // Create fountain sprite at center (resized spritesheet 267x94, frame 53x94)
-        const fountain = this.add.sprite(centerX, centerY, 'fountain', 0);
-        fountain.setOrigin(0.5, 0.7);  // Adjust origin for bottom-center alignment
-        fountain.setDepth(centerY);
-        fountain.play('fountain-anim');
+        // Create fountain sprite at center (resized spritesheet 713x235, frame 142.6x235)
+        this.fountainSprite = this.add.sprite(centerX, centerY, 'fountain', 0);
+        this.fountainSprite.setOrigin(0.5, 0.7);
+        const frameW = 142.6;
+        const frameH = 235;
+        const desiredTilesWide = 4;
+        const scaleMultiplier = 1.4;
+        const displayW = Math.round(desiredTilesWide * this.TILE_SIZE * scaleMultiplier);
+        const displayH = Math.round(displayW * frameH / frameW);
+        this.fountainSprite.setDisplaySize(displayW, displayH);
+        this.fountainSprite.setDepth(centerY);
+        this.fountainSprite.play('fountain-anim');
+
+        // Initialize Horoscope Modal
+        this.horoscopeModal = new HoroscopeModal(this);
+        this.horoscopeModal.onClose = () => {
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
+            const merlin1 = this.merlins.find(m => m.id === 'merlin1')?.sprite;
+            if (merlin1) {
+                merlin1.play('merlin1-idle');
+            }
+        };
+
+        // Initialize Tarot Modal
+        this.tarotModal = new TarotModal(this);
+        this.tarotModal.onClose = () => {
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
+            const merlin2 = this.merlins.find(m => m.id === 'merlin2')?.sprite;
+            if (merlin2) {
+                merlin2.play('merlin2-idle');
+            }
+        };
+
+        // Initialize DeFi Master Modal
+        this.defiMasterModal = new DefiMasterModal(this);
+        this.defiMasterModal.onClose = () => {
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = true;
+            }
+        };
+
+        // Listen for currency updates from HoroscopeModal
+        EventBus.on('currency-updated', (data: { gold: number }) => {
+            const gameState = useGameState(this);
+            gameState.setGold(data.gold);
+            // Refresh profile UI
+            this.profileManager.createProfileUI();
+        });
+    }
+
+    private createMerlinNPCs() {
+        const centerX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
+        const centerY = this.MAP_HEIGHT / 2 * this.TILE_SIZE;
+        
+        // Position in front of fountain (higher Y)
+        // Fountain center is centerY. Fountain height is ~155px. Origin 0.7.
+        // So bottom is roughly centerY + (1-0.7)*155 = centerY + 46.
+        // We want NPCs in front of that.
+        const npcY = centerY + 120; // Increased distance from fountain
+        const spacing = 100; // Increased spacing
+
+        // Create animations
+        ['merlin1', 'merlin2'].forEach(key => {
+            if (!this.anims.exists(`${key}-idle`)) {
+                this.anims.create({
+                    key: `${key}-idle`,
+                    frames: this.anims.generateFrameNumbers(key, { start: 0, end: 1 }),
+                    frameRate: 2,
+                    repeat: -1
+                });
+            }
+            if (!this.anims.exists(`${key}-active`)) {
+                this.anims.create({
+                    key: `${key}-active`,
+                    frames: this.anims.generateFrameNumbers(key, { start: 2, end: 3 }),
+                    frameRate: 4,
+                    repeat: -1
+                });
+            }
+        });
+
+        // Clear existing merlins list
+        this.merlins = [];
+
+        // Merlin 1 (Astrology) - Left
+        const merlin1 = this.add.sprite(centerX - spacing, npcY, 'merlin1');
+        merlin1.setOrigin(0.5, 0.9); // Anchor at feet
+        // Increase scale slightly (player is around 1.0 but small spritesheet, merlin is large spritesheet)
+        // Player height on screen is ~40-50px. Merlin at 0.085 was ~40px. 
+        // User wants "larger than player a bit".
+        // Let's try 0.11 (approx 30% larger than 0.085)
+        merlin1.setScale(0.11); 
+        merlin1.setDepth(npcY);
+        merlin1.play('merlin1-idle');
+        merlin1.setInteractive({ useHandCursor: true });
+        
+        // Add DynamicShadow for Merlin 1
+        const shadow1 = new DynamicShadow(this, merlin1, 0, 2);
+        
+        merlin1.on('pointerdown', () => {
+            merlin1.play('merlin1-active');
+            this.showToastMessage('Đang thỉnh giáo Thầy Đồ...', 0x9C27B0);
+            
+            // Open Horoscope Modal
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = false;
+            }
+            this.horoscopeModal.show();
+        });
+
+        this.merlins.push({
+            sprite: merlin1,
+            shadow: shadow1,
+            name: "Ta có thể xem tiền vận, hậu vận của con!\nNhấn để xem bói.",
+            label: null,
+            id: 'merlin1'
+        });
+
+        // Merlin 2 (Tarot) - Right
+        const merlin2 = this.add.sprite(centerX + spacing, npcY, 'merlin2');
+        merlin2.setOrigin(0.5, 0.9);
+        merlin2.setScale(0.11); 
+        merlin2.setDepth(npcY);
+        merlin2.play('merlin2-idle');
+        merlin2.setInteractive({ useHandCursor: true });
+
+        // Add DynamicShadow for Merlin 2
+        const shadow2 = new DynamicShadow(this, merlin2, 0, 2);
+
+        merlin2.on('pointerdown', () => {
+            merlin2.play('merlin2-active');
+            this.showToastMessage('Đang xem bài Tarot...', 0xE91E63);
+            
+            // Open Tarot Modal
+            if (this.input.keyboard) {
+                this.input.keyboard.enabled = false;
+            }
+            this.tarotModal.show();
+        });
+
+        this.merlins.push({
+            sprite: merlin2,
+            shadow: shadow2,
+            name: "The cards reveal all truths.\nClick for a reading.",
+            label: null,
+            id: 'merlin2'
+        });
+    }
+
+    private createDeFiMaster() {
+        // Position: Above Shop (42, 32) and Factory (42, 28), near center (30, 30)
+        // Let's place it at 38, 24
+        const x = 38 * this.TILE_SIZE;
+        const y = 24 * this.TILE_SIZE;
+
+        // Create NPC (Single static asset replacing board + npc)
+        const npc = this.add.image(x, y, 'defi-npc');
+        npc.setOrigin(0.5, 0.9);
+        npc.setScale(0.08); // Increased size
+        npc.setDepth(y);
+        
+        // Make interactive
+        npc.setInteractive({ useHandCursor: true });
+        npc.on('pointerdown', () => {
+            // Check if player is close enough
+            if (this.player) {
+                const dist = Phaser.Math.Distance.Between(
+                    this.player.x, this.player.y,
+                    npc.x, npc.y
+                );
+                if (dist < this.HOUSE_LABEL_DISTANCE * 1.5) {   
+                    if (this.input.keyboard) {
+                        this.input.keyboard.enabled = false;
+                    }
+                    this.defiMasterModal.show();
+                } else {
+                    this.showToastMessage('Hãy đến gần DeFi Master hơn!', 0xFFD700);
+                }
+            }
+        });
+        
+        // Add shadow
+        new DynamicShadow(this, npc, 0, 0);
+
+        // Store reference
+        this.defiMaster = {
+            sprite: npc,
+            label: null
+        };
+    }
+
+    private updateDeFiLabel() {
+        if (!this.player || !this.defiMaster) return;
+
+        const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.defiMaster.sprite.x, this.defiMaster.sprite.y);
+        
+        if (distance < this.MERLIN_LABEL_DISTANCE) {
+            // Player is near - show label
+            if (!this.defiMaster.label) {
+                const name = "Come here and learn DeFi knowledge";
+                
+                // Create bubble style label
+                const container = this.add.container(this.defiMaster.sprite.x, this.defiMaster.sprite.y - 50); // Adjusted offset
+                
+                // Measure text first
+                const tempText = this.add.text(0, 0, name, {
+                    fontSize: '6px',
+                    fontFamily: 'PixelFont',
+                    color: '#000000',
+                    resolution: 2,
+                    align: 'center'
+                });
+                const textWidth = tempText.width;
+                const textHeight = tempText.height;
+                tempText.destroy();
+                
+                const bubbleWidth = textWidth + 10;
+                const bubbleHeight = textHeight + 8;
+                
+                // Draw bubble background
+                const bubbleGraphics = new Phaser.GameObjects.Graphics(this);
+                bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                bubbleGraphics.lineStyle(1, 0x555555, 1);
+                bubbleGraphics.fillRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                bubbleGraphics.strokeRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                
+                // Speech bubble tail
+                bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                bubbleGraphics.fillTriangle(-3, bubbleHeight / 2 - 1, 3, bubbleHeight / 2 - 1, 0, bubbleHeight / 2 + 4);
+                bubbleGraphics.lineStyle(1, 0x555555, 1);
+                bubbleGraphics.lineBetween(-3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                bubbleGraphics.lineBetween(3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                
+                // Text
+                const textObj = new Phaser.GameObjects.Text(this, 0, 0, name, {
+                    fontSize: '6px',
+                    fontFamily: 'PixelFont',
+                    color: '#000000',
+                    resolution: 2,
+                    align: 'center'
+                });
+                textObj.setOrigin(0.5);
+                
+                container.add([bubbleGraphics, textObj]);
+                container.setDepth(this.defiMaster.sprite.y + 100);
+                
+                // Ignore by UI camera
+                if (this.uiCamera) {
+                    this.uiCamera.ignore(container);
+                }
+                
+                this.defiMaster.label = container;
+                
+                // Fade in
+                container.setAlpha(0);
+                this.tweens.add({
+                    targets: container,
+                    alpha: 1,
+                    duration: 150,
+                    ease: 'Quad.easeOut'
+                });
+            }
+        } else {
+            // Player is far - hide label
+            if (this.defiMaster.label) {
+                const labelToRemove = this.defiMaster.label;
+                this.defiMaster.label = null;
+                
+                // Fade out and destroy
+                this.tweens.add({
+                    targets: labelToRemove,
+                    alpha: 0,
+                    duration: 150,
+                    ease: 'Quad.easeIn',
+                    onComplete: () => labelToRemove.destroy()
+                });
+            }
+        }
+    }
+
+    private updateMerlinLabels() {
+        if (!this.player) return;
+
+        const playerX = this.player.x;
+        const playerY = this.player.y;
+
+        this.merlins.forEach(merlin => {
+            const distance = Phaser.Math.Distance.Between(playerX, playerY, merlin.sprite.x, merlin.sprite.y);
+            
+            if (distance < this.MERLIN_LABEL_DISTANCE) {
+                // Player is near - show label
+                if (!merlin.label) {
+                    // Create bubble style label (similar to chat speech bubble)
+                    const container = this.add.container(merlin.sprite.x, merlin.sprite.y - 70); // Higher offset for larger sprite
+                    
+                    // Measure text first
+                    const tempText = this.add.text(0, 0, merlin.name, {
+                        fontSize: '6px',
+                        fontFamily: 'PixelFont',
+                        color: '#000000',
+                        resolution: 2,
+                        align: 'center'
+                    });
+                    const textWidth = tempText.width;
+                    const textHeight = tempText.height;
+                    tempText.destroy();
+                    
+                    const bubbleWidth = textWidth + 10;
+                    const bubbleHeight = textHeight + 8;
+                    
+                    // Draw bubble background
+                    const bubbleGraphics = new Phaser.GameObjects.Graphics(this);
+                    bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                    bubbleGraphics.lineStyle(1, 0x555555, 1);
+                    bubbleGraphics.fillRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                    bubbleGraphics.strokeRoundedRect(-bubbleWidth / 2, -bubbleHeight / 2, bubbleWidth, bubbleHeight, 3);
+                    
+                    // Speech bubble tail
+                    bubbleGraphics.fillStyle(0xFFFFFF, 1);
+                    bubbleGraphics.fillTriangle(-3, bubbleHeight / 2 - 1, 3, bubbleHeight / 2 - 1, 0, bubbleHeight / 2 + 4);
+                    bubbleGraphics.lineStyle(1, 0x555555, 1);
+                    bubbleGraphics.lineBetween(-3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                    bubbleGraphics.lineBetween(3, bubbleHeight / 2, 0, bubbleHeight / 2 + 4);
+                    
+                    // Text
+                    const textObj = new Phaser.GameObjects.Text(this, 0, 0, merlin.name, {
+                        fontSize: '6px',
+                        fontFamily: 'PixelFont',
+                        color: '#000000',
+                        resolution: 2,
+                        align: 'center'
+                    });
+                    textObj.setOrigin(0.5);
+                    
+                    container.add([bubbleGraphics, textObj]);
+                    container.setDepth(merlin.sprite.y + 100);
+                    
+                    // Ignore by UI camera
+                    if (this.uiCamera) {
+                        this.uiCamera.ignore(container);
+                    }
+                    
+                    // Store as any since we're using container
+                    merlin.label = container;
+                    
+                    // Fade in
+                    container.setAlpha(0);
+                    this.tweens.add({
+                        targets: container,
+                        alpha: 1,
+                        duration: 150,
+                        ease: 'Quad.easeOut'
+                    });
+                }
+            } else {
+                // Player is far - hide label
+                if (merlin.label) {
+                    const labelToRemove = merlin.label;
+                    merlin.label = null;
+                    
+                    // Fade out and destroy
+                    this.tweens.add({
+                        targets: labelToRemove,
+                        alpha: 0,
+                        duration: 150,
+                        ease: 'Quad.easeIn',
+                        onComplete: () => labelToRemove.destroy()
+                    });
+                }
+            }
+        });
     }
 
     private createPlayer() {
         let startX: number;
         let startY: number;
 
-        // Spawn at station if coming from travel, otherwise spawn at center
+        // Spawn position based on origin
         if (this.navigationData?.spawnAt === 'station') {
             // Spawn near station (offset to the right so player doesn't overlap station)
             startX = (this.STATION_X + 3) * this.TILE_SIZE;
             startY = this.STATION_Y * this.TILE_SIZE;
+        } else if (this.navigationData?.spawnAt === 'classroom') {
+            // Spawn in front of house #5 (ClassRoom) at tile (12, 24)
+            startX = 14 * this.TILE_SIZE;
+            startY = 26 * this.TILE_SIZE;
         } else {
             // Default spawn at center
             startX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
@@ -702,6 +1242,9 @@ export class TownSquare extends Scene {
         this.player.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         this.player.setCollideWorldBounds(false);
         this.player.setDepth(startY);
+
+        // Create player shadow using DynamicShadow
+        this.playerShadow = new DynamicShadow(this, this.player, 0, 2);
 
         // Create player animations for all characters
         this.createPlayerAnimations();
@@ -847,7 +1390,8 @@ export class TownSquare extends Scene {
             const enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
             enterKey.on('down', () => {
                 // Only open chat if not already open and not typing in input
-                if (!this.chatModalOpen && document.activeElement?.tagName !== 'INPUT') {
+                const tag = document.activeElement?.tagName;
+                if (!this.chatModalOpen && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
                     this.openChatModal();
                 }
             });
@@ -977,6 +1521,15 @@ export class TownSquare extends Scene {
         // Multiplayer: send position and update other players
         this.sendPlayerPosition();
         this.updateOtherPlayers();
+
+        // Update house proximity labels
+        this.updateHouseLabels();
+        
+        // Update Merlin proximity labels
+        this.updateMerlinLabels();
+        
+        // Update DeFi Master proximity label
+        this.updateDeFiLabel();
     }
 
     private handlePlayerMovement() {
@@ -1056,6 +1609,15 @@ export class TownSquare extends Scene {
         // Update player depth based on Y position
         this.player.setDepth(this.player.y);
 
+        // Constrain to land area
+        this.constrainPlayerToLand();
+    }
+
+    private updatePlayerUI() {
+        if (!this.player) return;
+
+        // Shadow updates automatically via preUpdate
+
         // Update player name position and depth
         if (this.playerNameText) {
             this.playerNameText.setPosition(this.player.x, this.player.y - 18);
@@ -1067,9 +1629,6 @@ export class TownSquare extends Scene {
             this.speechBubble.setPosition(this.player.x, this.player.y - 40);
             this.speechBubble.setDepth(this.player.y + 100);
         }
-
-        // Constrain to land area
-        this.constrainPlayerToLand();
     }
 
     private constrainPlayerToLand() {
@@ -1085,14 +1644,13 @@ export class TownSquare extends Scene {
         this.player.y = Phaser.Math.Clamp(this.player.y, minY, maxY);
 
         // Fountain collision zone (prevent player from walking into fountain base)
-        const fountainCenterX = this.MAP_WIDTH / 2 * this.TILE_SIZE;
-        const fountainCenterY = this.MAP_HEIGHT / 2 * this.TILE_SIZE;
-
-        // Fountain frame is 67x118 with origin (0.5, 0.7)
-        // Collision zone covers the base area where player shouldn't walk
-        const fountainHalfWidth = 35;  // Half width of collision zone
-        const fountainTop = fountainCenterY - 15;  // Top of collision (allows walking behind water spray)
-        const fountainBottom = fountainCenterY + 35;  // Bottom of collision
+        const fountainCenterX = this.fountainSprite ? this.fountainSprite.x : this.MAP_WIDTH / 2 * this.TILE_SIZE;
+        const fountainCenterY = this.fountainSprite ? this.fountainSprite.y : this.MAP_HEIGHT / 2 * this.TILE_SIZE;
+        const displayW = this.fountainSprite ? this.fountainSprite.displayWidth : 67;
+        const displayH = this.fountainSprite ? this.fountainSprite.displayHeight : 118;
+        const fountainHalfWidth = displayW * 0.522;
+        const fountainTop = fountainCenterY - displayH * 0.127;
+        const fountainBottom = fountainCenterY + displayH * 0.297;
 
         // Check if player is inside fountain collision zone
         if (this.player.x > fountainCenterX - fountainHalfWidth &&
@@ -1218,6 +1776,7 @@ export class TownSquare extends Scene {
         // Remove event listeners
         this.scale.off('resize', this.onResize, this);
         EventBus.off('gamedata:updated', this.onGameDataUpdated, this);
+        this.events.off('postupdate', this.updatePlayerUI, this);
 
         // Cleanup managers
         this.soundManager?.destroy();
@@ -1228,6 +1787,10 @@ export class TownSquare extends Scene {
         this.factoryManager?.destroy();
         this.petManager?.destroy();
         this.gameHouseManager?.destroy();
+
+        // Cleanup modals
+        this.horoscopeModal?.destroy();
+        this.tarotModal?.destroy();
 
         // Cleanup lobby socket - disconnect to prevent orphaned connections
         this.cleanupLobbySocketListeners();
@@ -1304,6 +1867,7 @@ export class TownSquare extends Scene {
         // Destroy all other player sprites and speech bubbles
         this.otherPlayers.forEach((player) => {
             player.sprite.destroy();
+            player.shadow.destroy();
             player.nameText.destroy();
             if (player.speechBubble) {
                 player.speechBubble.destroy(true);
@@ -1384,6 +1948,7 @@ export class TownSquare extends Scene {
         // Clear existing players first (in case of reconnection)
         this.otherPlayers.forEach((player, id) => {
             player.sprite.destroy();
+            player.shadow.destroy();
             player.nameText.destroy();
             this.otherPlayers.delete(id);
         });
@@ -1472,6 +2037,9 @@ export class TownSquare extends Scene {
         sprite.setScale(GAME_CONSTANTS.CHARACTER_SCALE); // Use shared character scale
         sprite.setDepth(user.y); // Depth based on Y position for proper layering
 
+        // Create shadow
+        const shadow = new DynamicShadow(this, sprite, 0, 2);
+
         // Play idle animation with correct character
         if (this.anims.exists(`${characterKey}-idle-down`)) {
             sprite.play(`${characterKey}-idle-down`);
@@ -1493,11 +2061,13 @@ export class TownSquare extends Scene {
         // UI camera should ignore game objects
         if (this.uiCamera) {
             this.uiCamera.ignore(sprite);
+            this.uiCamera.ignore(shadow);
             this.uiCamera.ignore(nameText);
         }
 
         this.otherPlayers.set(user.userId, {
             sprite,
+            shadow,
             nameText,
             speechBubble: null,
             targetX: user.x,
@@ -1517,6 +2087,7 @@ export class TownSquare extends Scene {
         const player = this.otherPlayers.get(userId);
         if (player) {
             player.sprite.destroy();
+            player.shadow.destroy();
             player.nameText.destroy();
             if (player.speechBubble) {
                 player.speechBubble.destroy(true);
@@ -1618,6 +2189,8 @@ export class TownSquare extends Scene {
             // Update depth based on Y position for proper layering
             player.sprite.setDepth(player.sprite.y);
             player.nameText.setDepth(player.sprite.y + 1);
+
+            // Shadow updates automatically via preUpdate
 
             // Update name text position
             player.nameText.x = player.sprite.x;
@@ -1803,6 +2376,22 @@ export class TownSquare extends Scene {
             const housePos = tileToMiniMap(pos.x, pos.y);
             const house = this.add.text(housePos.x, housePos.y, '🏠', houseStyle).setOrigin(0.5);
             this.miniMapContainer.add(house);
+        });
+
+        // NPCs (Merlins) - Mage emoji
+        // We can get their positions from the merlins array if they exist, or calculate them
+        // Since createMiniMap is called in create(), merlins might not be fully populated or we can just recalculate positions
+        // The merlins array is populated in createMerlinNPCs which is called in addDecorativeElements -> createTownSquareMap -> create()
+        // But createMiniMap is called AFTER createTownSquareMap in create().
+        // So this.merlins should be populated.
+        
+        this.merlins.forEach(merlin => {
+            const tileX = merlin.sprite.x / this.TILE_SIZE;
+            const tileY = merlin.sprite.y / this.TILE_SIZE;
+            const pos = tileToMiniMap(tileX, tileY);
+            
+            const npcIcon = this.add.text(pos.x, pos.y, '🧙‍♂️', emojiStyle).setOrigin(0.5);
+            this.miniMapContainer.add(npcIcon);
         });
 
         // Player avatar (use character avatar image)
@@ -2106,7 +2695,10 @@ export class TownSquare extends Scene {
             } else if (e.key === 'Escape') {
                 this.closeChatModal();
             }
+            e.stopPropagation();
         });
+        this.chatInputElement.addEventListener('keyup', (e) => e.stopPropagation());
+        this.chatInputElement.addEventListener('keypress', (e) => e.stopPropagation());
 
         // Add to DOM
         document.body.appendChild(this.chatInputElement);
@@ -2154,7 +2746,7 @@ export class TownSquare extends Scene {
                 width: ${screenWidth}px;
                 height: ${screenHeight}px;
                 padding: 4px 8px;
-                font-family: 'PixelFont', Arial, sans-serif;
+                font-family: 'Arial', sans-serif;
                 font-size: ${12 * scaleY}px;
                 background: #1A1A1A;
                 color: #FFFFFF;
@@ -2185,7 +2777,7 @@ export class TownSquare extends Scene {
                 width: ${screenWidth}px;
                 height: ${screenHeight}px;
                 padding: 4px 8px;
-                font-family: 'PixelFont', Arial, sans-serif;
+                font-family: 'Arial', sans-serif;
                 font-size: ${12 * scaleY}px;
                 background: #1A1A1A;
                 color: #FFFFFF;

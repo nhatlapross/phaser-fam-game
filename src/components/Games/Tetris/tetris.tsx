@@ -50,9 +50,10 @@ const getInitialPosition = (type: TetrominoType) => ({
 interface TetrisProps {
   onScoreUpdate?: (score: number) => void;
   onGameOver?: (finalScore: number) => void;
+  onRestart?: () => void;
 }
 
-const Tetris: React.FC<TetrisProps> = ({ onScoreUpdate, onGameOver }) => {
+const Tetris: React.FC<TetrisProps> = ({ onScoreUpdate, onGameOver, onRestart }) => {
   const isMounted = useRef(false);
   const [initialized, setInitialized] = useState(false);
   const [board, setBoard] = useState<(string | number)[][]>([]);
@@ -105,12 +106,18 @@ const Tetris: React.FC<TetrisProps> = ({ onScoreUpdate, onGameOver }) => {
     }
   }, []);
 
+  // Track if onGameOver has been called to prevent duplicate calls
+  const gameOverCalledRef = useRef(false);
+
   useEffect(() => {
     if (onScoreUpdate && score > 0) onScoreUpdate(score);
   }, [score, onScoreUpdate]);
 
   useEffect(() => {
-    if (gameOver && onGameOver) onGameOver(score);
+    if (gameOver && onGameOver && !gameOverCalledRef.current) {
+      gameOverCalledRef.current = true;
+      onGameOver(score);
+    }
   }, [gameOver, score, onGameOver]);
 
   const isPositionValid = useCallback((tetromino: number[][], pos: { x: number; y: number }): boolean => {
@@ -256,7 +263,9 @@ const Tetris: React.FC<TetrisProps> = ({ onScoreUpdate, onGameOver }) => {
     setIsPaused(false);
     setLevel(1);
     setTickRate(TICK_RATE_MS);
-  }, []);
+    gameOverCalledRef.current = false; // Reset the flag for new game
+    if (onRestart) onRestart(); // Notify parent component
+  }, [onRestart]);
 
   useEffect(() => {
     if (!initialized) return;
@@ -478,7 +487,7 @@ const Tetris: React.FC<TetrisProps> = ({ onScoreUpdate, onGameOver }) => {
           { label: '←', action: () => moveHorizontal(-1) },
           { label: '→', action: () => moveHorizontal(1) },
           { label: '↻', action: rotate },
-          { label: '↓', action: hardDrop },
+          { label: '↓', action: moveDown },
           { label: isPaused ? '▶' : '⏸', action: () => setIsPaused(!isPaused) },
         ].map((btn, i) => (
           <button

@@ -3,6 +3,9 @@ import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 
 export class Preloader extends Scene
 {
+    // Version to force cache busting for updated assets
+    private readonly ASSET_VERSION = '?v=1.0.3';
+
     constructor ()
     {
         super('Preloader');
@@ -88,36 +91,54 @@ export class Preloader extends Scene
         });
 
         // Tilesets
-        this.load.image('grass-tileset', 'tilesets/grass.png');
+        this.load.image('grass-tileset', `tilesets/grass.png${this.ASSET_VERSION}`);
 
         // Water tileset as spritesheet for animation (4 frames)
-        this.load.spritesheet('water-tileset', 'tilesets/water.png', {
+        this.load.spritesheet('water-tileset', `tilesets/water.png${this.ASSET_VERSION}`, {
             frameWidth: 16,
             frameHeight: 16
         });
 
-        this.load.image('tilled-dirt-tileset', 'tilesets/tilled-dirt.png');
-        this.load.image('hills-tileset', 'tilesets/hills.png');
+        this.load.image('tilled-dirt-tileset', `tilesets/tilled-dirt.png${this.ASSET_VERSION}`);
+        this.load.image('hills-tileset', `tilesets/hills.png${this.ASSET_VERSION}`);
         // Square tileset (176x112, 11 cols x 7 rows of 16x16 tiles)
-        this.load.spritesheet('square-tileset', 'tilesets/square.png', {
+        this.load.spritesheet('square-tileset', `tilesets/square.png${this.ASSET_VERSION}`, {
             frameWidth: 16,
             frameHeight: 16
         });
 
-        // Fountain spritesheet (5 frames animation, 334x118 total, each frame 67x118)
-        this.load.spritesheet('fountain', 'objects/square/fountain.png', {
-            frameWidth: 67,
-            frameHeight: 118
+        // Classroom tileset (176x111, 11 cols x ~6 rows of 16x16 tiles)
+        this.load.spritesheet('classroom-tileset', `tilesets/class-room.png${this.ASSET_VERSION}`, {
+            frameWidth: 16,
+            frameHeight: 16
+        });
+
+        // Fountain spritesheet (5 frames, 713x235 total, each frame 142.6x235)
+        this.load.spritesheet('fountain', `objects/square/fountain.png${this.ASSET_VERSION}`, {
+            frameWidth: 142.6,
+            frameHeight: 235
+        });
+
+        // Merlin NPCs
+        // Merlin 1 (Astrology): 2156x467, 4 frames -> 539x467
+        this.load.spritesheet('merlin1', `objects/merlin/merline1.png${this.ASSET_VERSION}`, {
+            frameWidth: 539,
+            frameHeight: 467
+        });
+        // Merlin 2 (Tarot): 2040x493, 4 frames -> 510x493
+        this.load.spritesheet('merlin2', `objects/merlin/merline2.png${this.ASSET_VERSION}`, {
+            frameWidth: 510,
+            frameHeight: 493
         });
 
         // Town Square decorations (76x94 each)
-        this.load.image('square-chair', 'objects/square/chair.png');
-        this.load.image('square-lamp', 'objects/square/lamp.png');
-        this.load.image('square-tree', 'objects/square/tree.png');
+        this.load.image('square-chair', `objects/square/chair.png${this.ASSET_VERSION}`);
+        this.load.image('square-lamp', `objects/square/lamp.png${this.ASSET_VERSION}`);
+        this.load.image('square-tree', `objects/square/tree.png${this.ASSET_VERSION}`);
 
         // Town Square houses (1-12)
         for (let i = 1; i <= 12; i++) {
-            this.load.image(`house-${i}`, `objects/house/house-${i}.png`);
+            this.load.image(`house-${i}`, `objects/house/house-${i}.png${this.ASSET_VERSION}`);
         }
 
         // Objects
@@ -184,43 +205,41 @@ export class Preloader extends Scene
         this.load.image('tree-plant-2', 'objects/plant/social_plant/Social_plant_2.png');
         this.load.image('tree-plant-3', 'objects/plant/social_plant/Social_plant_3.png');
         this.load.image('tree-plant-4', 'objects/plant/social_plant/Social_plant_4.png');
-        this.load.image('tree-plant-5', 'objects/plant/social_plant/Social_plant_5.png');
         this.load.image('tree-plant-death', 'objects/plant/social_plant/Social_plant_death.png');
         this.load.image('tree-fruit', 'objects/plant/social_plant/social-fruit.png');
 
-        // Algae Plant (3 stages spritesheet: 144x54, 3 frames of 48x54)
-        this.load.image('algae-seed', 'objects/plant/technical_plant/Technical_Seed.png');
-        this.load.spritesheet('algae-spritesheet', 'objects/plant/aligant/Algae.png', {
-            frameWidth: 48,
-            frameHeight: 54
-        });
-        this.load.image('algae-plant-death', 'objects/plant/technical_plant/Technical_plant_death.png');
-        this.load.image('algae-fruit', 'objects/plant/technical_plant/technical-fruit.png');
+        // Algae Plant (Replaced spritesheet with individual images per user request)
+        this.load.image('algae-seed', 'objects/plant/algae/algae_Seed.png');
+        this.load.image('algae-plant-1', 'objects/plant/algae/algae_1.png');
+        this.load.image('algae-plant-2', 'objects/plant/algae/algae_2.png');
+        this.load.image('algae-plant-3', 'objects/plant/algae/algae_3.png');
+        this.load.image('algae-plant-death', 'objects/plant/algae/algae_death.png');
+        this.load.image('algae-fruit', 'objects/plant/algae/algae-fruit.png');
 
-        // Branded Plant
-        this.load.image('branded-seed', 'objects/plant/branded_plant/Branded_Seed.png');
-        this.load.image('branded-plant-1', 'objects/plant/branded_plant/Branded_plant_1.png');
-        this.load.image('branded-plant-2', 'objects/plant/branded_plant/Branded_plant_2.png');
-        this.load.image('branded-plant-3', 'objects/plant/branded_plant/Branded_plant_3.png');
-        this.load.image('branded-plant-4', 'objects/plant/branded_plant/Branded_plant_4.png');
-        this.load.image('branded-plant-5', 'objects/plant/branded_plant/Branded_plant_5.png');
-        this.load.image('branded-plant-death', 'objects/plant/branded_plant/Branded_plant_death.png');
-        this.load.image('branded-fruit', 'objects/plant/branded_plant/branded-fruit.png');
+        // Branded Plant (Temporarily disabled due to missing assets)
+        // this.load.image('branded-seed', 'objects/plant/branded_plant/Branded_Seed.png');
+        // this.load.image('branded-plant-1', 'objects/plant/branded_plant/Branded_plant_1.png');
+        // this.load.image('branded-plant-2', 'objects/plant/branded_plant/Branded_plant_2.png');
+        // this.load.image('branded-plant-3', 'objects/plant/branded_plant/Branded_plant_3.png');
+        // this.load.image('branded-plant-4', 'objects/plant/branded_plant/Branded_plant_4.png');
+        // this.load.image('branded-plant-5', 'objects/plant/branded_plant/Branded_plant_5.png');
+        // this.load.image('branded-plant-death', 'objects/plant/branded_plant/Branded_plant_death.png');
+        // this.load.image('branded-fruit', 'objects/plant/branded_plant/branded-fruit.png');
 
-        // Mushroom Plant (3 stages spritesheet: 144x48, 3 frames of 48x48)
+        // Mushroom Plant
         this.load.image('mushroom-seed', 'objects/plant/mushroom/mush_seed.png');
-        this.load.spritesheet('mushroom-spritesheet', 'objects/plant/mush-room/mush-room.png', {
-            frameWidth: 48,
-            frameHeight: 48
-        });
+        // Replaced spritesheet with individual images per user request
+        this.load.image('mushroom-plant-1', 'objects/plant/mushroom/mush_plant_1.png');
+        this.load.image('mushroom-plant-2', 'objects/plant/mushroom/mush_plant_2.png');
+        this.load.image('mushroom-plant-3', 'objects/plant/mushroom/mush_plant_3.png');
         this.load.image('mushroom-plant-death', 'objects/plant/mushroom/mush_plant_death.png');
         this.load.image('mushroom-fruit', 'objects/plant/mushroom/mush-fruit.png');
 
         // Factory (4 frames: 1-2 idle, 3-4 working)
-        this.load.image('factory-1', 'objects/factory/factory_1.png');
-        this.load.image('factory-2', 'objects/factory/factory_2.png');
-        this.load.image('factory-3', 'objects/factory/factory_3.png');
-        this.load.image('factory-4', 'objects/factory/factory_4.png');
+        this.load.image('factory-1', `objects/factory/factory_1.png${this.ASSET_VERSION}`);
+        this.load.image('factory-2', `objects/factory/factory_2.png${this.ASSET_VERSION}`);
+        this.load.image('factory-3', `objects/factory/factory_3.png${this.ASSET_VERSION}`);
+        this.load.image('factory-4', `objects/factory/factory_4.png${this.ASSET_VERSION}`);
 
         // Warehouse spritesheet (2 frames: 0=closed, 1=open)
         this.load.spritesheet('warehouse', 'objects/ware-house/ware-house.png', {
@@ -230,6 +249,19 @@ export class Preloader extends Scene
 
         // Default avatar for user profile
         this.load.image('default-avatar', 'characters/avatar.png');
+
+        // Classroom door, furniture & board
+        this.load.image('door', `objects/door/door.png${this.ASSET_VERSION}`);
+        this.load.image('classroom-table', `objects/class-room/table.png${this.ASSET_VERSION}`);
+        this.load.image('classroom-chair', `objects/class-room/chair.png${this.ASSET_VERSION}`);
+        this.load.image('classroom-board', `objects/class-room/board.png${this.ASSET_VERSION}`);
+        this.load.spritesheet('teacher1', `objects/class-room/teacher1.png${this.ASSET_VERSION}`, { frameWidth: 125, frameHeight: 125 });
+        this.load.spritesheet('teacher2', `objects/class-room/teacher2.png${this.ASSET_VERSION}`, { frameWidth: 125, frameHeight: 125 });
+        // Lesson files are in public/lesson/ (not under assets/)
+        this.load.setPath('');
+        this.load.text('lesson1-text', 'lesson/lesson1/text.md');
+        this.load.image('lesson1-img', 'lesson/lesson1/lesson1.jpg');
+        this.load.setPath('assets');
 
         // Check-in icon
         this.load.image('icon-checkin', 'icons/checkin.png');
@@ -249,25 +281,25 @@ export class Preloader extends Scene
         });
 
         // Shop spritesheet (2 frames for animation)
-        this.load.spritesheet('shop', 'objects/shop/shop.png', {
+        this.load.spritesheet('shop', `objects/shop/shop.png${this.ASSET_VERSION}`, {
             frameWidth: 159,
             frameHeight: 119
         });
 
         // Well spritesheet (2 frames for animation)
-        this.load.spritesheet('well', 'objects/well/well.png', {
+        this.load.spritesheet('well', `objects/well/well.png${this.ASSET_VERSION}`, {
             frameWidth: 177,
             frameHeight: 177
         });
 
         // Turtle tutor spritesheet (2 frames for idle animation)
-        this.load.spritesheet('tutor', 'objects/well/tutor.png', {
+        this.load.spritesheet('tutor', `objects/well/tutor.png${this.ASSET_VERSION}`, {
             frameWidth: 45,
             frameHeight: 55
         });
 
         // Station/Dock spritesheet (4 frames for animation)
-        this.load.spritesheet('station', 'objects/station/station.png', {
+        this.load.spritesheet('station', `objects/station/station.png${this.ASSET_VERSION}`, {
             frameWidth: 121,
             frameHeight: 92
         });
@@ -285,6 +317,11 @@ export class Preloader extends Scene
             frameWidth: 75,
             frameHeight: 75
         });
+
+        // DeFi Assets
+        // DeFi Master - Replaced with single static asset
+        // this.load.image('defi-board', 'objects/defi/board.png'); // Deprecated
+        this.load.image('defi-npc', 'objects/defi/defi-npc.png');
         this.load.spritesheet('pet-lion', 'pet/lion/lion.png', {
             frameWidth: 75,
             frameHeight: 75

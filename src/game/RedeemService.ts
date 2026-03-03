@@ -1,7 +1,11 @@
 // src/game/RedeemService.ts
 
+import { UserService } from './UserService';
+import { GameDataService } from './GameDataService';
+
 export interface RedeemResponse {
     success: boolean;
+    type?: string; // Type of redemption (e.g. 'GOLD', 'ITEM', 'EVENT')
     event?: {
         id?: string;
         name: string;
@@ -70,6 +74,7 @@ export class RedeemService {
                     success: data.success !== false,
                     event: data.event,
                     reward: data.reward,
+                    type: data.type, // Pass the type field from backend response
                     message: data.reward?.message || data.message || 'Code redeemed successfully!'
                 };
             } else {
@@ -85,6 +90,81 @@ export class RedeemService {
                 message: 'Network error. Please try again.'
             };
         }
+    }
+
+    /**
+     * Claim a redemption code
+     * @param code The redemption code (e.g., "TESTCODE123")
+     * @returns A Promise that resolves to the redeem response
+     */
+    static async claimRedemptionCode(code: string): Promise<RedeemResponse> {
+        const token = RedeemService.getAccessToken();
+        if (!token) {
+            return {
+                success: false,
+                message: 'Not authenticated'
+            };
+        }
+
+        // Get userId from token or localStorage
+        const userId = RedeemService.getUserId();
+        if (!userId) {
+            return {
+                success: false,
+                message: 'User not found'
+            };
+        }
+
+        try {
+            const response = await fetch(
+                `${RedeemService.API_BASE_URL}/redemption/claim`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ userId, code })
+                }
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                // API returns: { success, type, reward: { amount }, data }
+                return {
+                    success: data.success !== false,
+                    reward: data.reward,
+                    type: data.type, // Pass the type field from backend response
+                    message: data.reward?.message || data.message || 'Code redeemed successfully!'
+                };
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                return {
+                    success: false,
+                    message: errorData.message || 'Invalid or expired code'
+                };
+            }
+        } catch (error) {
+            return {
+                success: false,
+                message: 'Network error. Please try again.'
+            };
+        }
+    }
+
+    /**
+     * Gets the stored user ID from cached data or UserService
+     */
+    private static getUserId(): string | null {
+        // Try GameDataService first (cached data)
+        const cachedData = GameDataService.getCachedData();
+        if (cachedData?.user?.id) {
+            return cachedData.user.id;
+        }
+        
+        // Fallback to UserService
+        const user = UserService.getStoredUser();
+        return user?.id || null;
     }
 
     /**
@@ -120,6 +200,7 @@ export class RedeemService {
                     success: data.success !== false,
                     event: data.event,
                     reward: data.reward,
+                    type: data.type, // Pass the type field from backend response
                     message: data.reward?.message || data.message || 'Check-in successful!'
                 };
             } else {

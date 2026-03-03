@@ -20,6 +20,7 @@ import {
     MissionClaimedPayload,
     EventCheckinPayload,
     ClaimGiftPayload,
+    SaveScorePayload,
 } from './types/SocketTypes';
 
 /**
@@ -435,6 +436,35 @@ export class SocketService {
         const payload: ClaimGiftPayload = { code };
         console.log('[SocketService] Emitting claim_gift:', payload);
         this.socket.emit(SOCKET_EVENTS.CLAIM_GIFT, payload);
+        return true;
+    }
+
+    // ==========================================
+    // Game Score Methods (Client -> Server)
+    // Fire-and-forget: responses come via event listeners
+    // ==========================================
+
+    /**
+     * Save game score (high score logic handled by server)
+     * Emit: 'save_score', { gameId: string, score: number, metadata?: object }
+     * Response comes via 'action_success' or 'action_error' events
+     * Server keeps the higher score if one already exists
+     * @param gameId - The UUID of the game
+     * @param score - The score achieved
+     * @param metadata - Optional additional data (levelReached, timePlayed, etc.)
+     * @returns true if emit was successful, false otherwise
+     */
+    public saveScore(gameId: string, score: number, metadata?: Record<string, unknown>): boolean {
+        if (!this.socket?.connected) {
+            return false;
+        }
+
+        const payload: SaveScorePayload = { gameId, score };
+        if (metadata) {
+            payload.metadata = metadata;
+        }
+
+        this.socket.emit(SOCKET_EVENTS.SAVE_SCORE, payload);
         return true;
     }
 }

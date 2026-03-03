@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
+import { DynamicShadow } from '../objects/DynamicShadow';
 import { BaseManager } from './BaseManager';
+import { showAccessKeyPrompt, isAccessVerified } from '../utils/AccessKeyUtils';
 
 // Location destination data
 interface LocationDestination {
@@ -59,7 +61,7 @@ interface StationConfig {
 // Data passed when navigating to a new scene
 export interface NavigationData {
     fromLocation: string;  // ID of origin location
-    spawnAt: 'station';    // Where to spawn in destination
+    spawnAt: 'station' | 'classroom';  // Where to spawn in destination
 }
 
 interface StationCallbacks {
@@ -75,7 +77,7 @@ export class StationManager extends BaseManager {
     private callbacks: StationCallbacks;
     private config: StationConfig;
     private stationSprite: Phaser.GameObjects.Sprite | null = null;
-    private stationShadow: Phaser.GameObjects.Ellipse | null = null;
+    private stationCollider?: Phaser.GameObjects.Rectangle;
     private destinations: LocationDestination[] = [];
 
     private readonly TILE_SIZE = 16;
@@ -127,42 +129,21 @@ export class StationManager extends BaseManager {
         this.stationSprite.setDepth(pixelY + 10);
         this.stationSprite.setName('station');
 
+        // No shadow for station
+
         // Play idle animation
         this.stationSprite.play('station-idle');
 
         // Make interactive
         this.stationSprite.setInteractive({ useHandCursor: true });
 
-        // Create shadow for hover effect
-        this.stationShadow = this.scene.add.ellipse(
-            pixelX,
-            pixelY + 24,
-            48,
-            14,
-            0x000000,
-            0
-        );
-        this.stationShadow.setDepth(pixelY - 1);
-
         // Hover effects
         this.stationSprite.on('pointerover', () => {
             this.stationSprite?.setTint(0xffff88);
-            this.scene.tweens.add({
-                targets: this.stationShadow,
-                alpha: 0.5,
-                duration: 150,
-                ease: 'Quad.easeOut'
-            });
         });
 
         this.stationSprite.on('pointerout', () => {
             this.stationSprite?.clearTint();
-            this.scene.tweens.add({
-                targets: this.stationShadow,
-                alpha: 0,
-                duration: 150,
-                ease: 'Quad.easeIn'
-            });
         });
 
         // Click to open travel modal
@@ -170,11 +151,19 @@ export class StationManager extends BaseManager {
             this.open();
         });
 
+        // Create collider at the base of the station
+        const collisionWidth = this.stationSprite.displayWidth * 0.8;
+        const collisionHeight = this.stationSprite.displayHeight * 0.35;
+        const bottomY = pixelY + this.stationSprite.displayHeight / 2;
+        const collisionY = bottomY - collisionHeight / 2 - 4;
+        this.stationCollider = this.scene.add.rectangle(pixelX, collisionY, collisionWidth, collisionHeight);
+        this.stationCollider.setVisible(false);
+        this.scene.physics.add.existing(this.stationCollider, true);
+
         // Ignore by UI camera (game object, not UI)
         const uiCamera = this.scene.cameras.cameras.find(cam => cam.name === 'uiCamera');
         if (uiCamera) {
             uiCamera.ignore(this.stationSprite);
-            uiCamera.ignore(this.stationShadow);
         }
     }
 
@@ -442,7 +431,15 @@ export class StationManager extends BaseManager {
     /**
      * Handle destination selection
      */
-    private onDestinationSelect(destination: LocationDestination): void {
+    private async onDestinationSelect(destination: LocationDestination): Promise<void> {
+        // Check access key for Farm
+        if (destination.id === 'farm') {
+            if (!isAccessVerified()) {
+                const verified = await showAccessKeyPrompt();
+                if (!verified) return;
+            }
+        }
+
         if (this.callbacks.showToastMessage) {
             this.callbacks.showToastMessage(`Traveling to ${destination.nameVi}...`, 0x4CAF50);
         }
@@ -466,11 +463,8 @@ export class StationManager extends BaseManager {
         return this.stationSprite;
     }
 
-    /**
-     * Get station shadow for camera ignore
-     */
-    public getStationShadow(): Phaser.GameObjects.Ellipse | null {
-        return this.stationShadow;
+    public getStationCollider(): Phaser.GameObjects.Rectangle | undefined {
+        return this.stationCollider;
     }
 
     /**
@@ -480,10 +474,6 @@ export class StationManager extends BaseManager {
         if (this.stationSprite) {
             this.stationSprite.destroy();
             this.stationSprite = null;
-        }
-        if (this.stationShadow) {
-            this.stationShadow.destroy();
-            this.stationShadow = null;
         }
         super.destroy();
     }

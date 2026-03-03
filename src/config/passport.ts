@@ -21,21 +21,26 @@ export const getPassportInstance = (): passport.Passport | null => {
     }
 
     if (!passportInstance) {
-        const baseUrl = getBaseUrl();
+        try {
+            const baseUrl = getBaseUrl();
 
-        passportInstance = new passport.Passport({
-            baseConfig: {
-                environment: isProduction
-                    ? config.Environment.PRODUCTION
-                    : config.Environment.SANDBOX,
-                publishableKey: process.env.NEXT_PUBLIC_IMMUTABLE_PUBLISHABLE_KEY || '',
-            },
-            clientId: process.env.NEXT_PUBLIC_IMMUTABLE_CLIENT_ID || '',
-            redirectUri: `${baseUrl}/redirect`,
-            logoutRedirectUri: `${baseUrl}/logout`,
-            audience: 'platform_api',
-            scope: 'openid offline_access email transact',
-        });
+            passportInstance = new passport.Passport({
+                baseConfig: {
+                    environment: isProduction
+                        ? config.Environment.PRODUCTION
+                        : config.Environment.SANDBOX,
+                    publishableKey: process.env.NEXT_PUBLIC_IMMUTABLE_PUBLISHABLE_KEY || '',
+                },
+                clientId: process.env.NEXT_PUBLIC_IMMUTABLE_CLIENT_ID || '',
+                redirectUri: `${baseUrl}/redirect`,
+                logoutRedirectUri: `${baseUrl}/logout`,
+                audience: 'platform_api',
+                scope: 'openid offline_access email transact',
+            });
+        } catch (error) {
+            console.error('Failed to initialize Passport:', error);
+            return null;
+        }
     }
 
     return passportInstance;

@@ -8,6 +8,8 @@ import { NFTVoucherManager, SAMPLE_VOUCHERS } from './NFTVoucherManager';
 import { BadgeService, Badge, SoulboundToken, ApiBadge } from '../BadgeService';
 import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 import { QuickActionsManager } from './QuickActionsManager';
+import { FloatingButtonsManager } from './FloatingButtonsManager';
+import { SoundManager } from './SoundManager';
 
 interface ProfileCallbacks {
     onLogout: () => void;
@@ -51,6 +53,9 @@ export class ProfileManager extends BaseManager {
 
     // Quick actions manager (mission button, etc.)
     private quickActionsManager: QuickActionsManager | null = null;
+    
+    // Floating buttons manager (redeem, etc.)
+    private floatingButtonsManager: FloatingButtonsManager | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: ProfileCallbacks) {
         super(scene);
@@ -241,6 +246,22 @@ export class ProfileManager extends BaseManager {
         
         // Add quick action button elements to profile elements for camera ignore
         this.quickActionsManager.getButtonElements().forEach(el => {
+            this.profileElements.push(el);
+        });
+
+        // Create floating buttons (redeem, etc.) below quick actions
+        if (!this.floatingButtonsManager) {
+            this.floatingButtonsManager = new FloatingButtonsManager(this.scene, {
+                showToastMessage: this.callbacks.showToastMessage
+            });
+        }
+        // Position floating buttons below quick actions (4 buttons * 32px spacing + some padding)
+        const floatingBtnY = panelY + panelHeight / 2 + 20 + (3 * 32) + 40;
+        const floatingBtnX = panelX + 25 + (panelWidth - 10) / 2 - 18;
+        this.floatingButtonsManager.createButtons(floatingBtnX, floatingBtnY);
+        
+        // Add floating button elements to profile elements for camera ignore
+        this.floatingButtonsManager.getButtonElements().forEach(el => {
             this.profileElements.push(el);
         });
     }
@@ -599,10 +620,11 @@ export class ProfileManager extends BaseManager {
         const editAvatarBtn = this.scene.add.text(modalX, avatarY + avatarSize / 2 + 12, 'Edit Avatar', {
             fontSize: '9px',
             fontFamily: 'PixelFont',
-            color: '#4ade80',
+            color: '#FFFFFF',
             resolution: 2
         });
         editAvatarBtn.setOrigin(0.5);
+        editAvatarBtn.setStroke('#000000', 3);
         editAvatarBtn.setDepth(5104);
         editAvatarBtn.setAlpha(0);
         editAvatarBtn.setInteractive({ useHandCursor: true });
@@ -612,8 +634,8 @@ export class ProfileManager extends BaseManager {
         this.scene.tweens.add({ targets: editAvatarBtn, alpha: 1, duration: 150 });
 
         editAvatarBtn.on('pointerdown', () => this.openEditField('avatar', user.avatar || ''));
-        editAvatarBtn.on('pointerover', () => editAvatarBtn.setColor('#86efac'));
-        editAvatarBtn.on('pointerout', () => editAvatarBtn.setColor('#4ade80'));
+        editAvatarBtn.on('pointerover', () => editAvatarBtn.setColor('#CCCCCC'));
+        editAvatarBtn.on('pointerout', () => editAvatarBtn.setColor('#FFFFFF'));
 
         avatarFrame.on('pointerdown', () => this.openEditField('avatar', user.avatar || ''));
         avatarFrame.on('pointerover', () => avatarFrame.setTint(0xcccccc));
@@ -637,6 +659,13 @@ export class ProfileManager extends BaseManager {
 
         // Score (read-only)
         this.createReadOnlyField('Score:', user.reputationScore.toString(), labelX, valueX, fieldStartY + fieldSpacing * 3);
+
+        // Audio Controls
+        const soundManager = (this.scene as any).soundManager as SoundManager;
+        if (soundManager) {
+            this.createVolumeControl('Music', labelX, valueX, fieldStartY + fieldSpacing * 4 + 5, true, soundManager);
+            this.createVolumeControl('SFX', labelX, valueX, fieldStartY + fieldSpacing * 5 + 5, false, soundManager);
+        }
 
         // Logout button
         const logoutY = contentStartY + contentHeight - 60;
@@ -674,6 +703,130 @@ export class ProfileManager extends BaseManager {
         });
         logoutBg.on('pointerover', () => logoutBg.setTint(0xcccccc));
         logoutBg.on('pointerout', () => logoutBg.clearTint());
+    }
+
+    /**
+     * Create volume control with slider
+     */
+    private createVolumeControl(label: string, labelX: number, valueX: number, y: number, isMusic: boolean, soundManager: SoundManager): void {
+        // Label (Matching createReadOnlyField style)
+        const labelText = this.scene.add.text(labelX, y, label + ':', {
+            fontSize: '11px',
+            fontFamily: 'PixelFont',
+            color: '#FFFFFF',
+            resolution: 2
+        });
+        labelText.setOrigin(0, 0.5);
+        labelText.setDepth(5103);
+        labelText.setAlpha(0);
+        labelText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(labelText);
+        this.profileContentElements.push(labelText);
+
+        // Slider dimensions
+        const sliderWidth = 100;
+        const sliderHeight = 6;
+        const sliderX = valueX; // Start slider where value usually starts
+
+        // Slider Background (Track)
+        const sliderBg = this.scene.add.rectangle(sliderX + sliderWidth / 2, y, sliderWidth, sliderHeight, 0x3E2723);
+        sliderBg.setStrokeStyle(1, 0x5D4037);
+        sliderBg.setDepth(5103);
+        sliderBg.setAlpha(0);
+        sliderBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(sliderBg);
+        this.profileContentElements.push(sliderBg);
+
+        // Current volume
+        const currentVol = isMusic ? soundManager.getMusicVolume() : soundManager.getSfxVolume();
+        
+        // Slider Fill (Progress)
+        const sliderFill = this.scene.add.rectangle(sliderX, y, sliderWidth * currentVol, sliderHeight - 2, 0x4ade80);
+        sliderFill.setOrigin(0, 0.5); // Anchor left
+        sliderFill.setDepth(5103);
+        sliderFill.setAlpha(0);
+        this.scene.cameras.main.ignore(sliderFill);
+        this.profileContentElements.push(sliderFill);
+
+        // Slider Knob
+        const knobX = sliderX + sliderWidth * currentVol;
+        const knobShape = this.scene.add.rectangle(knobX, y, 8, 12, 0xFFD700);
+        knobShape.setStrokeStyle(1, 0x5D4037);
+        knobShape.setDepth(5104);
+        knobShape.setAlpha(0);
+        knobShape.setInteractive({ draggable: true, useHandCursor: true });
+        this.scene.cameras.main.ignore(knobShape);
+        this.profileContentElements.push(knobShape);
+
+        // Volume Percentage Text
+        const valueText = this.scene.add.text(sliderX + sliderWidth + 25, y, `${Math.round(currentVol * 100)}%`, {
+            fontSize: '10px',
+            fontFamily: 'PixelFont',
+            color: '#FFF8E1',
+            resolution: 2
+        });
+        valueText.setOrigin(0.5, 0.5);
+        valueText.setDepth(5103);
+        valueText.setAlpha(0);
+        valueText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(valueText);
+        this.profileContentElements.push(valueText);
+
+        // Animation
+        this.scene.tweens.add({
+            targets: [labelText, sliderBg, sliderFill, knobShape, valueText],
+            alpha: 1,
+            duration: 150,
+            delay: 50
+        });
+
+        // Update Function
+        const updateVolume = (x: number) => {
+            // Clamp x to slider bounds
+            const clampedX = Phaser.Math.Clamp(x, sliderX, sliderX + sliderWidth);
+            const percent = (clampedX - sliderX) / sliderWidth;
+            
+            // Update visual elements
+            knobShape.x = clampedX;
+            sliderFill.width = sliderWidth * percent;
+            
+            // Update Text
+            const displayVol = Math.round(percent * 100);
+            valueText.setText(`${displayVol}%`);
+
+            // Update Sound Manager
+            // Round to 2 decimal places for smoother volume but not too precise
+            const newVol = Math.round(percent * 100) / 100;
+
+            if (isMusic) {
+                soundManager.setMusicVolume(newVol);
+            } else {
+                soundManager.setSfxVolume(newVol);
+            }
+        };
+
+        // Drag Events
+        this.scene.input.setDraggable(knobShape);
+
+        knobShape.on('drag', (pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
+            updateVolume(dragX);
+        });
+
+        knobShape.on('dragend', () => {
+             // Play test sound on drag end if SFX
+             if (!isMusic) {
+                soundManager.playPlantSound();
+             }
+        });
+
+        // Click on track
+        sliderBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            updateVolume(pointer.x);
+            // Play test sound if SFX
+            if (!isMusic) {
+                soundManager.playPlantSound();
+            }
+        });
     }
 
     /**
@@ -867,10 +1020,11 @@ export class ProfileManager extends BaseManager {
             const allClaimed = this.scene.add.text(modalX, currentY + 10, 'All badges claimed! 🎉', {
                 fontSize: '8px',
                 fontFamily: 'PixelFont',
-                color: '#4ade80',
+                color: '#FFFFFF',
                 resolution: 2
             });
             allClaimed.setOrigin(0.5);
+            allClaimed.setStroke('#000000', 3);
             this.badgesContainer.add(allClaimed);
             currentY += 30;
         } else {
@@ -965,7 +1119,7 @@ export class ProfileManager extends BaseManager {
 
         // Badge name
         let nameColor = '#FFFFFF';
-        if (canClaim) nameColor = '#4ade80';
+        if (canClaim) nameColor = '#FFFFFF';
         else if (isPending) nameColor = '#fbbf24';
         
         const name = this.scene.add.text(leftX + 35, rowCenterY, badge.name, {
@@ -975,7 +1129,11 @@ export class ProfileManager extends BaseManager {
             resolution: 2
         });
         name.setOrigin(0, 0.5);
-        name.setStroke('#3E2723', 1);
+        if (canClaim) {
+            name.setStroke('#000000', 3);
+        } else {
+            name.setStroke('#3E2723', 1);
+        }
         this.badgesContainer!.add(name);
 
         // Button/Status
@@ -1057,7 +1215,8 @@ export class ProfileManager extends BaseManager {
                     iconElement.setAlpha(0.9);
                     
                     // Update name color
-                    name.setColor('#4ade80');
+                    name.setColor('#FFFFFF');
+                    name.setStroke('#000000', 3);
                 } else {
                     this.callbacks.showToastMessage?.(`❌ ${result.message}`, 0xef4444);
                     claimBtn.setInteractive({ useHandCursor: true });
@@ -1245,10 +1404,11 @@ export class ProfileManager extends BaseManager {
         const nameText = this.scene.add.text(0, 0, badge.name, {
             fontSize: '8px',
             fontFamily: 'PixelFont',
-            color: '#4ade80',
+            color: '#FFFFFF',
             resolution: 2
         });
         nameText.setOrigin(0.5);
+        nameText.setStroke('#000000', 3);
         container.add(nameText);
 
         this.badgeTooltip = container;
@@ -1395,20 +1555,6 @@ export class ProfileManager extends BaseManager {
         `;
         document.body.appendChild(this.proofInput);
 
-        this.proofInput.addEventListener('keydown', async (e) => {
-            if (e.key === 'Enter') {
-                await this.submitBadgeProof(badge);
-                e.preventDefault();
-            } else if (e.key === 'Escape') {
-                this.closeBadgeClaimForm();
-                e.preventDefault();
-            }
-            e.stopPropagation();
-        });
-        this.proofInput.addEventListener('keyup', (e) => e.stopPropagation());
-        this.proofInput.addEventListener('keypress', (e) => e.stopPropagation());
-        this.proofInput.focus();
-
         // Buttons
         const btnY = formY + 50;
 
@@ -1453,6 +1599,44 @@ export class ProfileManager extends BaseManager {
         this.scene.cameras.main.ignore(cancelText);
         this.claimFormElements.push(cancelText);
 
+        // Input Listeners
+        this.proofInput.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                await this.submitBadgeProof(badge, submitBtnBg, submitText);
+                e.preventDefault();
+            } else if (e.key === 'Escape') {
+                this.closeBadgeClaimForm();
+                e.preventDefault();
+            }
+            e.stopPropagation();
+        });
+        this.proofInput.addEventListener('keyup', (e) => e.stopPropagation());
+        this.proofInput.addEventListener('keypress', (e) => e.stopPropagation());
+
+        // Focus/Blur listeners for keyboard management
+        this.proofInput.addEventListener('focus', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = false;
+            }
+            // Disable submit button while typing
+            submitBtnBg.setInteractive(false);
+            submitBtnBg.setTint(0xcccccc);
+            submitText.setColor('#9E9E9E');
+        });
+
+        this.proofInput.addEventListener('blur', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = true;
+            }
+            // Re-enable submit button
+            submitBtnBg.setInteractive({ useHandCursor: true });
+            submitBtnBg.setTint(0x4ade80);
+            submitText.setColor('#FFFFFF');
+        });
+
+        this.proofInput.focus();
+
+        // Button Listeners
         submitBtnBg.on('pointerdown', () => {
             // Disable button and show loading state
             submitBtnBg.disableInteractive();
@@ -1630,19 +1814,25 @@ export class ProfileManager extends BaseManager {
         const nameText = this.scene.add.text(0, -6, badge.name, {
             fontSize: '8px',
             fontFamily: 'PixelFont',
-            color: isClaimed ? '#4ade80' : '#FFFFFF',
+            color: '#FFFFFF',
             resolution: 2
         });
         nameText.setOrigin(0.5);
+        if (isClaimed) {
+            nameText.setStroke('#000000', 3);
+        }
         container.add(nameText);
 
         const statusText = this.scene.add.text(0, 6, isClaimed ? '✓ Claimed' : 'Not claimed', {
             fontSize: '7px',
             fontFamily: 'PixelFont',
-            color: isClaimed ? '#4ade80' : '#BCAAA4',
+            color: isClaimed ? '#FFFFFF' : '#BCAAA4',
             resolution: 2
         });
         statusText.setOrigin(0.5);
+        if (isClaimed) {
+            statusText.setStroke('#000000', 3);
+        }
         container.add(statusText);
 
         this.badgeTooltip = container;
@@ -1695,9 +1885,10 @@ export class ProfileManager extends BaseManager {
         const editBtn = this.scene.add.text(editX - 18, y, 'Edit', {
             fontSize: '10px',
             fontFamily: 'PixelFont',
-            color: '#4ade80',
+            color: '#FFFFFF',
             resolution: 2
         });
+        editBtn.setStroke('#000000', 3);
         editBtn.setDepth(5102);
         editBtn.setAlpha(0);
         editBtn.setInteractive({ useHandCursor: true });
@@ -1712,8 +1903,8 @@ export class ProfileManager extends BaseManager {
         });
 
         editBtn.on('pointerdown', () => this.openEditField(fieldName, value));
-        editBtn.on('pointerover', () => editBtn.setColor('#86efac'));
-        editBtn.on('pointerout', () => editBtn.setColor('#4ade80'));
+        editBtn.on('pointerover', () => editBtn.setColor('#CCCCCC'));
+        editBtn.on('pointerout', () => editBtn.setColor('#FFFFFF'));
     }
 
     private createReadOnlyField(label: string, value: string, labelX: number, valueX: number, y: number): void {
@@ -1787,9 +1978,10 @@ export class ProfileManager extends BaseManager {
         const copyBtn = this.scene.add.text(editX , y, 'Copy', {
             fontSize: '9px',
             fontFamily: 'PixelFont',
-            color: '#4ade80',
+            color: '#FFFFFF',
             resolution: 2
         });
+        copyBtn.setStroke('#000000', 3);
         copyBtn.setDepth(5102);
         copyBtn.setAlpha(0);
         copyBtn.setInteractive({ useHandCursor: true });
@@ -1832,11 +2024,11 @@ export class ProfileManager extends BaseManager {
             try {
                 await navigator.clipboard.writeText(address);
                 copyBtn.setText('Copied!');
-                copyBtn.setColor('#86efac');
+                copyBtn.setColor('#CCCCCC');
                 this.scene.time.delayedCall(1500, () => {
                     if (copyBtn.active) {
                         copyBtn.setText('Copy');
-                        copyBtn.setColor('#4ade80');
+                        copyBtn.setColor('#FFFFFF');
                     }
                 });
             } catch {
@@ -1850,18 +2042,18 @@ export class ProfileManager extends BaseManager {
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
                 copyBtn.setText('Copied!');
-                copyBtn.setColor('#86efac');
+                copyBtn.setColor('#CCCCCC');
                 this.scene.time.delayedCall(1500, () => {
                     if (copyBtn.active) {
                         copyBtn.setText('Copy');
-                        copyBtn.setColor('#4ade80');
+                        copyBtn.setColor('#FFFFFF');
                     }
                 });
             }
         });
-        copyBtn.on('pointerover', () => copyBtn.setColor('#86efac'));
+        copyBtn.on('pointerover', () => copyBtn.setColor('#CCCCCC'));
         copyBtn.on('pointerout', () => {
-            if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
+            if (copyBtn.text === 'Copy') copyBtn.setColor('#FFFFFF');
         });
     }
 
@@ -1914,7 +2106,7 @@ export class ProfileManager extends BaseManager {
         });
         title.setOrigin(0.5);
         title.setDepth(5202);
-        title.setStroke('#5D4037', 2);
+        title.setStroke('#000000', 3);
         this.scene.cameras.main.ignore(title);
         this.walletModalElements.push(title);
 
@@ -1939,7 +2131,7 @@ export class ProfileManager extends BaseManager {
                 resolution: 2
             });
             label.setDepth(5202);
-            label.setStroke('#5D4037', 1);
+            label.setStroke('#000000', 3);
             this.scene.cameras.main.ignore(label);
             this.walletModalElements.push(label);
 
@@ -1953,15 +2145,17 @@ export class ProfileManager extends BaseManager {
                     resolution: 2
                 });
                 addrText.setDepth(5202);
+                addrText.setStroke('#000000', 3);
                 this.scene.cameras.main.ignore(addrText);
                 this.walletModalElements.push(addrText);
 
                 const copyBtn = this.scene.add.text(leftX + 185, rowY, 'Copy', {
                     fontSize: '8px',
                     fontFamily: 'PixelFont',
-                    color: '#4ade80',
+                    color: '#FFFFFF',
                     resolution: 2
                 });
+                copyBtn.setStroke('#000000', 3);
                 copyBtn.setDepth(5202);
                 copyBtn.setInteractive({ useHandCursor: true });
                 this.scene.cameras.main.ignore(copyBtn);
@@ -1971,19 +2165,19 @@ export class ProfileManager extends BaseManager {
                     try {
                         await navigator.clipboard.writeText(wallet.address!);
                         copyBtn.setText('Copied!');
-                        copyBtn.setColor('#86efac');
+                        copyBtn.setColor('#CCCCCC');
                         this.scene.time.delayedCall(1500, () => {
                             if (copyBtn.active) {
                                 copyBtn.setText('Copy');
-                                copyBtn.setColor('#4ade80');
+                                copyBtn.setColor('#FFFFFF');
                             }
                         });
                     } catch {
                     }
                 });
-                copyBtn.on('pointerover', () => copyBtn.setColor('#86efac'));
+                copyBtn.on('pointerover', () => copyBtn.setColor('#CCCCCC'));
                 copyBtn.on('pointerout', () => {
-                    if (copyBtn.text === 'Copy') copyBtn.setColor('#4ade80');
+                    if (copyBtn.text === 'Copy') copyBtn.setColor('#FFFFFF');
                 });
             } else {
                 const notLinked = this.scene.add.text(leftX + 70, rowY, 'Not linked', {
@@ -1999,21 +2193,28 @@ export class ProfileManager extends BaseManager {
         });
 
         // Close button
-        const closeBtn = this.scene.add.text(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, '✕', {
+        const closeBtnBg = this.scene.add.sprite(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, 'square-buttons', 7);
+        closeBtnBg.setDisplaySize(24, 24);
+        closeBtnBg.setDepth(5203);
+        closeBtnBg.setInteractive({ useHandCursor: true });
+        this.scene.cameras.main.ignore(closeBtnBg);
+        this.walletModalElements.push(closeBtnBg);
+
+        const closeText = this.scene.add.text(centerX + modalWidth / 2 - 20, centerY - modalHeight / 2 + 15, 'X', {
             fontSize: '14px',
             fontFamily: 'PixelFont',
             color: '#FFFFFF',
             resolution: 2
         });
-        closeBtn.setOrigin(0.5);
-        closeBtn.setDepth(5203);
-        closeBtn.setInteractive({ useHandCursor: true });
-        this.scene.cameras.main.ignore(closeBtn);
-        this.walletModalElements.push(closeBtn);
+        closeText.setOrigin(0.5);
+        closeText.setDepth(5204);
+        closeText.setStroke('#5D4037', 2);
+        this.scene.cameras.main.ignore(closeText);
+        this.walletModalElements.push(closeText);
 
-        closeBtn.on('pointerdown', () => this.closeWalletsModal());
-        closeBtn.on('pointerover', () => closeBtn.setColor('#ef4444'));
-        closeBtn.on('pointerout', () => closeBtn.setColor('#FFFFFF'));
+        closeBtnBg.on('pointerdown', () => this.closeWalletsModal());
+        closeBtnBg.on('pointerover', () => closeBtnBg.setTint(0xcccccc));
+        closeBtnBg.on('pointerout', () => closeBtnBg.clearTint());
 
         overlay.on('pointerdown', () => this.closeWalletsModal());
     }
@@ -2120,6 +2321,9 @@ export class ProfileManager extends BaseManager {
         `;
         document.body.appendChild(this.editInput);
 
+        // Buttons
+        const { saveBtn, saveText } = this.createEditFormButtons(formX, formY + 40, fieldName, currentValue);
+
         this.editInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 const newValue = this.editInput?.value.trim();
@@ -2136,13 +2340,35 @@ export class ProfileManager extends BaseManager {
         });
         this.editInput.addEventListener('keyup', (e) => e.stopPropagation());
         this.editInput.addEventListener('keypress', (e) => e.stopPropagation());
-        this.editInput.focus();
 
-        // Buttons
-        this.createEditFormButtons(formX, formY + 40, fieldName, currentValue);
+        // Focus/Blur listeners for keyboard management
+        this.editInput.addEventListener('focus', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = false;
+            }
+            // Disable save button while typing
+            saveBtn.setInteractive(false);
+            saveBtn.setTint(0xcccccc);
+            saveText.setColor('#9E9E9E');
+        });
+
+        this.editInput.addEventListener('blur', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = true;
+            }
+            // Re-enable save button
+            saveBtn.setInteractive({ useHandCursor: true });
+            saveBtn.clearTint();
+            saveText.setColor('#FFFFFF');
+        });
+
+        this.editInput.focus();
     }
 
     private createAvatarEditForm(formX: number, formY: number, currentValue: string): void {
+        // Create buttons first to get references
+        const { saveBtn, saveText } = this.createEditFormButtons(formX, formY + 80, 'avatar', currentValue);
+
         // URL label
         const urlLabel = this.scene.add.text(formX, formY - 35, 'Enter Image URL:', {
             fontSize: '10px',
@@ -2199,6 +2425,28 @@ export class ProfileManager extends BaseManager {
         });
         this.editInput.addEventListener('keyup', (e) => e.stopPropagation());
         this.editInput.addEventListener('keypress', (e) => e.stopPropagation());
+
+        // Focus/Blur listeners for keyboard management
+        this.editInput.addEventListener('focus', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = false;
+            }
+            // Disable save button while typing
+            saveBtn.setInteractive(false);
+            saveBtn.setTint(0xcccccc);
+            saveText.setColor('#9E9E9E');
+        });
+
+        this.editInput.addEventListener('blur', () => {
+            if (this.scene.input.keyboard) {
+                this.scene.input.keyboard.enabled = true;
+            }
+            // Re-enable save button
+            saveBtn.setInteractive({ useHandCursor: true });
+            saveBtn.clearTint();
+            saveText.setColor('#FFFFFF');
+        });
+
         this.editInput.focus();
 
         // Or label
@@ -2268,10 +2516,12 @@ export class ProfileManager extends BaseManager {
                     const ipfsUrl = await IPFSService.uploadImage(file);
                     if (this.editInput) this.editInput.value = ipfsUrl;
                     uploadText.setText('Uploaded!');
-                    uploadText.setColor('#4ade80');
+                    uploadText.setColor('#FFFFFF');
+                    uploadText.setStroke('#000000', 3);
                     setTimeout(() => {
                         uploadText.setText('Upload Image');
                         uploadText.setColor('#FFFFFF');
+                        uploadText.setStroke('#5D4037', 2);
                         uploadBtnBg.setInteractive({ useHandCursor: true });
                     }, 2000);
                 } catch {
@@ -2285,12 +2535,9 @@ export class ProfileManager extends BaseManager {
                 }
             }
         });
-
-        // Buttons
-        this.createEditFormButtons(formX, formY + 80, 'avatar', currentValue);
     }
 
-    private createEditFormButtons(formX: number, formY: number, fieldName: string, currentValue: string): void {
+    private createEditFormButtons(formX: number, formY: number, fieldName: string, currentValue: string): { saveBtn: Phaser.GameObjects.Sprite, saveText: Phaser.GameObjects.Text } {
         const saveBtnBg = this.scene.add.sprite(formX - 50, formY, 'square-buttons', 6);
         saveBtnBg.setDisplaySize(80, 32);
         saveBtnBg.setDepth(5202);
@@ -2352,6 +2599,8 @@ export class ProfileManager extends BaseManager {
         cancelBtnBg.on('pointerdown', () => this.closeEditForm());
         cancelBtnBg.on('pointerover', () => cancelBtnBg.setTint(0xcccccc));
         cancelBtnBg.on('pointerout', () => cancelBtnBg.clearTint());
+
+        return { saveBtn: saveBtnBg, saveText };
     }
 
     private closeEditForm(): void {
@@ -2498,6 +2747,10 @@ export class ProfileManager extends BaseManager {
         if (this.quickActionsManager) {
             this.quickActionsManager.destroy();
             this.quickActionsManager = null;
+        }
+        if (this.floatingButtonsManager) {
+            this.floatingButtonsManager.destroy();
+            this.floatingButtonsManager = null;
         }
         this.destroyProfileElements();
         super.destroy();

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BaseManager } from './BaseManager';
+import { DynamicShadow } from '../objects/DynamicShadow';
 import { PlantType, ChestSlot, ShopPurchaseLimits } from '../types/GameTypes';
 import {
     ShopService,
@@ -171,6 +172,9 @@ export class ShopManager extends BaseManager {
         this.shopSprite.setDepth(shopY + 20);
         this.shopSprite.setInteractive({ useHandCursor: true });
         this.shopSprite.play('shop-idle');
+
+        // Add shadow for shop
+        new DynamicShadow(this.scene, this.shopSprite, 0, 2);
 
         this.shopSprite.on('pointerdown', () => {
             this.open();

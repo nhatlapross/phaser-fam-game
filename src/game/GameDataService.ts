@@ -569,9 +569,123 @@ export class GameDataService {
         return goldShop;
     }
 
+    /**
+     * Update currency balances in all cached locations
+     * Ensures Single Source of Truth consistency across User, Currencies, and Shops
+     */
+    static updateCurrency(gold: number, gem: number): void {
+        if (!cachedGameData) return;
+
+        // 1. Update main currencies object
+        if (cachedGameData.currencies) {
+            cachedGameData.currencies.gold = gold;
+            cachedGameData.currencies.gem = gem;
+        } else {
+            cachedGameData.currencies = { gold, gem };
+        }
+
+        // 2. Update user profile
+        if (cachedGameData.user) {
+            cachedGameData.user.balanceGold = gold;
+            cachedGameData.user.balanceGem = gem;
+            cachedGameData.user.gold = gold; // Some parts might use this
+            cachedGameData.user.gem = gem;   // Some parts might use this
+        }
+
+        // 3. Update shop snapshots to prevent stale data in modals
+        if (cachedGameData.shop) {
+            if (cachedGameData.shop.gemShop?.user) {
+                cachedGameData.shop.gemShop.user.balanceGem = gem;
+            }
+            if (cachedGameData.shop.goldShop?.user) {
+                cachedGameData.shop.goldShop.user.balanceGold = gold;
+            }
+        }
+
+        // Persist to local storage
+        this.persistCache();
+        
+        // Notify UI listeners
+        this.notifyDataUpdated();
+    }
+
+    /**
+     * Update seed inventory in cache (optimistic update)
+     * @param type The seed type (e.g. 'ALGAE', 'MUSHROOM', 'TREE')
+     * @param amount The amount to add (can be negative)
+     */
+    static updateSeed(type: string, amount: number): void {
+        if (!cachedGameData) return;
+
+        // Ensure seeds array exists
+        if (!cachedGameData.seeds) cachedGameData.seeds = [];
+
+        // Find existing seed
+        const existingIndex = cachedGameData.seeds.findIndex(s => s.type === type);
+        
+        if (existingIndex >= 0) {
+            cachedGameData.seeds[existingIndex].quantity += amount;
+            // Prevent negative quantity
+            if (cachedGameData.seeds[existingIndex].quantity < 0) {
+                cachedGameData.seeds[existingIndex].quantity = 0;
+            }
+        } else if (amount > 0) {
+            // Add new seed item
+            cachedGameData.seeds.push({
+                type: type as any,
+                quantity: amount,
+                id: `temp_${Date.now()}`,
+                userId: cachedGameData.user?.id || '',
+                rarity: 'COMMON', // Default, will be corrected on next fetch
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+        }
+
+        this.persistCache();
+        this.notifyDataUpdated();
+    }
+
+    /**
+     * Update fertilizer inventory in cache (optimistic update)
+     * @param type The fertilizer type (e.g. 'FERTILIZER_COMMON')
+     * @param amount The amount to add (can be negative)
+     */
+    static updateFertilizer(type: string, amount: number): void {
+        if (!cachedGameData) return;
+
+        if (!cachedGameData.fertilizers) {
+            cachedGameData.fertilizers = { fertilizers: [], total: 0 };
+        }
+        
+        const existingIndex = cachedGameData.fertilizers.fertilizers.findIndex(f => f.type === type);
+        
+        if (existingIndex >= 0) {
+            cachedGameData.fertilizers.fertilizers[existingIndex].amount += amount;
+            // Prevent negative amount
+            if (cachedGameData.fertilizers.fertilizers[existingIndex].amount < 0) {
+                cachedGameData.fertilizers.fertilizers[existingIndex].amount = 0;
+            }
+        } else if (amount > 0) {
+            // Add new fertilizer item
+            cachedGameData.fertilizers.fertilizers.push({
+                type: type as any,
+                amount: amount,
+                rarity: type.replace('FERTILIZER_', '') as any // Best guess mapping
+            });
+        }
+        
+        this.persistCache();
+        this.notifyDataUpdated();
+    }
+
+    /**
+     * Refresh only the Gem Shop data
+     * Call this after a purchase to update availability
+     */
     static async refreshGemShop(): Promise<GemShopResponse | null> {
         const gemShop = await ShopService.getGemShop();
-        if (cachedGameData) {
+        if (cachedGameData && gemShop) {
             cachedGameData.shop.gemShop = gemShop;
         }
         return gemShop;
@@ -612,6 +726,9 @@ export class GameDataService {
 
     static async refreshStorage(): Promise<StorageResponse | null> {
         const storage = await InventoryService.getStorage();
+        if (storage && storage.storage) {
+            storage.storage = storage.storage.filter(item => !['GOLD', 'GEM', 'RUBY'].includes(item.itemType));
+        }
         if (cachedGameData) {
             cachedGameData.inventory.storage = storage;
         }
@@ -620,6 +737,9 @@ export class GameDataService {
 
     static async refreshBackpack(): Promise<BackpackResponse | null> {
         const backpack = await InventoryService.getBackpack();
+        if (backpack && backpack.backpack) {
+            backpack.backpack = backpack.backpack.filter(item => !['GOLD', 'GEM', 'RUBY'].includes(item.itemType));
+        }
         if (cachedGameData) {
             cachedGameData.inventory.backpack = backpack;
         }
@@ -631,6 +751,17 @@ export class GameDataService {
             InventoryService.getStorage(),
             InventoryService.getBackpack()
         ]);
+        
+        const IGNORED_ITEMS = ['GOLD', 'GEM', 'RUBY'];
+        
+        if (storage && storage.storage) {
+            storage.storage = storage.storage.filter(item => !IGNORED_ITEMS.includes(item.itemType));
+        }
+        
+        if (backpack && backpack.backpack) {
+            backpack.backpack = backpack.backpack.filter(item => !IGNORED_ITEMS.includes(item.itemType));
+        }
+
         const inventoryData: InventoryData = { storage, backpack };
         if (cachedGameData) {
             cachedGameData.inventory = inventoryData;
@@ -836,7 +967,8 @@ export class GameDataService {
             this.refreshCurrencies(),
             this.refreshSeeds(),
             this.refreshFertilizers(),
-            this.refreshFruits()
+            this.refreshFruits(),
+            this.refreshGemShop() // Refresh gem shop to update land availability
         ]);
         // Update localStorage cache with refreshed data
         if (cachedGameData) {
@@ -882,6 +1014,14 @@ export class GameDataService {
      */
     static clearUIUpdateCallback(): void {
         this.uiUpdateCallback = null;
+    }
+
+    /**
+     * Public method to trigger UI update
+     * Call this when data has been modified externally (e.g. via WebSocket)
+     */
+    static notifyDataUpdated(): void {
+        this.triggerUIUpdate();
     }
 
     /**
@@ -945,9 +1085,13 @@ export class GameDataService {
         if (!cachedGameData?.inventory?.storage?.storage) return;
 
         const storage = cachedGameData.inventory.storage.storage;
+        const IGNORED_ITEMS = ['GOLD', 'GEM', 'RUBY'];
 
         // Update each item in the cache
         items.forEach(item => {
+            // Filter out currency items
+            if (IGNORED_ITEMS.includes(item.itemType)) return;
+
             // Only update STORAGE items (or items without location specified)
             if (item.location && item.location !== 'STORAGE') return;
 
@@ -981,6 +1125,8 @@ export class GameDataService {
             cachedGameData.inventory.storage.summary.totalItems = storage.reduce((sum, item) => sum + item.amount, 0);
             cachedGameData.inventory.storage.summary.totalTypes = storage.length;
         }
+
+        this.notifyDataUpdated();
     }
 
     /**
@@ -1004,9 +1150,13 @@ export class GameDataService {
         if (!cachedGameData?.inventory?.backpack?.backpack) return;
 
         const backpack = cachedGameData.inventory.backpack.backpack;
+        const IGNORED_ITEMS = ['GOLD', 'GEM', 'RUBY'];
 
         // Update each item in the cache
         items.forEach(item => {
+            // Filter out currency items
+            if (IGNORED_ITEMS.includes(item.itemType)) return;
+
             // Only update BACKPACK items (or items without location specified)
             if (item.location && item.location !== 'BACKPACK') return;
 
@@ -1042,5 +1192,7 @@ export class GameDataService {
             cachedGameData.inventory.backpack.capacity.used = totalUsed;
             cachedGameData.inventory.backpack.capacity.available = maxCapacity - totalUsed;
         }
+
+        this.notifyDataUpdated();
     }
 }

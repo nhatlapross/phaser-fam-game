@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
+import { getSocketService } from '../SocketService';
 
 /**
  * GameHouseManager - Manages game house interactions in Town Square
@@ -34,6 +35,24 @@ export class GameHouseManager {
             title: 'Tetris',
             emoji: '🎮',
             description: 'Score points by clearing rows',
+        },
+        {
+            id: 'snake',
+            title: 'Snake',
+            emoji: '🐍',
+            description: 'Eat food and grow longer!',
+        },
+        {
+            id: 'brickbreaker',
+            title: 'Brick Breaker',
+            emoji: '🧱',
+            description: 'Break all the bricks!',
+        },
+        {
+            id: 'minesweeper',
+            title: 'Minesweeper',
+            emoji: '💣',
+            description: 'Find all the mines!',
         },
     ];
 
@@ -134,12 +153,12 @@ export class GameHouseManager {
         `;
         content.appendChild(subtitle);
 
-        // Games grid - single column on mobile
+        // Games grid - 2 columns layout
         const gamesGrid = document.createElement('div');
         gamesGrid.style.cssText = `
-            display: flex;
-            flex-direction: column;
-            gap: ${isMobile ? '10px' : '12px'};
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: ${isMobile ? '8px' : '10px'};
         `;
 
         this.games.forEach(game => {
@@ -152,14 +171,14 @@ export class GameHouseManager {
         comingSoon.style.cssText = `
             background: #2D2D2D;
             border: 2px dashed #5D4037;
-            border-radius: 12px;
-            padding: ${isMobile ? '16px' : '20px'};
+            border-radius: 10px;
+            padding: ${isMobile ? '12px 8px' : '14px 10px'};
             text-align: center;
             opacity: 0.6;
         `;
         comingSoon.innerHTML = `
-            <div style="font-size: ${isMobile ? '32px' : '40px'}; margin-bottom: 8px;">🎯</div>
-            <div style="color: #888; font-size: ${isMobile ? '12px' : '14px'};">More games coming soon...</div>
+            <div style="font-size: ${isMobile ? '24px' : '28px'}; margin-bottom: 6px;">🎯</div>
+            <div style="color: #888; font-size: ${isMobile ? '10px' : '11px'};">Coming soon...</div>
         `;
         gamesGrid.appendChild(comingSoon);
 
@@ -175,7 +194,7 @@ export class GameHouseManager {
     }
 
     /**
-     * Create a game card element - responsive for mobile
+     * Create a game card element - compact for 2-column grid
      */
     private createGameCard(game: MiniGameInfo): HTMLDivElement {
         const isMobile = window.innerWidth < 500;
@@ -184,8 +203,8 @@ export class GameHouseManager {
         card.style.cssText = `
             background: #3D1A1A;
             border: 2px solid #5D4037;
-            border-radius: 12px;
-            padding: ${isMobile ? '16px' : '20px'};
+            border-radius: 10px;
+            padding: ${isMobile ? '10px 8px' : '12px 10px'};
             text-align: center;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
@@ -194,11 +213,11 @@ export class GameHouseManager {
         `;
 
         card.innerHTML = `
-            <div style="font-size: ${isMobile ? '36px' : '48px'}; margin-bottom: ${isMobile ? '8px' : '12px'};">${game.emoji}</div>
-            <div style="color: #FFD700; font-size: ${isMobile ? '16px' : '18px'}; font-weight: bold; margin-bottom: 8px; text-shadow: 2px 2px 0 #000;">${game.title}</div>
-            <div style="color: #CCCCCC; font-size: ${isMobile ? '11px' : '12px'}; margin-bottom: ${isMobile ? '12px' : '16px'};">${game.description}</div>
-            <div style="background: #7BC043; color: white; padding: ${isMobile ? '12px 16px' : '10px 20px'}; border-radius: 8px; border: 2px solid #5D9B3A; font-size: ${isMobile ? '13px' : '14px'};">
-                Play Now
+            <div style="font-size: ${isMobile ? '28px' : '32px'}; margin-bottom: 6px;">${game.emoji}</div>
+            <div style="color: #FFD700; font-size: ${isMobile ? '13px' : '14px'}; font-weight: bold; margin-bottom: 4px; text-shadow: 1px 1px 0 #000;">${game.title}</div>
+            <div style="color: #CCCCCC; font-size: ${isMobile ? '9px' : '10px'}; margin-bottom: 8px; line-height: 1.2;">${game.description}</div>
+            <div style="background: #7BC043; color: white; padding: ${isMobile ? '8px 10px' : '8px 12px'}; border-radius: 6px; border: 2px solid #5D9B3A; font-size: ${isMobile ? '11px' : '12px'};">
+                Play
             </div>
         `;
 
@@ -239,6 +258,12 @@ export class GameHouseManager {
         this.currentGame = gameId;
         
         const isMobile = window.innerWidth < 500;
+        
+        // Ensure socket is connected for score submission
+        const socketService = getSocketService();
+        if (!socketService.isConnected()) {
+            socketService.connect();
+        }
         
         // Clear modal content and show game
         if (this.modalElement) {

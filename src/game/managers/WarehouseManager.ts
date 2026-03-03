@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
+import { DynamicShadow } from '../objects/DynamicShadow';
 import { BaseManager } from './BaseManager';
 import { InventoryService, InventoryItem } from '../InventoryService';
 import { GameDataService } from '../GameDataService';
+
+import { EventBus } from '../EventBus';
 
 interface WarehouseCallbacks {
     getBackpackItems: () => InventoryItem[];
@@ -19,6 +22,7 @@ interface WarehouseCallbacks {
  */
 export class WarehouseManager extends BaseManager {
     private warehouseSprite!: Phaser.GameObjects.Sprite;
+    private warehouseCollider?: Phaser.GameObjects.Rectangle;
     private callbacks: WarehouseCallbacks;
     private tileSize: number;
     private storageItems: InventoryItem[] = [];
@@ -36,6 +40,14 @@ export class WarehouseManager extends BaseManager {
         super(scene);
         this.callbacks = callbacks;
         this.tileSize = tileSize;
+
+        // Listen for game data updates (inventory changes from WebSocket)
+        EventBus.on('gamedata:updated', () => {
+            if (this.isOpen) {
+                // Re-open to refresh data and UI
+                this.open();
+            }
+        });
     }
 
     /**
@@ -52,12 +64,24 @@ export class WarehouseManager extends BaseManager {
         this.warehouseSprite.setDepth(warehouseY + 20);
         this.warehouseSprite.setInteractive({ useHandCursor: true });
 
+        // Add shadow for warehouse
+        new DynamicShadow(this.scene, this.warehouseSprite, 0, 2);
+
         this.warehouseSprite.on('pointerdown', () => {
             this.toggle();
         });
 
         // Setup hover effect with tint + shadow
         this.setupHoverEffect(this.warehouseSprite, 12);
+
+        // Create collider at the base of the warehouse (center-origin sprite by default)
+        const collisionWidth = this.warehouseSprite.displayWidth * 0.75 - 30;
+        const collisionHeight = this.warehouseSprite.displayHeight * 0.32 - 40;
+        const bottomY = warehouseY + this.warehouseSprite.displayHeight / 2;
+        const collisionY = bottomY - collisionHeight / 2 - 30;
+        this.warehouseCollider = this.scene.add.rectangle(warehouseX, collisionY, collisionWidth, collisionHeight);
+        this.warehouseCollider.setVisible(false);
+        this.scene.physics.add.existing(this.warehouseCollider, true);
     }
 
     /**
@@ -65,6 +89,10 @@ export class WarehouseManager extends BaseManager {
      */
     public getWarehouseSprite(): Phaser.GameObjects.Sprite {
         return this.warehouseSprite;
+    }
+
+    public getWarehouseCollider(): Phaser.GameObjects.Rectangle | undefined {
+        return this.warehouseCollider;
     }
 
     /**
@@ -90,13 +118,9 @@ export class WarehouseManager extends BaseManager {
         this.warehouseSprite.setFrame(1);
 
         // Use cached storage data (pre-loaded during game initialization)
-        // Filter out currency items (GOLD, RUBY, GEM) - these are on User model, not inventory
-        const CURRENCY_ITEMS = ['GOLD', 'RUBY', 'GEM'];
         const cachedData = GameDataService.getCachedData();
         if (cachedData?.inventory?.storage) {
-            this.storageItems = cachedData.inventory.storage.storage.filter(
-                item => !CURRENCY_ITEMS.includes(item.itemType)
-            );
+            this.storageItems = cachedData.inventory.storage.storage;
         } else {
             this.storageItems = [];
         }

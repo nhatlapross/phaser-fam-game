@@ -5,9 +5,10 @@ import { MissionService, Mission } from '../MissionService';
 import { RedeemService } from '../RedeemService';
 import { GameDataService } from '../GameDataService';
 import { getMissionSocketService, MissionUpdatedPayload } from '../MissionSocketService';
+import { useGameState } from '../hooks/useGameState';
 import { EventBus } from '../EventBus';
 import { SocialSubmissionManager } from './SocialSubmissionManager';
-import { getSocketService } from '../SocketService';
+import { DynamicShadow } from '../objects/DynamicShadow';
 
 interface MailboxCallbacks {
     getSeedCounts: () => Record<PlantType, number>;
@@ -26,11 +27,13 @@ type SubmissionType = 'link' | 'image';
  */
 export class MailboxManager extends BaseManager {
     private mailboxSprite!: Phaser.GameObjects.Sprite;
+    private mailboxCollider?: Phaser.GameObjects.Rectangle;
     private activeTab: 'missions' | 'redeem' = 'missions';
     private callbacks: MailboxCallbacks;
     private cachedMissions: Mission[] | null = null;
     private missionsCacheTime: number = 0;
     private redeemResultElements: Phaser.GameObjects.GameObject[] = [];
+    private redeemResultDelayedCall: Phaser.Time.TimerEvent | null = null;
     private missionDetailElements: Phaser.GameObjects.GameObject[] = [];
     private qrScannerContainer: HTMLDivElement | null = null;
     private redeemInput: HTMLInputElement | null = null;
@@ -41,11 +44,102 @@ export class MailboxManager extends BaseManager {
     private shouldCloseMailbox: boolean = false;
     private tileSize: number;
     private socialSubmissionManager: SocialSubmissionManager | null = null;
+    private resizeListener: (() => void) | null = null;
+    private redeemInputGameCoordinates: { x: number, y: number, width: number, height: number } | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: MailboxCallbacks, tileSize: number) {
         super(scene);
         this.callbacks = callbacks;
         this.tileSize = tileSize;
+    }
+
+    private isPortraitMode(): boolean {
+        return window.innerHeight > window.innerWidth;
+    }
+
+    private updateRedeemInputPosition(): void {
+        if (!this.redeemInput || !this.redeemInputGameCoordinates) return;
+
+        const gameWidth = this.scene.scale.width;
+        const gameHeight = this.scene.scale.height;
+        
+        // Target dimensions in game units
+        const inputWidthGame = this.redeemInputGameCoordinates.width;
+        const inputHeightGame = this.redeemInputGameCoordinates.height;
+        
+        // Input center in game coordinates
+        const inputCenterX = this.redeemInputGameCoordinates.x;
+        const inputCenterY = this.redeemInputGameCoordinates.y;
+
+        const isPortrait = this.isPortraitMode();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        if (isPortrait) {
+            // In portrait mode, the game is rotated 90deg clockwise via CSS
+            // Game X -> Screen Y, Game Y -> Screen X (inverted)
+            const scaleX = viewportHeight / gameWidth;
+            const scaleY = viewportWidth / gameHeight;
+
+            // Transform game coordinates to screen coordinates
+            // Screen X corresponds to Game Y (inverted)
+            // Screen Y corresponds to Game X
+            const screenX = viewportWidth - (inputCenterY / gameHeight) * viewportWidth;
+            const screenY = (inputCenterX / gameWidth) * viewportHeight;
+
+            const screenWidth = inputWidthGame * scaleX;
+            const screenHeight = inputHeightGame * scaleY;
+
+            this.redeemInput.style.cssText = `
+                position: fixed;
+                left: ${screenX}px;
+                top: ${screenY}px;
+                width: ${screenWidth}px;
+                height: ${screenHeight}px;
+                transform: translate(-50%, -50%) rotate(90deg);
+                padding: 4px 8px;
+                font-size: ${12 * Math.min(scaleX, scaleY)}px;
+                font-family: 'Arial', sans-serif;
+                border: 2px solid #5D4037;
+                border-radius: 5px;
+                background-color: #FFF8E1;
+                color: #5D4037;
+                outline: none;
+                text-align: center;
+                z-index: 10001;
+                box-sizing: border-box;
+            `;
+        } else {
+            // Landscape
+            const scaleX = viewportWidth / gameWidth;
+            const scaleY = viewportHeight / gameHeight;
+
+            const screenX = inputCenterX * scaleX;
+            const screenY = inputCenterY * scaleY;
+
+            const screenWidth = inputWidthGame * scaleX;
+            const screenHeight = inputHeightGame * scaleY;
+
+            this.redeemInput.style.cssText = `
+                position: fixed;
+                left: ${screenX}px;
+                top: ${screenY}px;
+                width: ${screenWidth}px;
+                height: ${screenHeight}px;
+                transform: translate(-50%, -50%);
+                padding: 4px 8px;
+                font-size: ${12 * Math.min(scaleX, scaleY)}px;
+                font-family: 'Arial', sans-serif;
+                border: 2px solid #5D4037;
+                border-radius: 5px;
+                background-color: #FFF8E1;
+                color: #5D4037;
+                outline: none;
+                text-align: center;
+                z-index: 10001;
+                box-sizing: border-box;
+            `;
+        }
     }
 
     /**
@@ -70,9 +164,12 @@ export class MailboxManager extends BaseManager {
 
         this.mailboxSprite = this.scene.add.sprite(mailboxX, mailboxY, 'mailbox');
         this.mailboxSprite.setDisplaySize(32, 32);
-        this.mailboxSprite.setDepth(mailboxY + 16);
+        this.mailboxSprite.setDepth(mailboxY + 25);
         this.mailboxSprite.setInteractive({ useHandCursor: true });
         this.mailboxSprite.play('mailbox-idle');
+
+        // Add shadow
+        new DynamicShadow(this.scene, this.mailboxSprite, 0, 0);
 
         this.mailboxSprite.on('pointerdown', () => {
             this.open();
@@ -80,6 +177,15 @@ export class MailboxManager extends BaseManager {
 
         // Setup hover effect with tint + shadow
         this.setupHoverEffect(this.mailboxSprite, 8);
+
+        // Create collider at the base of the mailbox
+        const collisionWidth = this.mailboxSprite.displayWidth * 0.75-20;
+        const collisionHeight = this.mailboxSprite.displayHeight * 0.35-35;
+        const bottomY = mailboxY + this.mailboxSprite.displayHeight / 2 - 10;
+        const collisionY = bottomY - collisionHeight / 2 - 4;
+        this.mailboxCollider = this.scene.add.rectangle(mailboxX, collisionY, collisionWidth, collisionHeight);
+        this.mailboxCollider.setVisible(false);
+        this.scene.physics.add.existing(this.mailboxCollider, true);
 
         // Add decorative bushes below mailbox
         const bushY = mailboxY + 16;
@@ -89,17 +195,17 @@ export class MailboxManager extends BaseManager {
         // Left bush
         const leftBush = this.scene.add.sprite(mailboxX - 12, bushY, 'basic-plants', bushFrame1);
         leftBush.setOrigin(0.5);
-        leftBush.setDepth(bushY);
+        leftBush.setDepth(bushY + 10);
 
         // Right bush
         const rightBush = this.scene.add.sprite(mailboxX + 12, bushY, 'basic-plants', bushFrame2);
         rightBush.setOrigin(0.5);
-        rightBush.setDepth(bushY);
+        rightBush.setDepth(bushY + 10);
 
         // Center bush (slightly lower)
         const centerBush = this.scene.add.sprite(mailboxX, bushY + 6, 'basic-plants', bushFrame1);
         centerBush.setOrigin(0.5);
-        centerBush.setDepth(bushY + 6);
+        centerBush.setDepth(bushY + 16);
     }
 
     /**
@@ -107,6 +213,10 @@ export class MailboxManager extends BaseManager {
      */
     public getMailboxSprite(): Phaser.GameObjects.Sprite {
         return this.mailboxSprite;
+    }
+
+    public getMailboxCollider(): Phaser.GameObjects.Rectangle | undefined {
+        return this.mailboxCollider;
     }
 
     /**
@@ -206,6 +316,17 @@ export class MailboxManager extends BaseManager {
             this.redeemInput.parentNode.removeChild(this.redeemInput);
         }
         this.redeemInput = null;
+        this.redeemInputGameCoordinates = null;
+
+        if (this.resizeListener) {
+            window.removeEventListener('resize', this.resizeListener);
+            this.resizeListener = null;
+        }
+        
+        // Re-enable keyboard input
+        if (this.scene.input.keyboard) {
+            this.scene.input.keyboard.enabled = true;
+        }
     }
 
     private createModalContent(modalX: number, modalY: number, modalWidth: number, modalHeight: number): void {
@@ -675,29 +796,34 @@ export class MailboxManager extends BaseManager {
             this.redeemInput.placeholder = 'Enter code here...';
             this.redeemInput.maxLength = 150;
 
-            // Get game canvas position for accurate placement
-            const canvas = this.scene.game.canvas;
-            const canvasRect = canvas.getBoundingClientRect();
-            const scaleX = canvasRect.width / this.scene.scale.width;
-            const scaleY = canvasRect.height / this.scene.scale.height;
+            // Calculate dynamic layout
+            const margin = 25;
+            const qrSize = 36;
+            const gap = 2;
+            const inputHeight = 28;
+            
+            // Calculate input width to fill available space
+            const contentWidth = modalWidth - (margin * 2);
+            const inputWidth = contentWidth - qrSize - gap - 10;
+            
+            // Calculate center positions
+            const startX = modalX - (modalWidth / 2) + margin + 15;
+            const inputCenterX = startX + (inputWidth / 2);
+            const qrCenterX = startX + inputWidth + gap + (qrSize / 2);
 
-            // Calculate input size based on modal width (not canvas)
-            const scaledModalWidth = modalWidth * scaleX;
-            const inputWidth = Math.min(180, scaledModalWidth * 2);
-
-            // Position at modal center
-            const inputLeft = canvasRect.left + (modalX * scaleX);
-            const inputTop = canvasRect.top + ((contentY - 20) * scaleY);
+            // Store game coordinates for resize updates
+            this.redeemInputGameCoordinates = {
+                x: inputCenterX,
+                y: contentY - 5,
+                width: inputWidth,
+                height: inputHeight
+            };
 
             this.redeemInput.style.cssText = `
                 position: fixed;
-                left: ${inputLeft}px;
-                top: ${inputTop}px;
-                transform: translateX(-55%);
-                width: ${inputWidth}px;
                 padding: 5px 8px;
                 font-size: 10px;
-                font-family: 'PixelFont', monospace;
+                font-family: 'Arial', sans-serif;
                 border: 2px solid #5D4037;
                 border-radius: 5px;
                 background-color: #FFF8E1;
@@ -707,12 +833,22 @@ export class MailboxManager extends BaseManager {
                 z-index: 10001;
                 box-sizing: border-box;
             `;
+
+            // Add resize listener if not already added
+            if (!this.resizeListener) {
+                this.resizeListener = () => this.updateRedeemInputPosition();
+                window.addEventListener('resize', this.resizeListener);
+            }
+
+            // Calculate initial position
+            this.updateRedeemInputPosition();
             document.body.appendChild(this.redeemInput);
-            this.redeemInput.focus();
+            
+            // Focus is handled after listeners setup below
 
             // QR button - responsive positioning
-            const qrBtnX = modalX + modalWidth / 2 - 60; // Position near right edge of modal
-            const qrBtnY = contentY - 15;
+            const qrBtnX = qrCenterX;
+            const qrBtnY = contentY - 5;
             const qrBtnBg = this.scene.add.sprite(qrBtnX, qrBtnY, 'square-buttons', 6);
             qrBtnBg.setDisplaySize(36, 28);
             qrBtnBg.setDepth(5302);
@@ -770,6 +906,32 @@ export class MailboxManager extends BaseManager {
             });
             redeemBtnBg.on('pointerover', () => redeemBtnBg.setTint(0xcccccc));
             redeemBtnBg.on('pointerout', () => redeemBtnBg.clearTint());
+
+            // Add focus/blur listeners to input (defined here to access redeemBtnBg)
+            if (this.redeemInput) {
+                // Prevent Phaser from capturing keys
+                this.redeemInput.addEventListener('keydown', (e) => e.stopPropagation());
+                this.redeemInput.addEventListener('keyup', (e) => e.stopPropagation());
+                this.redeemInput.addEventListener('keypress', (e) => e.stopPropagation());
+
+                this.redeemInput.addEventListener('focus', () => {
+                    if (this.scene.input.keyboard) {
+                        this.scene.input.keyboard.enabled = false;
+                    }
+                    redeemBtnBg.setInteractive(false);
+                    redeemBtnBg.setTint(0xcccccc);
+                });
+
+                this.redeemInput.addEventListener('blur', () => {
+                    if (this.scene.input.keyboard) {
+                        this.scene.input.keyboard.enabled = true;
+                    }
+                    redeemBtnBg.setInteractive({ useHandCursor: true });
+                    redeemBtnBg.clearTint();
+                });
+
+                this.redeemInput.focus();
+            }
         };
 
         // Tab handlers
@@ -1473,6 +1635,12 @@ export class MailboxManager extends BaseManager {
             box-sizing: border-box;
         `;
         document.body.appendChild(this.socialLinkInput);
+
+        // Prevent Phaser from capturing keys
+        this.socialLinkInput.addEventListener('keydown', (e) => e.stopPropagation());
+        this.socialLinkInput.addEventListener('keyup', (e) => e.stopPropagation());
+        this.socialLinkInput.addEventListener('keypress', (e) => e.stopPropagation());
+
         this.socialLinkInput.focus();
 
         return container;
@@ -1795,69 +1963,20 @@ export class MailboxManager extends BaseManager {
         this.showRedeemResultModal(true, 'Validating code...', undefined, true);
 
         try {
-            // Try WebSocket first if connected
-            const socketService = getSocketService();
-            let useWebSocket = false;
-            
-            if (socketService.isConnected()) {
-                // Use WebSocket for real-time response
-                const success = socketService.claimGift(code);
-                if (success) {
-                    useWebSocket = true;
-                    // Response will come via socket events in FarmingGame
-                    // Setup one-time listeners for this specific claim
-                    const successHandler = (data: any) => {
-                        EventBus.off('event:claim_gift_websocket_success', successHandler);
-                        EventBus.off('event:claim_gift_websocket_error', errorHandler);
-                        
-                        let rewardMessage = '';
-                        if (data.eventName) {
-                            rewardMessage += `Event: ${data.eventName}\n`;
-                        }
-                        if (data.message) {
-                            rewardMessage += data.message + '\n';
-                        }
-                        if (data.reward) {
-                            rewardMessage += `Reward: ${data.reward.itemName || data.reward.itemType}\nAmount: ${data.reward.amount}`;
-                        }
-
-                        this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
-
-                        this.scene.time.delayedCall(3000, () => {
-                            this.closeRedeemResultModal();
-                            this.close();
-                        });
-                    };
-                    
-                    const errorHandler = (data: any) => {
-                        EventBus.off('event:claim_gift_websocket_success', successHandler);
-                        EventBus.off('event:claim_gift_websocket_error', errorHandler);
-                        
-                        this.showRedeemResultModal(false, data.message || 'Invalid or expired code');
-                    };
-                    
-                    EventBus.on('event:claim_gift_websocket_success', successHandler);
-                    EventBus.on('event:claim_gift_websocket_error', errorHandler);
-                    
-                    return; // Exit early, response handled by socket events
-                }
-            }
-            
-            // Fallback to REST API if WebSocket not available or failed
-            if (!useWebSocket) {
-                const result = await RedeemService.redeemCode(code);
-                this.handleRedeemResult(result);
-            }
+            // Use redemption/claim API
+            const result = await RedeemService.claimRedemptionCode(code);
+            this.handleRedeemResult(result);
         } catch {
             this.showRedeemResultModal(false, 'Error validating code. Please try again.');
         }
     }
 
-    private async processRedeemCodeWithEventId(code: string, eventId: string): Promise<void> {
+    private async processRedeemCodeWithEventId(code: string, _eventId: string): Promise<void> {
         this.showRedeemResultModal(true, 'Validating code...', undefined, true);
 
         try {
-            const result = await RedeemService.redeemCode(code, eventId);
+            // Use redemption/claim API (eventId not needed for this API)
+            const result = await RedeemService.claimRedemptionCode(code);
             this.handleRedeemResult(result);
         } catch {
             this.showRedeemResultModal(false, 'Error validating code. Please try again.');
@@ -1866,6 +1985,11 @@ export class MailboxManager extends BaseManager {
 
     private handleRedeemResult(result: any): void {
         if (result.success && result.reward) {
+            let itemType = result.reward.itemType || result.reward.type;
+            if (!itemType && result.type === 'GOLD') {
+                itemType = 'GOLD';
+            }
+
             let rewardMessage = '';
             if (result.event) {
                 rewardMessage += `Event: ${result.event.name}\n`;
@@ -1873,13 +1997,45 @@ export class MailboxManager extends BaseManager {
             if (result.reward.message) {
                 rewardMessage += result.reward.message + '\n';
             }
-            rewardMessage += `Reward: ${result.reward.itemType}\nAmount: ${result.reward.amount}`;
+            rewardMessage += `Reward: ${itemType}\nAmount: ${result.reward.amount || 1}`;
 
             // Play success sound for successful redeem
             this.callbacks.playSuccessSound();
 
-            // Refresh inventory to update player's items after redeem
-            GameDataService.refreshAndUpdateUI();
+            // Optimistic update to prevent lag and ensure immediate feedback
+            const cachedData = GameDataService.getCachedData();
+            if (cachedData && cachedData.user && result.reward) {
+                const amount = parseInt(String(result.reward.amount || 1), 10);
+
+                if (itemType === 'GOLD') {
+                    const currentGold = parseInt(String(cachedData.user.balanceGold || 0), 10);
+                    const currentGem = parseInt(String(cachedData.user.balanceGem || 0), 10);
+                    
+                    // Update GameState directly for immediate UI feedback BEFORE notifying UI listeners
+                    useGameState(this.scene).setCurrency(currentGold + amount, currentGem);
+                    
+                    // Update cache and notify listeners
+                    GameDataService.updateCurrency(currentGold + amount, currentGem);
+                } else if (itemType === 'GEM') {
+                    const currentGold = parseInt(String(cachedData.user.balanceGold || 0), 10);
+                    const currentGem = parseInt(String(cachedData.user.balanceGem || 0), 10);
+                    
+                    // Update GameState directly for immediate UI feedback BEFORE notifying UI listeners
+                    useGameState(this.scene).setCurrency(currentGold, currentGem + amount);
+                    
+                    // Update cache and notify listeners
+                    GameDataService.updateCurrency(currentGold, currentGem + amount);
+                } else if (['ALGAE', 'MUSHROOM', 'TREE'].includes(itemType)) {
+                    GameDataService.updateSeed(itemType, amount);
+                } else if (itemType.startsWith('FERTILIZER_')) {
+                    GameDataService.updateFertilizer(itemType, amount);
+                } else {
+                    // Fallback for unknown items
+                    GameDataService.refreshAndUpdateUI();
+                }
+            } else {
+                GameDataService.refreshAndUpdateUI();
+            }
 
             this.showRedeemResultModal(true, rewardMessage, undefined, false, true);
 
@@ -1935,7 +2091,14 @@ export class MailboxManager extends BaseManager {
             ease: 'Back.easeOut'
         });
 
-        this.scene.time.delayedCall(100, () => {
+        // Cancel any pending delayed call from previous modal
+        if (this.redeemResultDelayedCall) {
+            this.redeemResultDelayedCall.destroy();
+            this.redeemResultDelayedCall = null;
+        }
+
+        this.redeemResultDelayedCall = this.scene.time.delayedCall(100, () => {
+            this.redeemResultDelayedCall = null;
             const titleText = isLoading ? 'Loading...' : (success ? 'Success!' : 'Failed');
             const strokeColor = isLoading ? '#4a90e2' : (success ? '#2d7a3d' : '#8b1a1a');
 
@@ -1976,12 +2139,13 @@ export class MailboxManager extends BaseManager {
                 this.redeemResultElements.push(failIcon);
             }
 
-            const msgText = this.scene.add.text(modalX, modalY + 30, message, {
+            const msgText = this.scene.add.text(modalX + 10, modalY + 30, message, {
                 fontSize: '10px',
                 fontFamily: 'PixelFont',
                 color: '#FFFFFF',
                 resolution: 2,
-                align: 'center'
+                align: 'center',
+                wordWrap: { width: 160 }
             });
             msgText.setOrigin(0.5);
             msgText.setDepth(5502);
@@ -2017,8 +2181,18 @@ export class MailboxManager extends BaseManager {
     }
 
     private closeRedeemResultModal(): void {
+        // Cancel any pending delayed call
+        if (this.redeemResultDelayedCall) {
+            this.redeemResultDelayedCall.destroy();
+            this.redeemResultDelayedCall = null;
+        }
+
+        // Stop all tweens on result elements before destroying
         this.redeemResultElements.forEach(el => {
-            if (el && el.destroy) el.destroy();
+            if (el) {
+                this.scene.tweens.killTweensOf(el);
+                if (el.destroy) el.destroy();
+            }
         });
         this.redeemResultElements = [];
 
