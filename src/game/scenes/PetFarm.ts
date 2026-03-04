@@ -1497,25 +1497,77 @@ export class PetFarm extends Scene {
                 "soccer-player",
                 "ninja",
                 "nurse",
-                "npc-maidcat",
             ];
             const randomPetType = Phaser.Utils.Array.GetRandom(petTypes);
 
-            const result = await CyberCatService.registerPet(randomPetType);
+            // Step 1: Register on-chain agent
+            const contractResult =
+                await CyberCatService.registerAgent(randomPetType);
 
-            if (result.success) {
-                this.showToast("✅ Pet agent registered!", 0x4caf50);
-                console.log("🎉 Pet agent registered:", result);
+            if (!contractResult.success) {
+                this.showToast(
+                    `❌ Registration failed: ${contractResult.error}`,
+                    0xe74c3c,
+                );
+                console.error(
+                    "❌ Contract registration failed:",
+                    contractResult.error,
+                );
+                return;
+            }
+
+            console.log("✅ On-chain agent registered:", contractResult);
+
+            // Step 2: Mint CyberCat NFT (ERC-1155)
+            const catType = CyberCatService.petTypeToCatType(randomPetType);
+            const nftResult = await CyberCatService.mintCatNFT(catType);
+
+            if (!nftResult.success) {
+                // NFT minting failed - check if already claimed
+                if (
+                    nftResult.error?.includes("already claimed") ||
+                    nftResult.error?.includes("hasClaimed")
+                ) {
+                    console.warn(
+                        "⚠️ NFT already claimed, continuing with backend claim...",
+                    );
+                } else {
+                    this.showToast(
+                        `❌ NFT minting failed: ${nftResult.error}`,
+                        0xe74c3c,
+                    );
+                    console.error("❌ NFT minting failed:", nftResult.error);
+                    return;
+                }
+            } else {
+                console.log("✅ CyberCat NFT minted:", nftResult);
+                this.showToast("✅ CyberCat NFT minted!", 0x4caf50);
+            }
+
+            // Step 3: Claim CyberCat in backend (off-chain data)
+            const apiResult = await CyberCatService.claimCat(catType);
+
+            if (apiResult.success) {
+                this.showToast("✅ CyberCat claimed!", 0x4caf50);
+                console.log("🎉 CyberCat claimed:", apiResult);
 
                 // Increment counter and spawn pet
                 this.luckyBoxOpenCount++;
                 this.openLuckyBox();
             } else {
-                this.showToast(
-                    `❌ Registration failed: ${result.error}`,
-                    0xe74c3c,
+                // Contract succeeded but API failed - still spawn pet
+                console.warn(
+                    "⚠️ API claim failed but contract succeeded:",
+                    apiResult.error,
                 );
-                console.error("❌ Registration failed:", result.error);
+                this.showToast(
+                    "✅ Pet registered (API sync pending)",
+                    0xffa500,
+                );
+
+                // Still spawn the pet
+                this.luckyBoxOpenCount++;
+                this.openLuckyBox();
             }
         });
 
@@ -1687,7 +1739,7 @@ export class PetFarm extends Scene {
             });
         };
 
-        const confirmNaming = () => {
+        const confirmNaming = async () => {
             const petName = inputElement.value.trim() || petDisplayName;
             closeModal();
 
@@ -1696,8 +1748,30 @@ export class PetFarm extends Scene {
                 this.spawnedPetLabel.setText(petName);
             }
 
-            // Show success toast with custom name
-            this.showToast(`✨ Named your companion: ${petName}!`, 0x3498db);
+            // Update CyberCat name in backend
+            const { CyberCatService } = await import("../CyberCatService");
+            const updateResult = await CyberCatService.updateCat({
+                name: petName,
+                mood: "happy",
+            });
+
+            if (updateResult.success) {
+                console.log("✅ CyberCat name updated:", updateResult.cat);
+                this.showToast(
+                    `✨ Named your companion: ${petName}!`,
+                    0x3498db,
+                );
+            } else {
+                console.warn(
+                    "⚠️ Failed to update name in backend:",
+                    updateResult.error,
+                );
+                // Still show success toast since local update worked
+                this.showToast(
+                    `✨ Named your companion: ${petName}!`,
+                    0x3498db,
+                );
+            }
         };
 
         // Button hover effects
