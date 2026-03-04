@@ -7,6 +7,7 @@ import { UserService } from "../UserService";
 import { PLAYABLE_CHARACTERS } from "../config/CharacterConfig";
 import { GAME_CONSTANTS, StationManager } from "../managers";
 import { AnywhereDoorManager } from "../managers/AnywhereDoorManager";
+import { PetChatModal } from "../ui/PetChatModal";
 
 /**
  * PetFarm Scene - Cyber-Home Map
@@ -61,6 +62,8 @@ export class PetFarm extends Scene {
     private spawnedPetShadow: DynamicShadow | null = null; // Track pet shadow
     private spawnedPetLabel: Phaser.GameObjects.Text | null = null; // Track pet label
     private spawnedPetHitArea: Phaser.GameObjects.Arc | null = null; // Track pet hit area
+    private spawnedPetType: string = ""; // Track pet type for chat modal
+    private petChatModal: PetChatModal | null = null; // Pet chat modal
 
     // Station manager for travel
     private stationManager!: StationManager;
@@ -186,6 +189,12 @@ export class PetFarm extends Scene {
         if (this.spawnedPetHitArea) {
             this.spawnedPetHitArea.destroy();
             this.spawnedPetHitArea = null;
+        }
+
+        // Clean up pet chat modal
+        if (this.petChatModal) {
+            this.petChatModal.destroy();
+            this.petChatModal = null;
         }
     }
 
@@ -662,7 +671,7 @@ export class PetFarm extends Scene {
 
         // Add name label above NPC (no background, no icon)
         const nameLabel = this.add
-            .text(npcX, npcY - 50, "Nobita", {
+            .text(npcX, npcY - 50, "Future Nobita", {
                 fontSize: "14px",
                 color: "#fff",
                 stroke: "#000",
@@ -1466,13 +1475,17 @@ export class PetFarm extends Scene {
                 this.spawnedPetHitArea.destroy();
                 this.spawnedPetHitArea = null;
             }
+            if (this.petChatModal) {
+                this.petChatModal.destroy();
+                this.petChatModal = null;
+            }
 
             closeModal();
 
             // Show loading toast
-            this.showToast("⏳ Minting pet NFT...", 0xffa500);
+            this.showToast("⏳ Registering pet agent...", 0xffa500);
 
-            // Call smart contract to mint pet NFT
+            // Call smart contract to register pet agent (ERC-8004)
             const { CyberCatService } = await import("../CyberCatService");
 
             // Random pet type for Lucky Box
@@ -1488,18 +1501,21 @@ export class PetFarm extends Scene {
             ];
             const randomPetType = Phaser.Utils.Array.GetRandom(petTypes);
 
-            const result = await CyberCatService.mintPet(randomPetType);
+            const result = await CyberCatService.registerPet(randomPetType);
 
             if (result.success) {
-                this.showToast("✅ Pet NFT minted!", 0x4caf50);
-                console.log("🎉 Pet NFT minted:", result);
+                this.showToast("✅ Pet agent registered!", 0x4caf50);
+                console.log("🎉 Pet agent registered:", result);
 
                 // Increment counter and spawn pet
                 this.luckyBoxOpenCount++;
                 this.openLuckyBox();
             } else {
-                this.showToast(`❌ Mint failed: ${result.error}`, 0xe74c3c);
-                console.error("❌ Mint failed:", result.error);
+                this.showToast(
+                    `❌ Registration failed: ${result.error}`,
+                    0xe74c3c,
+                );
+                console.error("❌ Registration failed:", result.error);
             }
         });
 
@@ -1965,10 +1981,20 @@ export class PetFarm extends Scene {
             petSprite.clearTint();
         });
 
-        // Click to interact
+        // Store pet info
+        this.spawnedPetType = petType;
+
+        // Initialize PetChatModal
+        if (this.petChatModal) {
+            this.petChatModal.destroy();
+        }
+        this.petChatModal = new PetChatModal(this, petName, petType);
+
+        // Click to open chat modal
         hitArea.on("pointerdown", () => {
-            const currentName = label.text;
-            this.showToast(`${currentName} says hello! 👋`, petColor);
+            if (this.petChatModal) {
+                this.petChatModal.show();
+            }
         });
 
         // Start random movement
