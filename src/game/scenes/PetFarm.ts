@@ -1429,7 +1429,7 @@ export class PetFarm extends Scene {
             openBtnCost.setScale(1.0);
             btnShadow.setScale(1.0);
         });
-        openBtn.on("pointerdown", () => {
+        openBtn.on("pointerdown", async () => {
             // Gold check for second pet onwards
             if (!isFree) {
                 // Get current gold from GameDataService
@@ -1437,7 +1437,10 @@ export class PetFarm extends Scene {
                 const currentGold = cachedData?.user?.gold || 0;
 
                 if (currentGold < cost) {
-                    this.showToast(`Not enough gold! Need ${cost} �`, 0xe74c3c);
+                    this.showToast(
+                        `Not enough gold! Need ${cost} 💰`,
+                        0xe74c3c,
+                    );
                     return;
                 }
 
@@ -1464,9 +1467,40 @@ export class PetFarm extends Scene {
                 this.spawnedPetHitArea = null;
             }
 
-            this.luckyBoxOpenCount++;
-            this.openLuckyBox();
             closeModal();
+
+            // Show loading toast
+            this.showToast("⏳ Minting pet NFT...", 0xffa500);
+
+            // Call smart contract to mint pet NFT
+            const { CyberCatService } = await import("../CyberCatService");
+
+            // Random pet type for Lucky Box
+            const petTypes = [
+                "kungfu-master",
+                "cowboy",
+                "explorer",
+                "bullfighter",
+                "soccer-player",
+                "ninja",
+                "nurse",
+                "npc-maidcat",
+            ];
+            const randomPetType = Phaser.Utils.Array.GetRandom(petTypes);
+
+            const result = await CyberCatService.mintPet(randomPetType);
+
+            if (result.success) {
+                this.showToast("✅ Pet NFT minted!", 0x4caf50);
+                console.log("🎉 Pet NFT minted:", result);
+
+                // Increment counter and spawn pet
+                this.luckyBoxOpenCount++;
+                this.openLuckyBox();
+            } else {
+                this.showToast(`❌ Mint failed: ${result.error}`, 0xe74c3c);
+                console.error("❌ Mint failed:", result.error);
+            }
         });
 
         this.cameras.main.ignore(modalElements);
