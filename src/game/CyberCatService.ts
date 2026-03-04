@@ -1,6 +1,6 @@
 /**
- * CyberCatService - Pet NFT Contract Service
- * Call smart contract để mint/adopt pet NFT khi mở Lucky Box
+ * CyberCatService - Pet Agent Registration Service
+ * Register pet agents using ERC-8004 Identity Registry (same as DefiMaster)
  */
 
 import {
@@ -13,21 +13,18 @@ import {
 import { arbitrumSepolia } from "viem/chains";
 import { EventBus } from "./EventBus";
 
-// CyberCat NFT Contract Address (update with your deployed contract)
+// CyberCat uses ERC-8004 Identity Registry (same as DefiMaster)
 const CYBERCAT_CONTRACT_ADDRESS =
     (process.env.NEXT_PUBLIC_CYBERCAT_CONTRACT as `0x${string}`) ??
-    "0x0000000000000000000000000000000000000000"; // TODO: Update with real address
+    "0x27558E49D50E398C34e665A62d8f3DAcc1941449"; // Identity Registry
 
-// CyberCat Contract ABI - Minimal functions needed
+// ERC-8004 ABI
 const CYBERCAT_ABI = [
     {
         type: "function",
-        name: "mint",
-        inputs: [
-            { name: "to", type: "address" },
-            { name: "petType", type: "string" },
-        ],
-        outputs: [{ name: "tokenId", type: "uint256" }],
+        name: "register",
+        inputs: [{ name: "agentURI", type: "string" }],
+        outputs: [{ name: "agentId", type: "uint256" }],
         stateMutability: "nonpayable",
     },
     {
@@ -39,16 +36,16 @@ const CYBERCAT_ABI = [
     },
     {
         type: "function",
-        name: "tokenURI",
-        inputs: [{ name: "tokenId", type: "uint256" }],
+        name: "getAgentURI",
+        inputs: [{ name: "agentId", type: "uint256" }],
         outputs: [{ name: "", type: "string" }],
         stateMutability: "view",
     },
 ] as const;
 
-export interface MintPetResult {
+export interface RegisterPetResult {
     success: boolean;
-    tokenId?: string;
+    agentId?: string;
     txHash?: string;
     error?: string;
 }
@@ -85,12 +82,12 @@ export class CyberCatService {
     }
 
     /**
-     * Mint a new pet NFT
+     * Register a pet agent using ERC-8004
      * @param petType - Pet type identifier (e.g., "kungfu-master", "cowboy", etc.)
      */
-    static async mintPet(petType: string): Promise<MintPetResult> {
+    static async registerPet(petType: string): Promise<RegisterPetResult> {
         try {
-            console.log("🐱 Minting CyberCat NFT:", petType);
+            console.log("🐱 Registering CyberCat agent:", petType);
 
             const provider = await this.getProvider();
 
@@ -109,14 +106,14 @@ export class CyberCatService {
                 return { success: false, error: "No account found in wallet." };
             }
 
-            console.log("📝 Sending mint transaction...");
+            console.log("📝 Sending register transaction...");
 
-            // Send mint transaction
+            // Register pet agent with petType as agentURI
             const txHash = await walletClient.writeContract({
                 address: CYBERCAT_CONTRACT_ADDRESS,
                 abi: CYBERCAT_ABI,
-                functionName: "mint",
-                args: [account, petType],
+                functionName: "register",
+                args: [petType],
                 account,
             });
 
@@ -135,36 +132,34 @@ export class CyberCatService {
                 };
             }
 
-            // Extract tokenId from logs
-            let tokenId: string | undefined;
+            // Extract agentId from logs
+            let agentId: string | undefined;
             if (receipt.logs.length > 0) {
                 const log = receipt.logs[0];
                 if (log.topics[1]) {
-                    tokenId = BigInt(log.topics[1]).toString();
+                    agentId = BigInt(log.topics[1]).toString();
                 }
             }
 
-            console.log("✅ Pet NFT minted successfully!", {
-                tokenId,
+            console.log("✅ Pet agent registered successfully!", {
+                agentId,
                 txHash,
             });
 
-            return { success: true, tokenId, txHash };
+            return { success: true, agentId, txHash };
         } catch (err: unknown) {
             const message =
                 err instanceof Error ? err.message : "Unknown error occurred";
-            console.error("❌ CyberCatService.mintPet error:", err);
+            console.error("❌ CyberCatService.registerPet error:", err);
             return { success: false, error: message };
         }
     }
 
     /**
-     * Get number of pets owned by address
+     * Get number of agents owned by address
      */
-    static async getPetCount(address: string): Promise<number> {
+    static async getAgentCount(address: string): Promise<number> {
         try {
-            const provider = await this.getProvider();
-
             const publicClient = createPublicClient({
                 chain: arbitrumSepolia,
                 transport: http(),
@@ -179,7 +174,7 @@ export class CyberCatService {
 
             return Number(balance);
         } catch (error) {
-            console.error("❌ Error getting pet count:", error);
+            console.error("❌ Error getting agent count:", error);
             return 0;
         }
     }

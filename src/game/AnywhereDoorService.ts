@@ -89,7 +89,7 @@ export class AnywhereDoorService {
         request: BridgeRequest,
     ): Promise<{ success: boolean; message: string; data?: any }> {
         try {
-            console.log("🌉 Triggering cross-chain bridge:", request);
+            console.log("Triggering cross-chain bridge:", request);
 
             // Try to get Anywhere Door token first
             let authToken = this.API_TOKEN;
