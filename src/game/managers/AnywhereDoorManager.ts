@@ -306,7 +306,7 @@ export class AnywhereDoorManager {
             .setInteractive({ useHandCursor: true });
 
         const btnText = this.scene.add
-            .text(X, btnY - 5, "BRIDGE NOW!", {
+            .text(X, btnY, "BRIDGE NOW!", {
                 fontSize: "16px",
                 fontFamily: "PixelFont",
                 color: "#FFF",
@@ -317,20 +317,11 @@ export class AnywhereDoorManager {
             .setScrollFactor(0)
             .setStroke("#000", 4);
 
-        const btnIcon = this.scene.add
-            .text(X, btnY + 12, "🌉", {
-                fontSize: "13px",
-                resolution: 2,
-            })
-            .setOrigin(0.5)
-            .setDepth(5003)
-            .setScrollFactor(0);
-
-        elements.push(bridgeBtn, btnText, btnIcon);
+        elements.push(bridgeBtn, btnText);
 
         // Pulsing
         this.scene.tweens.add({
-            targets: [bridgeBtn, btnText, btnIcon, shadow],
+            targets: [bridgeBtn, btnText, shadow],
             scale: 1.05,
             duration: 1000,
             yoyo: true,
