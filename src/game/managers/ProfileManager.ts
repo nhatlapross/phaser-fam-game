@@ -10,6 +10,7 @@ import { PLAYABLE_CHARACTERS } from '../config/CharacterConfig';
 import { QuickActionsManager } from './QuickActionsManager';
 import { FloatingButtonsManager } from './FloatingButtonsManager';
 import { SoundManager } from './SoundManager';
+import { ChainSwitcherManager } from './ChainSwitcherManager';
 
 interface ProfileCallbacks {
     onLogout: () => void;
@@ -53,9 +54,12 @@ export class ProfileManager extends BaseManager {
 
     // Quick actions manager (mission button, etc.)
     private quickActionsManager: QuickActionsManager | null = null;
-    
+
     // Floating buttons manager (redeem, etc.)
     private floatingButtonsManager: FloatingButtonsManager | null = null;
+
+    // Chain switcher (small button next to profile panel)
+    private chainSwitcherManager: ChainSwitcherManager | null = null;
 
     constructor(scene: Phaser.Scene, callbacks: ProfileCallbacks) {
         super(scene);
@@ -259,11 +263,19 @@ export class ProfileManager extends BaseManager {
         const floatingBtnY = panelY + panelHeight / 2 + 20 + (3 * 32) + 40;
         const floatingBtnX = panelX + 25 + (panelWidth - 10) / 2 - 18;
         this.floatingButtonsManager.createButtons(floatingBtnX, floatingBtnY);
-        
+
         // Add floating button elements to profile elements for camera ignore
         this.floatingButtonsManager.getButtonElements().forEach(el => {
             this.profileElements.push(el);
         });
+
+        // Create chain switcher button — positioned to the LEFT of the profile panel.
+        // NOTE: chain switcher manages its own element lifecycle (not added to profileElements)
+        // to avoid double-destroy conflicts when createProfileUI is called multiple times.
+        if (!this.chainSwitcherManager) {
+            this.chainSwitcherManager = new ChainSwitcherManager(this.scene);
+        }
+        this.chainSwitcherManager.createChainButton(panelX, panelY, panelWidth, panelHeight);
     }
 
     /**
@@ -2751,6 +2763,10 @@ export class ProfileManager extends BaseManager {
         if (this.floatingButtonsManager) {
             this.floatingButtonsManager.destroy();
             this.floatingButtonsManager = null;
+        }
+        if (this.chainSwitcherManager) {
+            this.chainSwitcherManager.destroy();
+            this.chainSwitcherManager = null;
         }
         this.destroyProfileElements();
         super.destroy();
