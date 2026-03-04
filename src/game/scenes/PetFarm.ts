@@ -6,6 +6,8 @@ import { GameDataService } from "../GameDataService";
 import { UserService } from "../UserService";
 import { PLAYABLE_CHARACTERS } from "../config/CharacterConfig";
 import { GAME_CONSTANTS, StationManager } from "../managers";
+import { AnywhereDoorManager } from "../managers/AnywhereDoorManager";
+import { PetChatModal } from "../ui/PetChatModal";
 
 /**
  * PetFarm Scene - Cyber-Home Map
@@ -60,9 +62,22 @@ export class PetFarm extends Scene {
     private spawnedPetShadow: DynamicShadow | null = null; // Track pet shadow
     private spawnedPetLabel: Phaser.GameObjects.Text | null = null; // Track pet label
     private spawnedPetHitArea: Phaser.GameObjects.Arc | null = null; // Track pet hit area
+    private spawnedPetType: string = ""; // Track pet type for chat modal
+    private petChatModal: PetChatModal | null = null; // Pet chat modal
 
     // Station manager for travel
     private stationManager!: StationManager;
+
+    // Anywhere Door manager for cross-chain bridge
+    private anywhereDoorManager!: AnywhereDoorManager;
+
+    // Anywhere Door objects for show/hide
+    private anywhereDoorImage: Phaser.GameObjects.Image | null = null;
+    private anywhereDoorGlow: Phaser.GameObjects.Arc | null = null;
+    private anywhereDoorParticles: Phaser.GameObjects.Particles.ParticleEmitter | null =
+        null;
+    private anywhereDoorLabel: Phaser.GameObjects.Text | null = null;
+    private anywhereDoorHitArea: Phaser.GameObjects.Arc | null = null;
 
     // Collision walls group
     private walls!: Phaser.Physics.Arcade.StaticGroup;
@@ -174,6 +189,12 @@ export class PetFarm extends Scene {
         if (this.spawnedPetHitArea) {
             this.spawnedPetHitArea.destroy();
             this.spawnedPetHitArea = null;
+        }
+
+        // Clean up pet chat modal
+        if (this.petChatModal) {
+            this.petChatModal.destroy();
+            this.petChatModal = null;
         }
     }
 
@@ -473,7 +494,10 @@ export class PetFarm extends Scene {
         );
         // Don't call stationManager.create() - we only want the modal functionality
 
-        // Create exit door instead
+        // Initialize Anywhere Door Manager
+        this.anywhereDoorManager = new AnywhereDoorManager(this);
+
+        // Create exit door (now opens Anywhere Door bridge modal)
         this.createExitDoor();
     }
 
@@ -483,19 +507,26 @@ export class PetFarm extends Scene {
         const exitX = centerX - 250; // Left side
         const exitY = this.MAP_HEIGHT * this.TILE_SIZE - 20; // Near bottom
 
-        // Create door image (vertical orientation)
-        const doorImage = this.add.image(exitX, exitY, "exit-door");
-        doorImage.setScale(0.5); // Smaller scale for better fit
-        doorImage.setDepth(exitY);
-        doorImage.setOrigin(0.5, 0.8); // Same origin as characters
-        doorImage.setAngle(-55); // Rotate to make it vertical
+        // Create door image (vertical orientation) - keep original pink color
+        this.anywhereDoorImage = this.add.image(exitX, exitY, "exit-door");
+        this.anywhereDoorImage.setScale(0.5); // Smaller scale for better fit
+        this.anywhereDoorImage.setDepth(exitY);
+        this.anywhereDoorImage.setOrigin(0.5, 0.8); // Same origin as characters
+        this.anywhereDoorImage.setAngle(-55); // Rotate to make it vertical
+        // No tint - keep original pink color
 
-        // Add pulsing glow effect
-        const glow = this.add.circle(exitX, exitY, 20, 0xffd700, 0.3);
-        glow.setDepth(exitY - 1);
+        // Add pulsing glow effect (golden/yellow)
+        this.anywhereDoorGlow = this.add.circle(
+            exitX,
+            exitY,
+            20,
+            0xffd700,
+            0.3,
+        );
+        this.anywhereDoorGlow.setDepth(exitY - 1);
 
         this.tweens.add({
-            targets: glow,
+            targets: this.anywhereDoorGlow,
             alpha: 0.1,
             scale: 1.3,
             duration: 1000,
@@ -504,28 +535,118 @@ export class PetFarm extends Scene {
             ease: "Sine.easeInOut",
         });
 
+        // Add sparkle particles
+        this.anywhereDoorParticles = this.add.particles(exitX, exitY, "star", {
+            speed: { min: 10, max: 30 },
+            scale: { start: 0.3, end: 0 },
+            alpha: { start: 0.8, end: 0 },
+            lifespan: 1000,
+            frequency: 200,
+            quantity: 1,
+            blendMode: "ADD",
+        });
+        this.anywhereDoorParticles.setDepth(exitY + 1);
+
+        // Add label
+        this.anywhereDoorLabel = this.add
+            .text(exitX, exitY - 60, "Anywhere Door", {
+                fontSize: "14px",
+                color: "#ffd700",
+                stroke: "#000",
+                strokeThickness: 3,
+                fontFamily: "PixelFont",
+            })
+            .setOrigin(0.5)
+            .setDepth(10000);
+
         // Make interactive
-        const hitArea = this.add.circle(exitX, exitY, 30, 0x000000, 0);
-        hitArea.setInteractive({ useHandCursor: true });
-        hitArea.setDepth(exitY - 1);
+        this.anywhereDoorHitArea = this.add.circle(
+            exitX,
+            exitY,
+            30,
+            0x000000,
+            0,
+        );
+        this.anywhereDoorHitArea.setInteractive({ useHandCursor: true });
+        this.anywhereDoorHitArea.setDepth(exitY - 1);
 
         // Hover effect
-        hitArea.on("pointerover", () => {
-            doorImage.setTint(0xffff99);
-            glow.setFillStyle(0xffd700, 0.6);
-            doorImage.setScale(0.55);
+        this.anywhereDoorHitArea.on("pointerover", () => {
+            if (this.anywhereDoorImage) {
+                this.anywhereDoorImage.setTint(0xffff99); // Light yellow tint on hover
+                this.anywhereDoorImage.setScale(0.55);
+            }
+            if (this.anywhereDoorGlow) {
+                this.anywhereDoorGlow.setFillStyle(0xffd700, 0.6);
+            }
+            if (this.anywhereDoorLabel) {
+                this.anywhereDoorLabel.setScale(1.1);
+            }
         });
 
-        hitArea.on("pointerout", () => {
-            doorImage.clearTint();
-            glow.setFillStyle(0xffd700, 0.3);
-            doorImage.setScale(0.5);
+        this.anywhereDoorHitArea.on("pointerout", () => {
+            if (this.anywhereDoorImage) {
+                this.anywhereDoorImage.clearTint(); // Remove tint to show original pink
+                this.anywhereDoorImage.setScale(0.5);
+            }
+            if (this.anywhereDoorGlow) {
+                this.anywhereDoorGlow.setFillStyle(0xffd700, 0.3);
+            }
+            if (this.anywhereDoorLabel) {
+                this.anywhereDoorLabel.setScale(1.0);
+            }
         });
 
-        // Click to open StationManager travel modal
-        hitArea.on("pointerdown", () => {
-            this.stationManager.open();
+        // Click to open Anywhere Door bridge modal
+        this.anywhereDoorHitArea.on("pointerdown", () => {
+            this.openAnywhereDoor();
         });
+    }
+
+    /**
+     * Open Anywhere Door modal and hide door objects
+     */
+    private openAnywhereDoor() {
+        // Hide door objects
+        if (this.anywhereDoorImage) this.anywhereDoorImage.setVisible(false);
+        if (this.anywhereDoorGlow) this.anywhereDoorGlow.setVisible(false);
+        if (this.anywhereDoorParticles)
+            this.anywhereDoorParticles.setVisible(false);
+        if (this.anywhereDoorLabel) this.anywhereDoorLabel.setVisible(false);
+        if (this.anywhereDoorHitArea)
+            this.anywhereDoorHitArea.setVisible(false);
+
+        // Open modal
+        this.anywhereDoorManager.open();
+
+        // Listen for modal close to show door again
+        this.time.delayedCall(100, () => {
+            this.checkAnywhereDoorModalClosed();
+        });
+    }
+
+    /**
+     * Check if modal is closed and show door again
+     */
+    private checkAnywhereDoorModalClosed() {
+        // Check if modal is still open
+        const modalStillOpen = (this.anywhereDoorManager as any).modal !== null;
+
+        if (modalStillOpen) {
+            // Check again after 100ms
+            this.time.delayedCall(100, () => {
+                this.checkAnywhereDoorModalClosed();
+            });
+        } else {
+            // Modal closed, show door again
+            if (this.anywhereDoorImage) this.anywhereDoorImage.setVisible(true);
+            if (this.anywhereDoorGlow) this.anywhereDoorGlow.setVisible(true);
+            if (this.anywhereDoorParticles)
+                this.anywhereDoorParticles.setVisible(true);
+            if (this.anywhereDoorLabel) this.anywhereDoorLabel.setVisible(true);
+            if (this.anywhereDoorHitArea)
+                this.anywhereDoorHitArea.setVisible(true);
+        }
     }
 
     private createPetShopNPC() {
@@ -550,7 +671,7 @@ export class PetFarm extends Scene {
 
         // Add name label above NPC (no background, no icon)
         const nameLabel = this.add
-            .text(npcX, npcY - 50, "Nobita", {
+            .text(npcX, npcY - 50, "Future Nobita", {
                 fontSize: "14px",
                 color: "#fff",
                 stroke: "#000",
@@ -1317,7 +1438,7 @@ export class PetFarm extends Scene {
             openBtnCost.setScale(1.0);
             btnShadow.setScale(1.0);
         });
-        openBtn.on("pointerdown", () => {
+        openBtn.on("pointerdown", async () => {
             // Gold check for second pet onwards
             if (!isFree) {
                 // Get current gold from GameDataService
@@ -1325,7 +1446,10 @@ export class PetFarm extends Scene {
                 const currentGold = cachedData?.user?.gold || 0;
 
                 if (currentGold < cost) {
-                    this.showToast(`Not enough gold! Need ${cost} �`, 0xe74c3c);
+                    this.showToast(
+                        `Not enough gold! Need ${cost} 💰`,
+                        0xe74c3c,
+                    );
                     return;
                 }
 
@@ -1351,10 +1475,48 @@ export class PetFarm extends Scene {
                 this.spawnedPetHitArea.destroy();
                 this.spawnedPetHitArea = null;
             }
+            if (this.petChatModal) {
+                this.petChatModal.destroy();
+                this.petChatModal = null;
+            }
 
-            this.luckyBoxOpenCount++;
-            this.openLuckyBox();
             closeModal();
+
+            // Show loading toast
+            this.showToast("⏳ Registering pet agent...", 0xffa500);
+
+            // Call smart contract to register pet agent (ERC-8004)
+            const { CyberCatService } = await import("../CyberCatService");
+
+            // Random pet type for Lucky Box
+            const petTypes = [
+                "kungfu-master",
+                "cowboy",
+                "explorer",
+                "bullfighter",
+                "soccer-player",
+                "ninja",
+                "nurse",
+                "npc-maidcat",
+            ];
+            const randomPetType = Phaser.Utils.Array.GetRandom(petTypes);
+
+            const result = await CyberCatService.registerPet(randomPetType);
+
+            if (result.success) {
+                this.showToast("✅ Pet agent registered!", 0x4caf50);
+                console.log("🎉 Pet agent registered:", result);
+
+                // Increment counter and spawn pet
+                this.luckyBoxOpenCount++;
+                this.openLuckyBox();
+            } else {
+                this.showToast(
+                    `❌ Registration failed: ${result.error}`,
+                    0xe74c3c,
+                );
+                console.error("❌ Registration failed:", result.error);
+            }
         });
 
         this.cameras.main.ignore(modalElements);
@@ -1441,7 +1603,7 @@ export class PetFarm extends Scene {
 
         // Add pet sprite preview (moved up)
         const petSprite = this.add.sprite(modalX, modalY - 40, petType, 0);
-        petSprite.setScale(0.8); // Larger scale for preview
+        petSprite.setScale(0.4); // Adjusted scale for cosplay characters (500x500 spritesheet)
         petSprite.setDepth(3002);
         petSprite.setScrollFactor(0);
 
@@ -1819,10 +1981,20 @@ export class PetFarm extends Scene {
             petSprite.clearTint();
         });
 
-        // Click to interact
+        // Store pet info
+        this.spawnedPetType = petType;
+
+        // Initialize PetChatModal
+        if (this.petChatModal) {
+            this.petChatModal.destroy();
+        }
+        this.petChatModal = new PetChatModal(this, petName, petType);
+
+        // Click to open chat modal
         hitArea.on("pointerdown", () => {
-            const currentName = label.text;
-            this.showToast(`${currentName} says hello! 👋`, petColor);
+            if (this.petChatModal) {
+                this.petChatModal.show();
+            }
         });
 
         // Start random movement
