@@ -472,6 +472,49 @@ Authorization: Bearer {{token}}
 
 ###
 # --------------------
+# FriendCards Controller
+# --------------------
+# Get FriendCard NFT balances from smart contract
+# Card mapping: 1=ORIGIN_CAT, 2=MYSTIC_CAT, 3=SCHOLAR_CAT, 4=TIME_CAT, 5=NINJA_CAT, 6=SCOUT_CAT, 7=BUILDER_CAT
+
+### Get my FriendCard balances (authenticated user)
+GET {{baseUrl}}/friend-cards
+Authorization: Bearer {{token}}
+
+### Get FriendCard balances by address (public)
+GET {{baseUrl}}/friend-cards/0x39c51157aeb811967d5185b454a883df82097264
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# Anywhere Door Controller
+# --------------------
+# Cross-chain bridge via CRE workflow
+# NOTE: Backend requires CRE_WORKFLOW_ENDPOINT environment variable to be configured
+# Current status: 503 - CRE workflow endpoint not configured
+
+### Trigger bridge transaction
+# Expected: 201 with bridge data
+# Current: 503 - CRE workflow endpoint not configured
+POST {{baseUrl}}/anywhere-door/bridge
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "sourceChain": "421614",
+  "destChain": "84532",
+  "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+  "amount": "100000000000000000",
+  "userAddress": "0x39c51157aeb811967d5185b454a883df82097264"
+}
+
+### Get bridge status for user
+# Returns: { found: false, message: "No bridge report found" } if no bridge history
+GET {{baseUrl}}/anywhere-door/status/0x39c51157aeb811967d5185b454a883df82097264
+Authorization: Bearer {{token}}
+
+###
+# --------------------
 # CyberCat Controller
 # --------------------
 # Flow: 1) Register agent (ERC-8004), 2) Mint NFT (FriendCards), 3) Claim backend cat

@@ -515,5 +515,59 @@ export class CyberCatService {
         };
         return mapping[catType] || "kungfu-master";
     }
+
+    /**
+     * Get FriendCard NFT balances from backend API
+     * Returns on-chain balances for all 7 card types
+     */
+    static async getFriendCardBalances(): Promise<{
+        success: boolean;
+        address?: string;
+        balances?: number[];
+        cards?: Array<{ id: number; name: string; balance: number }>;
+        error?: string;
+    }> {
+        const token = UserService.getAccessToken();
+        if (!token) {
+            return { success: false, error: "Not logged in!" };
+        }
+
+        try {
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000"}/friend-cards`,
+                {
+                    method: "GET",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                },
+            );
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                return {
+                    success: false,
+                    error: errorData.message || `Error: ${response.status}`,
+                };
+            }
+
+            const data = await response.json();
+            return {
+                success: true,
+                address: data.address,
+                balances: data.balances,
+                cards: data.cards,
+            };
+        } catch (error) {
+            console.error(
+                "❌ CyberCatService.getFriendCardBalances error:",
+                error,
+            );
+            return {
+                success: false,
+                error: "Cannot connect to server",
+            };
+        }
+    }
 }
 
