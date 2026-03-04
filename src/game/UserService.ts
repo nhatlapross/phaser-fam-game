@@ -51,7 +51,7 @@ export class UserService {
         process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000"; // New backend base URL, fallback for development
 
     // 🎭 MOCK MODE for development (set to false when backend is ready)
-    private static MOCK_MODE = true; // TODO: Set to false in production
+    private static MOCK_MODE = false; // Changed to false to use real backend tokens
 
     /**
      * Gets the stored access token
