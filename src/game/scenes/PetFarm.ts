@@ -1545,6 +1545,11 @@ export class PetFarm extends Scene {
                 this.luckyBoxOpenCount++;
                 this.openLuckyBox();
             } else {
+                // Contract succeeded but API failed - still spawn pet
+                console.warn(
+                    "⚠️ API claim failed but contract succeeded:",
+                    apiResult.error,
+                );
                 this.showToast(
                     `❌ Mint failed: ${result.error}`,
                     0xe74c3c,
@@ -1721,7 +1726,7 @@ export class PetFarm extends Scene {
             });
         };
 
-        const confirmNaming = () => {
+        const confirmNaming = async () => {
             const petName = inputElement.value.trim() || petDisplayName;
             closeModal();
 
@@ -1730,8 +1735,30 @@ export class PetFarm extends Scene {
                 this.spawnedPetLabel.setText(petName);
             }
 
-            // Show success toast with custom name
-            this.showToast(`✨ Named your companion: ${petName}!`, 0x3498db);
+            // Update CyberCat name in backend
+            const { CyberCatService } = await import("../CyberCatService");
+            const updateResult = await CyberCatService.updateCat({
+                name: petName,
+                mood: "happy",
+            });
+
+            if (updateResult.success) {
+                console.log("✅ CyberCat name updated:", updateResult.cat);
+                this.showToast(
+                    `✨ Named your companion: ${petName}!`,
+                    0x3498db,
+                );
+            } else {
+                console.warn(
+                    "⚠️ Failed to update name in backend:",
+                    updateResult.error,
+                );
+                // Still show success toast since local update worked
+                this.showToast(
+                    `✨ Named your companion: ${petName}!`,
+                    0x3498db,
+                );
+            }
         };
 
         // Button hover effects

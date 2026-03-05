@@ -1,8 +1,10 @@
 /**
- * CyberCatService - Pet Agent Registration Service
- * Register pet agents using ERC-8004 Identity Registry (same as DefiMaster)
+ * CyberCatService - CyberCat Backend API Integration + Smart Contract
+ * Manages CyberCat claiming, retrieval, and updates via backend API
+ * Also handles on-chain agent registration via ERC-8004
  */
 
+import { UserService } from "./UserService";
 import {
     createWalletClient,
     createPublicClient,
@@ -172,9 +174,10 @@ export class CyberCatService {
     }
 
     /**
-     * Get number of agents owned by address
+     * Mint CyberCat NFT using FriendCards contract (ERC-1155)
+     * @param catType - Cat type (1-7)
      */
-    static async getAgentCount(address: string): Promise<number> {
+    static async mintCatNFT(catType: CatType): Promise<RegisterAgentResult> {
         try {
             const chainId = CyberCatService.activeChainId;
             const chain = CHAIN_CONFIG[chainId] ?? arbitrumSepolia;
@@ -194,8 +197,14 @@ export class CyberCatService {
 
             return Number(balance);
         } catch (error) {
-            console.error("❌ Error getting agent count:", error);
-            return 0;
+            console.error(
+                "❌ CyberCatService.getFriendCardBalances error:",
+                error,
+            );
+            return {
+                success: false,
+                error: "Cannot connect to server",
+            };
         }
     }
 }
