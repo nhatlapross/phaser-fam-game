@@ -543,6 +543,7 @@ export class DefiMasterModal {
         // Convert markdown-like formatting to HTML
         return text
             .replace(/\*\*(.*?)\*\*/g, `<strong style="color: ${this.COLORS.accent};">$1</strong>`)
+            .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, `<a href="$2" target="_blank" rel="noopener noreferrer" style="color: ${this.COLORS.accent}; text-decoration: underline;">$1</a>`)
             .replace(/\n\n/g, '</p><p style="margin: 10px 0;">')
             .replace(/\n/g, '<br>');
     }
@@ -587,11 +588,17 @@ export class DefiMasterModal {
             const result = await ContractService.registerAgent();
 
             if (result.success) {
+                const chainName = result.chainName ?? 'Unknown Chain';
+                const explorerLink = result.explorerBaseUrl && result.txHash
+                    ? `${result.explorerBaseUrl}/tx/${result.txHash}`
+                    : null;
+
                 this.answer =
                     `**Agent registered successfully!** 🎉\n\n` +
                     (result.agentId ? `**Agent ID:** ${result.agentId}\n` : '') +
-                    `**TX Hash:** ${result.txHash}\n\n` +
-                    `Your agent identity has been recorded on Arbitrum Sepolia.`;
+                    `**TX Hash:** ${result.txHash}\n` +
+                    (explorerLink ? `**Explorer:** [View on ${chainName}](${explorerLink})\n\n` : '\n') +
+                    `Your agent identity has been recorded on **${chainName}**.`;
             } else {
                 this.answer = `**Registration failed**\n\n${result.error || 'Unknown error'}`;
             }

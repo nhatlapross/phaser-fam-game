@@ -40,6 +40,8 @@ export interface RegisterAgentResult {
     success: boolean;
     agentId?: string;
     txHash?: string;
+    chainName?: string;
+    explorerBaseUrl?: string;
     error?: string;
 }
 
@@ -130,7 +132,10 @@ export class ContractService {
                 }
             }
 
-            return { success: true, agentId, txHash };
+            const chainName = chain.name;
+            const explorerBaseUrl = chain.blockExplorers?.default?.url ?? '';
+
+            return { success: true, agentId, txHash, chainName, explorerBaseUrl };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Unknown error occurred';
             console.error('ContractService.registerAgent error:', err);
