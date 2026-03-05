@@ -30,13 +30,13 @@ const CHAIN_CONFIG: Record<number, Chain> = {
     [creditcoin.id]: creditcoin,
 };
 
-// ERC-8004 ABI
+// CyberCat ABI (mintCat from FriendCards contract)
 const CYBERCAT_ABI = [
     {
         type: "function",
-        name: "register",
-        inputs: [{ name: "agentURI", type: "string" }],
-        outputs: [{ name: "agentId", type: "uint256" }],
+        name: "mintCat",
+        inputs: [{ name: "catType", type: "uint256", internalType: "uint256" }],
+        outputs: [],
         stateMutability: "nonpayable",
     },
     {
@@ -46,18 +46,22 @@ const CYBERCAT_ABI = [
         outputs: [{ name: "", type: "uint256" }],
         stateMutability: "view",
     },
-    {
-        type: "function",
-        name: "getAgentURI",
-        inputs: [{ name: "agentId", type: "uint256" }],
-        outputs: [{ name: "", type: "string" }],
-        stateMutability: "view",
-    },
 ] as const;
 
-export interface RegisterPetResult {
+// Map catType (1-7) → pet sprite key used in game
+export const CAT_TYPE_TO_SPRITE: Record<number, string> = {
+    1: "kungfu-master",
+    2: "cowboy",
+    3: "explorer",
+    4: "bullfighter",
+    5: "soccer-player",
+    6: "ninja",
+    7: "nurse",
+};
+
+export interface MintCatResult {
     success: boolean;
-    agentId?: string;
+    catType?: number;
     txHash?: string;
     chainName?: string;
     explorerBaseUrl?: string;
@@ -104,12 +108,12 @@ export class CyberCatService {
     }
 
     /**
-     * Register a pet agent using ERC-8004
-     * @param petType - Pet type identifier (e.g., "kungfu-master", "cowboy", etc.)
+     * Mint a CyberCat NFT by calling mintCat(uint256 catType) on-chain.
+     * @param catType - Cat type 1–7
      */
-    static async registerPet(petType: string): Promise<RegisterPetResult> {
+    static async mintCat(catType: number): Promise<MintCatResult> {
         try {
-            console.log("🐱 Registering CyberCat agent:", petType);
+            console.log("🐱 Minting CyberCat type:", catType);
 
             const chainId = CyberCatService.activeChainId;
             const chain = CHAIN_CONFIG[chainId];
@@ -136,54 +140,33 @@ export class CyberCatService {
                 return { success: false, error: "No account found in wallet." };
             }
 
-            console.log("📝 Sending register transaction...");
+            console.log("📝 Sending mintCat transaction...");
 
-            // Register pet agent with petType as agentURI
             const txHash = await walletClient.writeContract({
                 address: contractAddress,
                 abi: CYBERCAT_ABI,
-                functionName: "register",
-                args: [petType],
+                functionName: "mintCat",
+                args: [BigInt(catType)],
                 account,
             });
 
             console.log("⏳ Waiting for transaction confirmation...");
 
-            // Wait for transaction receipt
-            const receipt = await publicClient.waitForTransactionReceipt({
-                hash: txHash,
-            });
+            const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
             if (receipt.status === "reverted") {
-                return {
-                    success: false,
-                    txHash,
-                    error: "Transaction reverted.",
-                };
+                return { success: false, txHash, error: "Transaction reverted." };
             }
 
-            // Extract agentId from logs
-            let agentId: string | undefined;
-            if (receipt.logs.length > 0) {
-                const log = receipt.logs[0];
-                if (log.topics[1]) {
-                    agentId = BigInt(log.topics[1]).toString();
-                }
-            }
-
-            console.log("✅ Pet agent registered successfully!", {
-                agentId,
-                txHash,
-            });
+            console.log("✅ CyberCat minted!", { catType, txHash });
 
             const chainName = chain.name;
             const explorerBaseUrl = chain.blockExplorers?.default?.url ?? '';
 
-            return { success: true, agentId, txHash, chainName, explorerBaseUrl };
+            return { success: true, catType, txHash, chainName, explorerBaseUrl };
         } catch (err: unknown) {
-            const message =
-                err instanceof Error ? err.message : "Unknown error occurred";
-            console.error("❌ CyberCatService.registerPet error:", err);
+            const message = err instanceof Error ? err.message : "Unknown error occurred";
+            console.error("❌ CyberCatService.mintCat error:", err);
             return { success: false, error: message };
         }
     }
@@ -207,7 +190,7 @@ export class CyberCatService {
                 abi: CYBERCAT_ABI,
                 functionName: "balanceOf",
                 args: [address as `0x${string}`],
-            });
+            }) as bigint;
 
             return Number(balance);
         } catch (error) {

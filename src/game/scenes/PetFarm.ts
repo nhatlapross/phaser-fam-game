@@ -1526,39 +1526,30 @@ export class PetFarm extends Scene {
             closeModal();
 
             // Show loading toast
-            this.showToast("⏳ Registering pet agent...", 0xffa500);
+            this.showToast("⏳ Minting CyberCat...", 0xffa500);
 
-            // Call smart contract to register pet agent (ERC-8004)
-            const { CyberCatService } = await import("../CyberCatService");
+            // Call mintCat(uint256 catType) on-chain with random type 1–7
+            const { CyberCatService, CAT_TYPE_TO_SPRITE } = await import("../CyberCatService");
 
-            // Random pet type for Lucky Box
-            const petTypes = [
-                "kungfu-master",
-                "cowboy",
-                "explorer",
-                "bullfighter",
-                "soccer-player",
-                "ninja",
-                "nurse",
-                "npc-maidcat",
-            ];
-            const randomPetType = Phaser.Utils.Array.GetRandom(petTypes);
-
-            const result = await CyberCatService.registerPet(randomPetType);
+            const randomCatType = Phaser.Math.Between(1, 7);
+            const result = await CyberCatService.mintCat(randomCatType);
 
             if (result.success) {
-                this.showToast("✅ Pet agent registered!", 0x4caf50);
-                console.log("🎉 Pet agent registered:", result);
+                this.showToast("✅ CyberCat minted!", 0x4caf50);
+                console.log("🎉 CyberCat minted:", result);
+
+                // Map catType → sprite key for game visuals
+                this.spawnedPetType = CAT_TYPE_TO_SPRITE[randomCatType] ?? "npc-maidcat";
 
                 // Increment counter and spawn pet
                 this.luckyBoxOpenCount++;
                 this.openLuckyBox();
             } else {
                 this.showToast(
-                    `❌ Registration failed: ${result.error}`,
+                    `❌ Mint failed: ${result.error}`,
                     0xe74c3c,
                 );
-                console.error("❌ Registration failed:", result.error);
+                console.error("❌ Mint failed:", result.error);
             }
         });
 
@@ -1810,10 +1801,9 @@ export class PetFarm extends Scene {
         //     this.showToast(`-${cost} Gold`, 0xff9800);
         // }
 
-        // Increment open count
-        this.luckyBoxOpenCount++;
+        // Note: luckyBoxOpenCount is incremented by the caller before openLuckyBox()
 
-        // Random pet selection - only cosplay characters (no animals)
+        // Use pet type set by mintCat result (spawnedPetType), or fallback to random
         const pets = [
             "npc-maidcat",
             "kungfu-master",
@@ -1823,15 +1813,10 @@ export class PetFarm extends Scene {
             "soccer-player",
             "ninja",
             "nurse",
-            // "magician", // Uncomment when magician.png is added
         ];
-        const randomIndex = Math.floor(Math.random() * pets.length);
-        const randomPet = pets[randomIndex];
+        const randomPet = this.spawnedPetType || pets[Math.floor(Math.random() * pets.length)];
 
-        // Debug log
-        console.log(`🎲 Lucky Box #${this.luckyBoxOpenCount}:`);
-        console.log(`   Random index: ${randomIndex} / ${pets.length}`);
-        console.log(`   Selected pet: ${randomPet}`);
+        console.log(`🎲 Lucky Box #${this.luckyBoxOpenCount}: ${randomPet}`);
 
         // Spawn at center of map (only one pet allowed)
         const centerX = (this.MAP_WIDTH * this.TILE_SIZE) / 2;
