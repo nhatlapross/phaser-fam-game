@@ -5,9 +5,10 @@ import { PetFarmManager, PetStats } from "../managers/PetFarmManager";
 import { GameDataService } from "../GameDataService";
 import { UserService } from "../UserService";
 import { PLAYABLE_CHARACTERS } from "../config/CharacterConfig";
-import { GAME_CONSTANTS, StationManager } from "../managers";
+import { GAME_CONSTANTS, StationManager, ProfileManager } from "../managers";
 import { AnywhereDoorManager } from "../managers/AnywhereDoorManager";
 import { PetChatModal } from "../ui/PetChatModal";
+import { useGameState } from "../hooks/useGameState";
 
 /**
  * PetFarm Scene - Cyber-Home Map
@@ -64,6 +65,9 @@ export class PetFarm extends Scene {
     private spawnedPetHitArea: Phaser.GameObjects.Arc | null = null; // Track pet hit area
     private spawnedPetType: string = ""; // Track pet type for chat modal
     private petChatModal: PetChatModal | null = null; // Pet chat modal
+
+    // Profile UI
+    private profileManager!: ProfileManager;
 
     // Station manager for travel
     private stationManager!: StationManager;
@@ -203,6 +207,7 @@ export class PetFarm extends Scene {
      */
     shutdown() {
         this.cleanupAllNPCs();
+        this.profileManager?.destroy();
 
         // Clear singleton instance
         if (PetFarm.instance === this) {
@@ -471,7 +476,45 @@ export class PetFarm extends Scene {
         });
     }
 
+    private initializeGameState() {
+        const cachedData = GameDataService.getCachedData();
+        if (!cachedData) return;
+
+        const gameState = useGameState(this);
+        gameState.initialize({
+            currency: {
+                gold: cachedData.user?.balanceGold ?? cachedData.currencies?.gold ?? 0,
+                gem:  cachedData.user?.balanceGem  ?? cachedData.currencies?.gem  ?? 0,
+            },
+            seeds:       { algae: 0, mushroom: 0, tree: 0 },
+            fertilizers: { common: 0, rare: 0, epic: 0, legendary: 0 },
+            fruits:      cachedData.fruits || [],
+            waterCount:  0,
+            user: cachedData.user ? {
+                id:              cachedData.user.id,
+                username:        cachedData.user.username || 'Player',
+                avatar:          cachedData.user.avatar || null,
+                xp:              cachedData.user.xp,
+                reputationScore: cachedData.user.reputationScore,
+                address:         cachedData.user.address,
+                landsCount:      cachedData.user.landsCount || 0,
+                plantsCount:     cachedData.user.plantsCount || 0,
+            } : null,
+        });
+    }
+
     private createUI() {
+        // Initialize game state and profile UI (same as other scenes)
+        this.initializeGameState();
+
+        this.profileManager = new ProfileManager(this, {
+            onLogout: () => {
+                this.scene.start('Login', { fromLogout: true });
+            },
+            onWalletConnected: (_address) => {},
+        });
+        this.profileManager.createProfileUI();
+
         // Initialize StationManager (but don't create the station sprite)
         // We'll use it only for the travel modal
         this.stationManager = new StationManager(
@@ -557,7 +600,7 @@ export class PetFarm extends Scene {
                 fontFamily: "PixelFont",
             })
             .setOrigin(0.5)
-            .setDepth(10000);
+            .setDepth(4000);
 
         // Make interactive
         this.anywhereDoorHitArea = this.add.circle(
@@ -678,7 +721,7 @@ export class PetFarm extends Scene {
                 strokeThickness: 3,
             })
             .setOrigin(0.5)
-            .setDepth(10000);
+            .setDepth(4000);
 
         // Make NPC interactive
         const hitArea = this.add
@@ -749,7 +792,7 @@ export class PetFarm extends Scene {
                 strokeThickness: 3,
             })
             .setOrigin(0.5)
-            .setDepth(10000);
+            .setDepth(4000);
 
         // Make NPC interactive
         this.maidCatHitArea = this.add
@@ -1961,7 +2004,7 @@ export class PetFarm extends Scene {
                 strokeThickness: 3,
             })
             .setOrigin(0.5)
-            .setDepth(10000);
+            .setDepth(4000);
 
         // Make interactive
         const hitArea = this.add
@@ -3003,24 +3046,16 @@ export class PetFarm extends Scene {
     }
 
     private setupCameraIgnore() {
-        // Get all game objects (non-UI)
-        const gameObjects: Phaser.GameObjects.GameObject[] = [];
-
-        // Collect all children that should be ignored by UI camera
+        // uiCamera ignores all game world objects (depth < 5000)
+        // UI elements (depth >= 5000) are visible to uiCamera, ignored by main camera
         this.children.each((child) => {
-            // Only ignore objects with scrollFactor !== 0 (game world objects)
             if (child instanceof Phaser.GameObjects.GameObject) {
-                const scrollFactorX = (child as any).scrollFactorX;
-                if (scrollFactorX === undefined || scrollFactorX !== 0) {
-                    gameObjects.push(child);
+                const depth = (child as any).depth || 0;
+                if (depth < 5000) {
+                    this.uiCamera.ignore(child);
                 }
             }
         });
-
-        // Make UI camera ignore all game world objects
-        if (gameObjects.length > 0) {
-            this.uiCamera.ignore(gameObjects);
-        }
     }
 
     private setupDebugHelpers() {

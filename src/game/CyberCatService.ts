@@ -9,14 +9,26 @@ import {
     custom,
     http,
     type EIP1193Provider,
+    type Chain,
 } from "viem";
 import { arbitrumSepolia } from "viem/chains";
+import { creditcoin } from "../config/privy";
 import { EventBus } from "./EventBus";
 
-// CyberCat uses ERC-8004 Identity Registry (same as DefiMaster)
-const CYBERCAT_CONTRACT_ADDRESS =
-    (process.env.NEXT_PUBLIC_CYBERCAT_CONTRACT as `0x${string}`) ??
-    "0x27558E49D50E398C34e665A62d8f3DAcc1941449"; // Identity Registry
+// CyberCat contract address per chain
+const CYBERCAT_CONTRACTS: Record<number, `0x${string}`> = {
+    [arbitrumSepolia.id]:
+        (process.env.NEXT_PUBLIC_CYBERCAT_CONTRACT as `0x${string}`) ??
+        "0x4748FEB6Fb3335476154df7da978A48769509eF1",
+    [creditcoin.id]:
+        (process.env.NEXT_PUBLIC_CREADIT_COIN_CYBERCAT_CONTRACT as `0x${string}`) ??
+        "0x4B9BB9d553faEA260f8d69CB7F9Dd7503b0D8c3b",
+};
+
+const CHAIN_CONFIG: Record<number, Chain> = {
+    [arbitrumSepolia.id]: arbitrumSepolia,
+    [creditcoin.id]: creditcoin,
+};
 
 // ERC-8004 ABI
 const CYBERCAT_ABI = [
@@ -47,10 +59,20 @@ export interface RegisterPetResult {
     success: boolean;
     agentId?: string;
     txHash?: string;
+    chainName?: string;
+    explorerBaseUrl?: string;
     error?: string;
 }
 
 export class CyberCatService {
+    private static activeChainId: number = arbitrumSepolia.id;
+
+    static {
+        EventBus.on("chain-changed", ({ chainId }: { chainId: number }) => {
+            CyberCatService.activeChainId = chainId;
+        });
+    }
+
     /**
      * Request EIP-1193 provider from React layer via EventBus
      */
@@ -89,15 +111,23 @@ export class CyberCatService {
         try {
             console.log("🐱 Registering CyberCat agent:", petType);
 
+            const chainId = CyberCatService.activeChainId;
+            const chain = CHAIN_CONFIG[chainId];
+            const contractAddress = CYBERCAT_CONTRACTS[chainId];
+
+            if (!chain || !contractAddress) {
+                return { success: false, error: `Unsupported chain: ${chainId}` };
+            }
+
             const provider = await this.getProvider();
 
             const walletClient = createWalletClient({
-                chain: arbitrumSepolia,
+                chain,
                 transport: custom(provider),
             });
 
             const publicClient = createPublicClient({
-                chain: arbitrumSepolia,
+                chain,
                 transport: http(),
             });
 
@@ -110,7 +140,7 @@ export class CyberCatService {
 
             // Register pet agent with petType as agentURI
             const txHash = await walletClient.writeContract({
-                address: CYBERCAT_CONTRACT_ADDRESS,
+                address: contractAddress,
                 abi: CYBERCAT_ABI,
                 functionName: "register",
                 args: [petType],
@@ -146,7 +176,10 @@ export class CyberCatService {
                 txHash,
             });
 
-            return { success: true, agentId, txHash };
+            const chainName = chain.name;
+            const explorerBaseUrl = chain.blockExplorers?.default?.url ?? '';
+
+            return { success: true, agentId, txHash, chainName, explorerBaseUrl };
         } catch (err: unknown) {
             const message =
                 err instanceof Error ? err.message : "Unknown error occurred";
@@ -160,13 +193,17 @@ export class CyberCatService {
      */
     static async getAgentCount(address: string): Promise<number> {
         try {
+            const chainId = CyberCatService.activeChainId;
+            const chain = CHAIN_CONFIG[chainId] ?? arbitrumSepolia;
+            const contractAddress = CYBERCAT_CONTRACTS[chainId] ?? CYBERCAT_CONTRACTS[arbitrumSepolia.id];
+
             const publicClient = createPublicClient({
-                chain: arbitrumSepolia,
+                chain,
                 transport: http(),
             });
 
             const balance = await publicClient.readContract({
-                address: CYBERCAT_CONTRACT_ADDRESS,
+                address: contractAddress,
                 abi: CYBERCAT_ABI,
                 functionName: "balanceOf",
                 args: [address as `0x${string}`],
