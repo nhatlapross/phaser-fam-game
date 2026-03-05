@@ -9,10 +9,10 @@ export const creditcoin = defineChain({
     name: 'Creditcoin',
     nativeCurrency: { name: 'Creditcoin', symbol: 'CTC', decimals: 18 },
     rpcUrls: {
-        default: { http: ['https://rpc.creditcoin.network'] },
+        default: { http: ['https://rpc.cc3-testnet.creditcoin.network'] },
     },
     blockExplorers: {
-        default: { name: 'Creditcoin Explorer', url: 'https://creditcoin.blockscout.com' },
+        default: { name: 'Creditcoin Explorer', url: 'https://creditcoin-testnet.blockscout.com' },
     },
 });
 
