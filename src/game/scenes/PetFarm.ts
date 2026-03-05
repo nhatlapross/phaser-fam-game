@@ -1545,11 +1545,6 @@ export class PetFarm extends Scene {
                 this.luckyBoxOpenCount++;
                 this.openLuckyBox();
             } else {
-                // Contract succeeded but API failed - still spawn pet
-                console.warn(
-                    "⚠️ API claim failed but contract succeeded:",
-                    apiResult.error,
-                );
                 this.showToast(
                     `❌ Mint failed: ${result.error}`,
                     0xe74c3c,

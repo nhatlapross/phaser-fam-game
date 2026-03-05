@@ -70,6 +70,19 @@ export interface MintCatResult {
     error?: string;
 }
 
+export interface UpdateCatRequest {
+    name?: string;
+    mood?: string;
+    lastFedAt?: string;
+    stats?: { speed?: number; power?: number; luck?: number };
+}
+
+export interface UpdateCatResponse {
+    success: boolean;
+    cat?: { id: string; name?: string | null; mood: string };
+    error?: string;
+}
+
 export class CyberCatService {
     private static activeChainId: number = arbitrumSepolia.id;
 
@@ -174,10 +187,40 @@ export class CyberCatService {
     }
 
     /**
-     * Mint CyberCat NFT using FriendCards contract (ERC-1155)
-     * @param catType - Cat type (1-7)
+     * Update CyberCat stats via backend API
      */
-    static async mintCatNFT(catType: CatType): Promise<RegisterAgentResult> {
+    static async updateCat(updates: UpdateCatRequest): Promise<UpdateCatResponse> {
+        const token = UserService.getAccessToken();
+        if (!token) return { success: false, error: "Not logged in!" };
+
+        try {
+            const API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000"}/cat`;
+            const response = await fetch(API_URL, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(updates),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                return { success: false, error: errorData.message || `Error: ${response.status}` };
+            }
+
+            const data = await response.json();
+            return { success: true, cat: data.cat };
+        } catch (error) {
+            console.error("❌ CyberCatService.updateCat error:", error);
+            return { success: false, error: "Cannot connect to server" };
+        }
+    }
+
+    /**
+     * Get number of CyberCats owned by address
+     */
+    static async getAgentCount(address: string): Promise<number> {
         try {
             const chainId = CyberCatService.activeChainId;
             const chain = CHAIN_CONFIG[chainId] ?? arbitrumSepolia;
@@ -197,14 +240,8 @@ export class CyberCatService {
 
             return Number(balance);
         } catch (error) {
-            console.error(
-                "❌ CyberCatService.getFriendCardBalances error:",
-                error,
-            );
-            return {
-                success: false,
-                error: "Cannot connect to server",
-            };
+            console.error("❌ Error getting agent count:", error);
+            return 0;
         }
     }
 }
