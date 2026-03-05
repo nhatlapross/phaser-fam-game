@@ -152,6 +152,8 @@ function App() {
         login,
         logout,
         getEthereumProvider,
+        switchChain,
+        activeChainId,
     } = usePassport();
 
     const logoutRef = useRef(logout);
@@ -201,6 +203,12 @@ function App() {
             }
         };
 
+        // Handle chain switch request from Phaser game
+        const handleRequestSwitchChain = async ({ chainId }: { chainId: number }) => {
+            const success = await switchChain(chainId);
+            EventBus.emit("chain-switched", { chainId, success });
+        };
+
         EventBus.on("check-wallet-connection", handleCheckConnection);
         EventBus.on("disconnect-wallet", handleDisconnectWallet);
         EventBus.on("current-scene-ready", handleSceneReady);
@@ -208,6 +216,7 @@ function App() {
         EventBus.on("hide-registration-form", handleHideRegistrationForm);
         EventBus.on("request-login", handleRequestLogin);
         EventBus.on("request-eth-provider", handleRequestEthProvider);
+        EventBus.on("request-switch-chain", handleRequestSwitchChain);
 
         return () => {
             EventBus.off("check-wallet-connection", handleCheckConnection);
@@ -217,8 +226,16 @@ function App() {
             EventBus.off("hide-registration-form", handleHideRegistrationForm);
             EventBus.off("request-login", handleRequestLogin);
             EventBus.off("request-eth-provider", handleRequestEthProvider);
+            EventBus.off("request-switch-chain", handleRequestSwitchChain);
         };
-    }, [isLoggedIn, walletAddress, login, getEthereumProvider]);
+    }, [isLoggedIn, walletAddress, login, getEthereumProvider, switchChain]);
+
+    // Emit active chain to game whenever it changes
+    useEffect(() => {
+        if (isLoggedIn && activeChainId) {
+            EventBus.emit("chain-changed", { chainId: activeChainId });
+        }
+    }, [isLoggedIn, activeChainId]);
 
     useEffect(() => {
         if (isLoggedIn && walletAddress) {

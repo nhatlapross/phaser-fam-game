@@ -24,6 +24,7 @@ export { PetManager } from "./PetManager";
 export { GameHouseManager } from "./GameHouseManager";
 export { MangaStudioManager } from "./MangaStudioManager";
 export { AnywhereDoorManager } from "./AnywhereDoorManager";
+export { ChainSwitcherManager } from "./ChainSwitcherManager";
 
 // Re-export types
 export * from "../types/GameTypes";

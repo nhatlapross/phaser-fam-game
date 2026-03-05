@@ -4,17 +4,28 @@ import {
     custom,
     http,
     type EIP1193Provider,
+    type Chain,
 } from 'viem';
 import { arbitrumSepolia } from 'viem/chains';
+import { creditcoin } from '../config/privy';
 import { EventBus } from './EventBus';
 
-const IDENTITY_REGISTRY_ADDRESS =
-    (process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`) ??
-    '0x27558E49D50E398C34e665A62d8f3DAcc1941449';
+// Contract addresses per chain
+const IDENTITY_REGISTRY: Record<number, `0x${string}`> = {
+    [arbitrumSepolia.id]: (process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`) ??
+        '0x27558E49D50E398C34e665A62d8f3DAcc1941449',
+    [creditcoin.id]: (process.env.NEXT_PUBLIC_CREADIT_COIN_IDENTITY_REGISTRY as `0x${string}`) ??
+        '0x28F170E6f3C3216482F8d8BF0A936844076B0A63',
+};
+
+const CHAIN_CONFIG: Record<number, Chain> = {
+    [arbitrumSepolia.id]: arbitrumSepolia,
+    [creditcoin.id]: creditcoin,
+};
 
 const AGENT_URI = 'agent.overguild.com';
 
-// Minimal ABI — only the function we need
+// Minimal ABI — only the function we need (same on all chains)
 const REGISTER_ABI = [
     {
         type: 'function',
@@ -33,9 +44,17 @@ export interface RegisterAgentResult {
 }
 
 export class ContractService {
+    /** Tracks the active chain; updated by 'chain-changed' EventBus event. */
+    private static activeChainId: number = arbitrumSepolia.id;
+
+    static {
+        EventBus.on('chain-changed', ({ chainId }: { chainId: number }) => {
+            ContractService.activeChainId = chainId;
+        });
+    }
+
     /**
      * Request the EIP-1193 provider from the React layer via EventBus.
-     * App.tsx listens for 'request-eth-provider' and responds with the provider.
      */
     private static getProvider(): Promise<EIP1193Provider> {
         return new Promise((resolve, reject) => {
@@ -58,19 +77,29 @@ export class ContractService {
     }
 
     /**
-     * Call `register(agentURI)` on the ERC-8004 Identity Registry contract.
+     * Call `register(agentURI)` on the Identity Registry contract.
+     * Automatically uses the correct contract address and chain for the
+     * currently selected chain (ARB Sepolia or Creditcoin).
      */
     static async registerAgent(): Promise<RegisterAgentResult> {
         try {
-            const provider = await this.getProvider();
+            const chainId = ContractService.activeChainId;
+            const chain = CHAIN_CONFIG[chainId];
+            const contractAddress = IDENTITY_REGISTRY[chainId];
+
+            if (!chain || !contractAddress) {
+                return { success: false, error: `Unsupported chain: ${chainId}` };
+            }
+
+            const provider = await ContractService.getProvider();
 
             const walletClient = createWalletClient({
-                chain: arbitrumSepolia,
+                chain,
                 transport: custom(provider),
             });
 
             const publicClient = createPublicClient({
-                chain: arbitrumSepolia,
+                chain,
                 transport: http(),
             });
 
@@ -79,23 +108,20 @@ export class ContractService {
                 return { success: false, error: 'No account found in wallet.' };
             }
 
-            // Send the register transaction
             const txHash = await walletClient.writeContract({
-                address: IDENTITY_REGISTRY_ADDRESS,
+                address: contractAddress,
                 abi: REGISTER_ABI,
                 functionName: 'register',
                 args: [AGENT_URI],
                 account,
             });
 
-            // Wait for transaction receipt
             const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
             if (receipt.status === 'reverted') {
                 return { success: false, txHash, error: 'Transaction reverted.' };
             }
 
-            // Try to extract agentId from logs (first topic after event sig is usually the id)
             let agentId: string | undefined;
             if (receipt.logs.length > 0) {
                 const log = receipt.logs[0];
@@ -106,8 +132,7 @@ export class ContractService {
 
             return { success: true, agentId, txHash };
         } catch (err: unknown) {
-            const message =
-                err instanceof Error ? err.message : 'Unknown error occurred';
+            const message = err instanceof Error ? err.message : 'Unknown error occurred';
             console.error('ContractService.registerAgent error:', err);
             return { success: false, error: message };
         }

@@ -469,3 +469,104 @@ Authorization: Bearer {{token}}
 ### Get QR code data for social features
 GET {{baseUrl}}/user/qr
 Authorization: Bearer {{token}}
+
+###
+# --------------------
+# FriendCards Controller
+# --------------------
+# Get FriendCard NFT balances from smart contract
+# Card mapping: 1=ORIGIN_CAT, 2=MYSTIC_CAT, 3=SCHOLAR_CAT, 4=TIME_CAT, 5=NINJA_CAT, 6=SCOUT_CAT, 7=BUILDER_CAT
+
+### Get my FriendCard balances (authenticated user)
+GET {{baseUrl}}/friend-cards
+Authorization: Bearer {{token}}
+
+### Get FriendCard balances by address (public)
+GET {{baseUrl}}/friend-cards/0x39c51157aeb811967d5185b454a883df82097264
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# Anywhere Door Controller
+# --------------------
+# Cross-chain bridge via CRE workflow
+# NOTE: Backend requires CRE_WORKFLOW_ENDPOINT environment variable to be configured
+# Current status: 503 - CRE workflow endpoint not configured
+
+### Trigger bridge transaction
+# Expected: 201 with bridge data
+# Current: 503 - CRE workflow endpoint not configured
+POST {{baseUrl}}/anywhere-door/bridge
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "sourceChain": "421614",
+  "destChain": "84532",
+  "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+  "amount": "100000000000000000",
+  "userAddress": "0x39c51157aeb811967d5185b454a883df82097264"
+}
+
+### Get bridge status for user
+# Returns: { found: false, message: "No bridge report found" } if no bridge history
+GET {{baseUrl}}/anywhere-door/status/0x39c51157aeb811967d5185b454a883df82097264
+Authorization: Bearer {{token}}
+
+###
+# --------------------
+# CyberCat Controller
+# --------------------
+# Flow: 1) Register agent (ERC-8004), 2) Mint NFT (FriendCards), 3) Claim backend cat
+# CatType mapping: 1=kungfu-master, 2=cowboy, 3=explorer, 4=bullfighter, 5=soccer-player, 6=ninja, 7=nurse
+
+### Claim a new CyberCat (catType: 1-7)
+# First time: Returns 201 with cat data
+# Already claimed: Returns 409 error
+POST {{baseUrl}}/cat/claim
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "catType": 2
+}
+
+### Get current CyberCat data
+# Returns cat data + on-chain balances from FriendCards contract
+GET {{baseUrl}}/cat
+Authorization: Bearer {{token}}
+
+### Update CyberCat stats
+# Can update: name, mood, lastFedAt, stats (speed, power, luck)
+PATCH {{baseUrl}}/cat
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Whiskers",
+  "mood": "happy",
+  "lastFedAt": "2026-03-05T12:00:00Z",
+  "stats": {
+    "speed": 5,
+    "power": 3,
+    "luck": 7
+  }
+}
+
+### Update CyberCat name only
+PATCH {{baseUrl}}/cat
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Fluffy"
+}
+
+### Update CyberCat mood only
+PATCH {{baseUrl}}/cat
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "mood": "playful"
+}
