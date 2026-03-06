@@ -66,6 +66,16 @@ export class PetFarm extends Scene {
     private spawnedPetType: string = ""; // Track pet type for chat modal
     private petChatModal: PetChatModal | null = null; // Pet chat modal
 
+    // Chain-loaded pets (from NFT contract)
+    private chainPets: Array<{
+        sprite: Phaser.GameObjects.Sprite;
+        shadow: DynamicShadow;
+        label: Phaser.GameObjects.Text;
+        hitArea: Phaser.GameObjects.Arc;
+        chatModal: PetChatModal;
+    }> = [];
+    private chainPetsLoading: Phaser.GameObjects.Text | null = null;
+
     // Profile UI
     private profileManager!: ProfileManager;
 
@@ -124,6 +134,9 @@ export class PetFarm extends Scene {
         this.setupDebugHelpers();
 
         EventBus.emit("current-scene-ready", this);
+
+        // Load NFT pets from both chains in the background
+        this.loadPetsFromChain();
     }
 
     /**
@@ -132,6 +145,22 @@ export class PetFarm extends Scene {
     private cleanupAllNPCs() {
         this.cleanupNobita();
         this.cleanupMaidCat();
+        this.cleanupChainPets();
+    }
+
+    private cleanupChainPets() {
+        for (const pet of this.chainPets) {
+            if (pet.sprite.active) pet.sprite.destroy();
+            pet.shadow.destroy();
+            if (pet.label.active) pet.label.destroy();
+            if (pet.hitArea.active) pet.hitArea.destroy();
+            pet.chatModal.destroy();
+        }
+        this.chainPets = [];
+        if (this.chainPetsLoading?.active) {
+            this.chainPetsLoading.destroy();
+            this.chainPetsLoading = null;
+        }
     }
 
     /**
@@ -1162,6 +1191,72 @@ export class PetFarm extends Scene {
         });
     }
 
+    /**
+     * Load NFT pets owned on Arbitrum Sepolia and Creditcoin, then spawn them in PET_ZONES.
+     */
+    private async loadPetsFromChain() {
+        const cachedData = GameDataService.getCachedData();
+        const user = cachedData?.user || UserService.getStoredUser();
+        const address = user?.address || user?.walletAddress;
+        if (!address) return;
+
+        // Loading indicator (screen-space, visible above game world)
+        const W = this.scale.width;
+        const H = this.scale.height;
+        this.chainPetsLoading = this.add
+            .text(W / 2, H * 0.35, "🔍 Loading NFT pets...", {
+                fontSize: "12px",
+                color: "#ffd700",
+                stroke: "#000000",
+                strokeThickness: 3,
+                fontFamily: "PixelFont",
+                resolution: 2,
+            })
+            .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(5100);
+        this.cameras.main.ignore(this.chainPetsLoading);
+
+        try {
+            const { CyberCatService, CAT_TYPE_TO_SPRITE } = await import("../CyberCatService");
+            const ownedCats = await CyberCatService.fetchOwnedCats(address);
+
+            if (this.chainPetsLoading?.active) {
+                this.chainPetsLoading.destroy();
+                this.chainPetsLoading = null;
+            }
+
+            // Clear any previously loaded chain pets
+            this.cleanupChainPets();
+
+            if (ownedCats.length === 0) return;
+
+            const shortChain = (name: string) =>
+                name.toLowerCase().includes("arbitrum") ? "[ARB]" : "[CTC]";
+
+            const slotsToFill = Math.min(ownedCats.length, this.PET_ZONES.length);
+            for (let i = 0; i < slotsToFill; i++) {
+                const cat = ownedCats[i];
+                const zone = this.PET_ZONES[i];
+                const spriteKey = CAT_TYPE_TO_SPRITE[cat.catType];
+                if (!spriteKey) continue;
+                const cyberName = i === 0 ? "Cyber Cat" : `Cyber Cat ${i + 1}`;
+                this.spawnPet(spriteKey, zone.x, zone.y, shortChain(cat.chainName), cyberName);
+            }
+
+            this.showToast(
+                `🐱 ${slotsToFill} NFT pet(s) loaded from chain!`,
+                0x4caf50,
+            );
+        } catch (err) {
+            if (this.chainPetsLoading?.active) {
+                this.chainPetsLoading.destroy();
+                this.chainPetsLoading = null;
+            }
+            console.error("[PetFarm] Failed to load pets from chain:", err);
+        }
+    }
+
     private showPetSelectionModal() {
         const modalWidth = 450;
         const modalHeight = 500;
@@ -1858,7 +1953,7 @@ export class PetFarm extends Scene {
     /**
      * Spawn a pet at specified position
      */
-    private spawnPet(petType: string, x: number, y: number) {
+    private spawnPet(petType: string, x: number, y: number, chainLabel?: string, overrideName?: string) {
         let petSprite: Phaser.GameObjects.Sprite;
         let petName: string;
         let petScale: number;
@@ -2002,13 +2097,16 @@ export class PetFarm extends Scene {
         // Make UI camera ignore pet and shadow (prevent ghost images)
         this.uiCamera.ignore([petSprite, shadow]);
 
-        // Add name label
+        // Add name label (chain pets show a chain badge)
+        const displayName = overrideName ?? petName;
+        const labelText = chainLabel ? `${displayName}\n${chainLabel}` : displayName;
         const label = this.add
-            .text(x, y - 50, petName, {
+            .text(x, y - 50, labelText, {
                 fontSize: "14px",
                 color: "#fff",
                 stroke: "#000",
                 strokeThickness: 3,
+                align: "center",
             })
             .setOrigin(0.5)
             .setDepth(4000);
@@ -2031,20 +2129,22 @@ export class PetFarm extends Scene {
             petSprite.clearTint();
         });
 
-        // Store pet info
-        this.spawnedPetType = petType;
-
-        // Initialize PetChatModal
-        if (this.petChatModal) {
-            this.petChatModal.destroy();
+        // Initialize PetChatModal — chain pets each get their own modal
+        let chatModal: PetChatModal;
+        if (chainLabel) {
+            chatModal = new PetChatModal(this, displayName, petType);
+        } else {
+            if (this.petChatModal) {
+                this.petChatModal.destroy();
+            }
+            this.petChatModal = new PetChatModal(this, petName, petType);
+            chatModal = this.petChatModal;
+            this.spawnedPetType = petType;
         }
-        this.petChatModal = new PetChatModal(this, petName, petType);
 
         // Click to open chat modal
         hitArea.on("pointerdown", () => {
-            if (this.petChatModal) {
-                this.petChatModal.show();
-            }
+            chatModal.show();
         });
 
         // Start random movement
@@ -2056,18 +2156,19 @@ export class PetFarm extends Scene {
             "center",
         );
 
-        // Track spawned pet and related objects
-        this.spawnedPet = petSprite;
-        this.spawnedPetShadow = shadow;
-        this.spawnedPetLabel = label;
-        this.spawnedPetHitArea = hitArea;
+        if (chainLabel) {
+            // Chain-loaded pets tracked in array
+            this.chainPets.push({ sprite: petSprite, shadow, label, hitArea, chatModal });
+        } else {
+            // Lucky box pet tracked as single reference
+            this.spawnedPet = petSprite;
+            this.spawnedPetShadow = shadow;
+            this.spawnedPetLabel = label;
+            this.spawnedPetHitArea = hitArea;
 
-        // Show success message
-        const costMsg =
-            this.luckyBoxOpenCount === 1
-                ? "FREE"
-                : `${this.LUCKY_BOX_COST} Gold`;
-        this.showToast(`🎉 You got ${petName}! (${costMsg})`, petColor);
+            const costMsg = this.luckyBoxOpenCount === 1 ? "FREE" : `${this.LUCKY_BOX_COST} Gold`;
+            this.showToast(`🎉 You got ${petName}! (${costMsg})`, petColor);
+        }
     }
 
     private createMaidCatAnimations() {

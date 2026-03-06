@@ -967,6 +967,10 @@ export class ClassRoom extends Scene {
                         delay: 15,
                         repeat: fullTocText.length * 2 - 1,
                         callback: () => {
+                            if (!tocText.active || !cursor.active) {
+                                typeTimer.remove(false);
+                                return;
+                            }
                             if (phase === 0) {
                                 // Phase 0: move cursor to where next char will appear
                                 const nextText = fullTocText.substring(0, charIndex + 1);
@@ -998,7 +1002,9 @@ export class ClassRoom extends Scene {
                         },
                     });
                     // Clean up measure text after typewriter finishes
-                    this.time.delayedCall(15 * fullTocText.length * 2 + 200, () => measureText.destroy());
+                    this.time.delayedCall(15 * fullTocText.length * 2 + 200, () => {
+                        if (measureText.active) measureText.destroy();
+                    });
 
                     // Populate screen 2 HTML with full markdown content
                     if (this.lessonContentElement) {
@@ -1618,6 +1624,8 @@ export class ClassRoom extends Scene {
 
         for (const npc of this.npcs) {
             const { sprite, key } = npc;
+
+            if (!sprite?.body || !sprite.active) continue;
 
             // ── Chat bubble lifetime ──
             if (npc.chatTimeLeft > 0) {
