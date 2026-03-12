@@ -83,6 +83,12 @@ export class PetFarm extends Scene {
     private anywhereDoorLabel: Phaser.GameObjects.Text | null = null;
     private anywhereDoorHitArea: Phaser.GameObjects.Arc | null = null;
 
+    // Mobile joystick
+    private joystickBase!: Phaser.GameObjects.Arc;
+    private joystickThumb!: Phaser.GameObjects.Arc;
+    private joystickActive: boolean = false;
+    private joystickPointer: Phaser.Input.Pointer | null = null;
+
     // Collision walls group
     private walls!: Phaser.Physics.Arcade.StaticGroup;
 
@@ -117,6 +123,7 @@ export class PetFarm extends Scene {
         this.createPlayer();
         this.setupCamera();
         this.setupControls();
+        this.createMobileControls();
         this.createPetShopNPC(); // Add Nobita NPC
         // Don't spawn pets automatically - wait for Lucky Box
         this.createUI();
@@ -3065,50 +3072,95 @@ export class PetFarm extends Scene {
         });
     }
 
+    private createMobileControls() {
+        const joystickX = 80;
+        const joystickY = this.scale.height - 80;
+
+        this.joystickBase = this.add.circle(joystickX, joystickY, 40, 0x333333, 0.5);
+        this.joystickBase.setDepth(5100);
+        this.joystickBase.setScrollFactor(0);
+        this.cameras.main.ignore(this.joystickBase);
+
+        this.joystickThumb = this.add.circle(joystickX, joystickY, 20, 0x666666, 0.8);
+        this.joystickThumb.setDepth(5101);
+        this.joystickThumb.setScrollFactor(0);
+        this.cameras.main.ignore(this.joystickThumb);
+
+        this.joystickBase.setInteractive();
+        this.joystickBase.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+            this.joystickActive = true;
+            this.joystickPointer = pointer;
+        });
+
+        this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+            if (this.joystickActive && this.joystickPointer === pointer) {
+                const dx = pointer.x - this.joystickBase.x;
+                const dy = pointer.y - this.joystickBase.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const maxDistance = 30;
+
+                if (distance < maxDistance) {
+                    this.joystickThumb.setPosition(pointer.x, pointer.y);
+                } else {
+                    const angle = Math.atan2(dy, dx);
+                    this.joystickThumb.setPosition(
+                        this.joystickBase.x + Math.cos(angle) * maxDistance,
+                        this.joystickBase.y + Math.sin(angle) * maxDistance,
+                    );
+                }
+            }
+        });
+
+        this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+            if (this.joystickPointer === pointer) {
+                this.joystickActive = false;
+                this.joystickPointer = null;
+                this.joystickThumb.setPosition(this.joystickBase.x, this.joystickBase.y);
+            }
+        });
+    }
+
     private setupDebugHelpers() {
         // Debug helpers removed for production
     }
 
     update() {
         const speed = 100;
-        let isMoving = false;
+        let velocityX = 0;
+        let velocityY = 0;
+        let direction = "";
 
-        // Horizontal movement
-        if (this.cursors.left.isDown) {
-            this.player.setVelocityX(-speed);
-            this.player.play("walk-left", true);
-            isMoving = true;
-        } else if (this.cursors.right.isDown) {
-            this.player.setVelocityX(speed);
-            this.player.play("walk-right", true);
-            isMoving = true;
-        } else {
-            this.player.setVelocityX(0);
+        // Keyboard input
+        if (this.cursors.left.isDown)       { velocityX = -speed; direction = "left"; }
+        else if (this.cursors.right.isDown) { velocityX =  speed; direction = "right"; }
+        if (this.cursors.up.isDown)         { velocityY = -speed; direction = "up"; }
+        else if (this.cursors.down.isDown)  { velocityY =  speed; direction = "down"; }
+
+        // Joystick input
+        if (this.joystickActive) {
+            const dx = this.joystickThumb.x - this.joystickBase.x;
+            const dy = this.joystickThumb.y - this.joystickBase.y;
+            const threshold = 5;
+
+            if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
+                const angle = Math.atan2(dy, dx);
+                velocityX = Math.cos(angle) * speed;
+                velocityY = Math.sin(angle) * speed;
+                direction = Math.abs(dx) > Math.abs(dy)
+                    ? (dx > 0 ? "right" : "left")
+                    : (dy > 0 ? "down" : "up");
+            }
         }
 
-        // Vertical movement
-        if (this.cursors.up.isDown) {
-            this.player.setVelocityY(-speed);
-            if (!isMoving) {
-                this.player.play("walk-up", true);
-            }
-            isMoving = true;
-        } else if (this.cursors.down.isDown) {
-            this.player.setVelocityY(speed);
-            if (!isMoving) {
-                this.player.play("walk-down", true);
-            }
-            isMoving = true;
-        } else {
-            this.player.setVelocityY(0);
-        }
+        this.player.setVelocity(velocityX, velocityY);
 
-        // Play idle animation when not moving
-        if (!isMoving) {
+        if (velocityX !== 0 || velocityY !== 0) {
+            this.player.play(`walk-${direction || "down"}`, true);
+        } else {
             const currentAnim = this.player.anims.currentAnim?.key || "";
             if (currentAnim.includes("walk")) {
-                const direction = currentAnim.split("-")[1];
-                this.player.play(`idle-${direction}`, true);
+                const dir = currentAnim.split("-").pop() || "down";
+                this.player.play(`idle-${dir}`, true);
             }
         }
 
