@@ -232,6 +232,19 @@ export class ClassRoom extends Scene {
 
         this.events.on('postupdate', this.updatePlayerUI, this);
 
+        // When waking up from WindowsXP scene — stand player back up
+        this.events.on('wake', () => {
+            this.isSitting = false;
+
+            // Play stand-up (idle facing down)
+            if (this.player?.active) {
+                this.player.play(`${this.currentCharacterKey}-idle-down`, true);
+            }
+
+            // Short camera fade-in for smooth return
+            this.cameras.main.fadeIn(400, 0, 0, 0);
+        });
+
         EventBus.emit('current-scene-ready', this);
     }
 
@@ -441,7 +454,7 @@ export class ClassRoom extends Scene {
         }
     }
 
-    /** Teleports the player to the seat and shows the studying overlay. */
+    /** Teleports the player to the seat and opens the Windows XP computer scene. */
     private sitAtDesk(seatX: number, seatY: number) {
         if (this.isSitting) return;
 
@@ -452,7 +465,9 @@ export class ClassRoom extends Scene {
         this.player.setVelocity(0, 0);
         this.player.play(`${this.currentCharacterKey}-idle-up`, true);
 
-        this.showStudyingOverlay();
+        // Sleep this scene and launch WindowsXP on top
+        this.scene.sleep('ClassRoom');
+        this.scene.launch('WindowsXP', { seatX, seatY });
     }
 
     /** Shows a large CRT-style 2-screen lesson viewer in screen space. */

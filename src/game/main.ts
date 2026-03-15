@@ -18,6 +18,7 @@ import { ProfileScene } from "./scenes/ProfileScene";
 import { PetFarm } from "./scenes/PetFarm";
 import { MapSelection } from "./scenes/MapSelection";
 import { ClassRoom } from "./scenes/ClassRoom";
+import { WindowsXP } from "./scenes/WindowsXP";
 import InputTextPlugin from "phaser3-rex-plugins/plugins/inputtext-plugin.js";
 import UIPlugin from "phaser3-rex-plugins/templates/ui/ui-plugin.js";
 
@@ -84,6 +85,7 @@ const config: Phaser.Types.Core.GameConfig = {
         FarmingGame,
         TownSquare,
         ClassRoom,
+        WindowsXP,
         PetFarm,
         HomeGarden,
         EventCheckIn,
