@@ -64,6 +64,7 @@ export class WindowsXP extends Scene {
     // ── My Documents state ────────────────────────────────────────────────────
     private myDocsFolderId: string | null = null;
     private myDocsBackStack: Array<string | null> = [];
+    private myDocsTreeCollapsed = new Set<string>(); // tree node ids that are collapsed
 
     // ── Taskbar ──────────────────────────────────────────────────────────────
     private taskbarWinBtns: Phaser.GameObjects.Container | null = null;
@@ -107,8 +108,9 @@ export class WindowsXP extends Scene {
         this.isShuttingDown  = false;
         this.startMenuOpen   = false;
         this.focusStack      = [];
-        this.myDocsFolderId  = null;
-        this.myDocsBackStack = [];
+        this.myDocsFolderId      = null;
+        this.myDocsBackStack     = [];
+        this.myDocsTreeCollapsed = new Set();
         this.notepadFilename = 'Untitled';
         this.notepadFileId   = null;
         this.leoLessons      = [];
@@ -1062,42 +1064,92 @@ export class WindowsXP extends Scene {
 
     private refreshMyDocsTree() {
         if (!this.myDocsTreeEl) return;
-        const style = this.myDocsTreeEl.querySelector('style')?.outerHTML ?? '';
 
-        const buildNodes = (parentId: string | null, depth: number): string => {
-            const folders = this.getFs().filter(i => i.type === 'folder' && i.parentId === parentId);
-            return folders.map(f => {
-                const isActive = this.myDocsFolderId === f.id;
-                const hasChildren = this.getFs().some(i => i.type === 'folder' && i.parentId === f.id);
-                const children = hasChildren ? buildNodes(f.id, depth + 1) : '';
-                return `
-                    <div class="tr-node${isActive ? ' active' : ''}" data-id="${f.id}" style="padding-left:${4 + depth * 12}px">
-                        <span class="tr-toggle">${hasChildren ? '▶' : ' '}</span>
-                        <span class="tr-icon">📁</span>
-                        <span class="tr-label">${f.name}</span>
-                    </div>${children}`;
-            }).join('');
-        };
+        // Keep the <style> tag, clear everything else
+        const styleEl = this.myDocsTreeEl.querySelector('style');
+        this.myDocsTreeEl.innerHTML = '';
+        if (styleEl) this.myDocsTreeEl.appendChild(styleEl);
 
-        const rootActive = this.myDocsFolderId === null;
-        const rootHtml = `
-            <div class="tr-node${rootActive ? ' active' : ''}" data-id="__root__" style="padding-left:4px">
-                <span class="tr-toggle">▶</span>
-                <span class="tr-icon">🖥️</span>
-                <span class="tr-label">My Documents</span>
-            </div>${buildNodes(null, 1)}`;
+        const fs = this.getFs();
 
-        this.myDocsTreeEl.innerHTML = style + rootHtml;
+        const buildNode = (id: string | null, label: string, icon: string, depth: number, parentWrap: HTMLElement) => {
+            const isRoot   = id === null;
+            const nodeId   = isRoot ? '__root__' : id!;
+            const isActive = this.myDocsFolderId === id;
+            const children = fs.filter(i => i.type === 'folder' && i.parentId === id);
+            const hasKids  = children.length > 0;
+            const collapsed = this.myDocsTreeCollapsed.has(nodeId);
 
-        this.myDocsTreeEl.querySelectorAll('.tr-node').forEach(node => {
-            node.addEventListener('click', () => {
-                const rawId = (node as HTMLElement).dataset.id ?? '';
-                const folderId = rawId === '__root__' ? null : rawId;
+            // Row
+            const row = document.createElement('div');
+            row.className = 'tr-node' + (isActive ? ' active' : '');
+            row.dataset.id = nodeId;
+            row.style.paddingLeft = `${4 + depth * 12}px`;
+
+            // Arrow (toggle collapse) — only shown when has children
+            const arrow = document.createElement('span');
+            arrow.className = 'tr-toggle';
+            if (hasKids) {
+                arrow.textContent = collapsed ? '▶' : '▼';
+                arrow.style.cursor = 'pointer';
+                arrow.style.color  = '#555';
+            } else {
+                arrow.textContent = ' ';
+            }
+
+            const iconSpan  = document.createElement('span');
+            iconSpan.className = 'tr-icon';
+            iconSpan.textContent = icon;
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'tr-label';
+            labelSpan.textContent = label;
+            labelSpan.style.cursor = 'pointer';
+
+            row.appendChild(arrow);
+            row.appendChild(iconSpan);
+            row.appendChild(labelSpan);
+            parentWrap.appendChild(row);
+
+            // Child container
+            const childWrap = document.createElement('div');
+            childWrap.style.display = collapsed ? 'none' : 'block';
+            parentWrap.appendChild(childWrap);
+
+            // Arrow click: toggle collapse (don't navigate)
+            if (hasKids) {
+                arrow.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (this.myDocsTreeCollapsed.has(nodeId)) {
+                        this.myDocsTreeCollapsed.delete(nodeId);
+                        arrow.textContent = '▼';
+                        childWrap.style.display = 'block';
+                    } else {
+                        this.myDocsTreeCollapsed.add(nodeId);
+                        arrow.textContent = '▶';
+                        childWrap.style.display = 'none';
+                    }
+                    // Update active styling only
+                    this.myDocsTreeEl!.querySelectorAll('.tr-node').forEach(n =>
+                        n.classList.toggle('active', (n as HTMLElement).dataset.id === (this.myDocsFolderId ?? '__root__'))
+                    );
+                });
+            }
+
+            // Label/row click: navigate into folder
+            labelSpan.addEventListener('click', () => {
                 this.myDocsBackStack.push(this.myDocsFolderId);
-                this.myDocsFolderId = folderId;
+                this.myDocsFolderId = id;
                 this.refreshMyDocs();
             });
-        });
+
+            // Build children recursively
+            children.sort((a, b) => a.name.localeCompare(b.name)).forEach(child => {
+                buildNode(child.id, child.name, '📁', depth + 1, childWrap);
+            });
+        };
+
+        buildNode(null, 'My Documents', '🖥️', 0, this.myDocsTreeEl);
     }
 
     private refreshMyDocsList() {
@@ -1185,6 +1237,51 @@ export class WindowsXP extends Scene {
             e.preventDefault();
             const srcId = e.dataTransfer?.getData('text/plain') ?? '';
             if (srcId) { this.fsMoveItem(srcId, this.myDocsFolderId); this.refreshMyDocs(); }
+        });
+    }
+
+    /** Replace a list row's name span with an inline input, commit on Enter/blur. */
+    private startInlineRename(itemId: string, isNew = false) {
+        if (!this.myDocsListEl) return;
+
+        // Wait a tick for the DOM to settle after refresh
+        requestAnimationFrame(() => {
+            const row = this.myDocsListEl!.querySelector<HTMLElement>(`.fd-row[data-id="${itemId}"]`);
+            if (!row) return;
+
+            const nameSpan = row.querySelector<HTMLElement>('.fd-name');
+            if (!nameSpan) return;
+
+            const item = this.fsItem(itemId);
+            if (!item) return;
+
+            // Create inline input
+            const input = document.createElement('input');
+            input.type  = 'text';
+            input.value = isNew ? '' : item.name;
+            input.placeholder = item.type === 'folder' ? 'New Folder' : 'New File';
+            input.style.cssText = `
+                flex:1; min-width:0; border:1px solid #3170D7; outline:none;
+                padding:1px 3px; font-family:inherit; font-size:inherit;
+                background:#FFF; color:#000; box-sizing:border-box;`;
+
+            nameSpan.replaceWith(input);
+            input.select();
+            input.focus();
+
+            const commit = () => {
+                const newName = input.value.trim() || (item.type === 'folder' ? 'New Folder' : 'New File');
+                if (newName !== item.name) {
+                    this.fsRenameItem(itemId, newName);
+                }
+                this.refreshMyDocs();
+            };
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+                if (e.key === 'Escape') { this.refreshMyDocs(); }
+            });
+            input.addEventListener('blur', commit, { once: true });
         });
     }
 
@@ -1901,12 +1998,14 @@ export class WindowsXP extends Scene {
         if (!itemId) {
             // Background click
             addItem('📄 New Text File', () => {
-                const name = window.prompt('File name:', 'New File');
-                if (name?.trim()) { this.fsAddFile(name.trim(), '', this.myDocsFolderId); this.refreshMyDocs(); }
+                const item = this.fsAddFile('New File', '', this.myDocsFolderId);
+                this.refreshMyDocs();
+                this.startInlineRename(item.id, true);
             });
             addItem('📁 New Folder', () => {
-                const name = window.prompt('Folder name:', 'New Folder');
-                if (name?.trim()) { this.fsAddFolder(name.trim(), this.myDocsFolderId); this.refreshMyDocs(); }
+                const item = this.fsAddFolder('New Folder', this.myDocsFolderId);
+                this.refreshMyDocs();
+                this.startInlineRename(item.id, true);
             });
         } else {
             if (itemType === 'folder') {
@@ -1921,13 +2020,7 @@ export class WindowsXP extends Scene {
                 addSep();
             }
             addItem('✏️ Rename', () => {
-                const item = this.fsItem(itemId);
-                if (!item) return;
-                const newName = window.prompt('Rename to:', item.name);
-                if (newName?.trim() && newName.trim() !== item.name) {
-                    this.fsRenameItem(itemId, newName.trim());
-                    this.refreshMyDocs();
-                }
+                this.startInlineRename(itemId, false);
             });
             addItem('🗑️ Delete', () => {
                 const item = this.fsItem(itemId);
