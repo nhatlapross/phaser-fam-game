@@ -46,6 +46,20 @@ export interface LessonListResponse {
     error?: string;
 }
 
+export interface TreeNode {
+    name: string;
+    type: 'file' | 'directory';
+    size?: number;
+    updatedAt?: string;
+    children?: TreeNode[];
+}
+
+export interface ResearchTreeResponse {
+    success: boolean;
+    tree?: TreeNode[];
+    error?: string;
+}
+
 export class ClassroomChatService {
     private static instance: ClassroomChatService | null = null;
     private readonly baseUrl = process.env.NEXT_PUBLIC_AGENT_API_URL || 'http://54.255.174.8:3001';
@@ -143,6 +157,49 @@ export class ClassroomChatService {
             return {
                 success: false,
                 error: 'Could not load lesson. Please try again later.',
+            };
+        }
+    }
+
+    /**
+     * Fetch research file tree from the API
+     */
+    public async getResearchTree(): Promise<ResearchTreeResponse> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/research/tree`);
+
+            if (!response.ok) {
+                throw new Error(`Research tree API error: ${response.status}`);
+            }
+
+            return await response.json() as ResearchTreeResponse;
+        } catch (error) {
+            console.error('ClassroomChatService research tree error:', error);
+            return {
+                success: false,
+                error: 'Could not load file tree.',
+            };
+        }
+    }
+
+    /**
+     * Fetch a specific research file by folder and slug
+     * GET /api/research/:folder/:slug
+     */
+    public async getResearchFile(folder: string, slug: string): Promise<LessonResponse> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/research/${encodeURIComponent(folder)}/${encodeURIComponent(slug)}`);
+
+            if (!response.ok) {
+                throw new Error(`Research file API error: ${response.status}`);
+            }
+
+            return await response.json() as LessonResponse;
+        } catch (error) {
+            console.error('ClassroomChatService research file error:', error);
+            return {
+                success: false,
+                error: 'Could not load file. Please try again later.',
             };
         }
     }

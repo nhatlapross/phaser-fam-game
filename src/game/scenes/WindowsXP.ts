@@ -1,6 +1,6 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
-import { ClassroomChatService, LessonResponse, LessonSummary } from '../ClassroomChatService';
+import { ClassroomChatService, LessonResponse, LessonSummary, TreeNode } from '../ClassroomChatService';
 import { marked } from 'marked';
 
 type WinId = 'leo' | 'notepad' | 'mydocs';
@@ -53,6 +53,7 @@ export class WindowsXP extends Scene {
 
     // ── Leo sidebar state ─────────────────────────────────────────────────────
     private leoLessons: LessonSummary[] = [];
+    private leoTree: TreeNode[] = [];
     private leoFilter  = '';
     private leoCollapsed = new Set<string>();
     private leoActiveSlug = '';
@@ -114,6 +115,7 @@ export class WindowsXP extends Scene {
         this.notepadFilename = 'Untitled';
         this.notepadFileId   = null;
         this.leoLessons      = [];
+        this.leoTree         = [];
         this.leoFilter       = '';
         this.leoCollapsed    = new Set();
         this.leoActiveSlug   = '';
@@ -719,26 +721,25 @@ export class WindowsXP extends Scene {
                     background:#FFF; color:#000; }
                 #leo-search-input:focus { border-color:#3170D7; }
                 #leo-tree-wrap { flex:1; overflow-y:auto; overflow-x:hidden; }
-                .leo-grp-hdr { display:flex; align-items:center; gap:3px; padding:4px 5px 4px 4px;
-                    cursor:pointer; user-select:none; background:#E8E4DB;
-                    border-bottom:1px solid #CAC6BC; font-weight:bold; color:#003366; }
-                .leo-grp-hdr:hover { background:#D4D0C8; }
-                .leo-grp-arrow { display:inline-block; width:10px; font-size:0.65em;
+                .leo-ft-dir { user-select:none; }
+                .leo-ft-dir-label { display:flex; align-items:center; gap:3px; padding:3px 5px;
+                    cursor:pointer; color:#003366; font-weight:bold;
+                    border-bottom:1px solid #EEEAE0; }
+                .leo-ft-dir-label:hover { background:#D0E4F8; }
+                .leo-ft-arrow { display:inline-block; width:10px; font-size:0.65em;
                     transition:transform 0.15s; flex-shrink:0; text-align:center; }
-                .leo-grp-arrow.open { transform:rotate(90deg); }
-                .leo-grp-label { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-                .leo-grp-count { font-size:0.8em; color:#666; font-weight:normal; margin-left:4px; }
-                .leo-grp-items { background:#F5F5F2; }
-                .leo-lesson { display:flex; flex-direction:column; padding:3px 6px 3px 16px;
-                    cursor:pointer; border-left:3px solid transparent;
-                    border-bottom:1px solid #EEEAE0; color:#222; line-height:1.25; }
-                .leo-lesson:hover { background:#D0E4F8; border-left-color:#3170D7; }
-                .leo-lesson.active { background:#C5DCF5; border-left-color:#003BBC; font-weight:bold; }
-                .leo-lesson-title { display:block; overflow:hidden; text-overflow:ellipsis;
-                    white-space:nowrap; color:#111; }
-                .leo-lesson-date { font-size:0.78em; color:#888; margin-top:1px; }
-                .leo-badge { background:#003BBC; color:#fff; padding:0 3px;
-                    border-radius:2px; font-size:0.72em; font-weight:bold; margin-right:3px; }
+                .leo-ft-arrow.open { transform:rotate(90deg); }
+                .leo-ft-children { padding-left:12px; border-left:1px solid #CAC6BC; margin-left:8px; }
+                .leo-ft-children.collapsed { display:none; }
+                .leo-ft-file { user-select:none; }
+                .leo-ft-file-label { display:flex; align-items:center; gap:4px;
+                    padding:3px 6px 3px 16px; cursor:pointer;
+                    border-left:3px solid transparent; border-bottom:1px solid #EEEAE0;
+                    color:#222; line-height:1.25; }
+                .leo-ft-file-label:hover { background:#D0E4F8; border-left-color:#3170D7; }
+                .leo-ft-file-label.active { background:#C5DCF5; border-left-color:#003BBC; font-weight:bold; }
+                .leo-ft-file-label .ft-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+                .leo-ft-file-label .ft-size { font-size:0.78em; color:#888; flex-shrink:0; margin-left:auto; }
                 .leo-msg { text-align:center; color:#888; padding:12px 6px; }`;
             document.head.appendChild(s);
         }
@@ -797,19 +798,9 @@ export class WindowsXP extends Scene {
     }
 
     /** Extract group name from lesson slug/title. */
-    private getLessonGroup(lesson: LessonSummary): string {
-        // Match patterns: week-1, chapter-2, session-3, module-4, day-5, unit-6, part-7
-        const fromSlug = lesson.slug.match(/^(week|chapter|session|module|day|unit|part|lesson)[-_]?(\d+)/i);
-        if (fromSlug) {
-            const word = fromSlug[1][0].toUpperCase() + fromSlug[1].slice(1).toLowerCase();
-            return `${word} ${fromSlug[2]}`;
-        }
-        const fromTitle = lesson.title.match(/^(week|chapter|session|module|day|unit|part|lesson)\s*(\d+)/i);
-        if (fromTitle) {
-            const word = fromTitle[1][0].toUpperCase() + fromTitle[1].slice(1).toLowerCase();
-            return `${word} ${fromTitle[2]}`;
-        }
-        return 'Lessons';
+    private formatFileSize(bytes: number): string {
+        if (bytes < 1024) return `${bytes}B`;
+        return `${(bytes / 1024).toFixed(1)}K`;
     }
 
     private renderLeoSidebar() {
@@ -818,82 +809,127 @@ export class WindowsXP extends Scene {
         if (!wrap) return;
 
         const q = this.leoFilter;
-        const filtered = q
-            ? this.leoLessons.filter(l =>
-                l.title.toLowerCase().includes(q) || l.slug.toLowerCase().includes(q))
-            : this.leoLessons;
 
-        if (this.leoLessons.length > 0 && filtered.length === 0) {
-            wrap.innerHTML = '<div class="leo-msg">No lessons match.</div>';
-            return;
-        }
+        // If we have tree data, render tree; otherwise fall back to flat lessons
+        if (this.leoTree.length > 0) {
+            wrap.innerHTML = '';
 
-        // Build group map (preserve insertion order)
-        const groupMap = new Map<string, LessonSummary[]>();
-        filtered.forEach(l => {
-            const g = this.getLessonGroup(l);
-            if (!groupMap.has(g)) groupMap.set(g, []);
-            groupMap.get(g)!.push(l);
-        });
+            const buildNode = (node: TreeNode, parentFolder: string): HTMLElement | null => {
+                if (node.type === 'directory') {
+                    // Filter: if searching, only show dirs that contain matching files
+                    const hasMatch = (n: TreeNode): boolean => {
+                        if (n.type === 'file') return n.name.toLowerCase().includes(q);
+                        return (n.children || []).some(hasMatch);
+                    };
+                    const filteredChildren = q
+                        ? (node.children || []).filter(c => hasMatch(c))
+                        : (node.children || []);
 
-        // Auto-expand everything while searching
-        if (q) groupMap.forEach((_, g) => this.leoCollapsed.delete(g));
+                    if (q && filteredChildren.length === 0) return null;
 
-        // Build DOM directly (avoids innerHTML parsing issues)
-        wrap.innerHTML = '';
-        let isFirstLesson = true;
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'leo-ft-dir';
 
-        groupMap.forEach((lessons, groupName) => {
-            const isOpen = !this.leoCollapsed.has(groupName);
+                    const isOpen = !this.leoCollapsed.has(node.name);
+                    const label = document.createElement('div');
+                    label.className = 'leo-ft-dir-label';
+                    label.innerHTML = `<span class="leo-ft-arrow${isOpen ? ' open' : ''}">▶</span>${isOpen ? '📂' : '📁'} ${node.name}`;
 
-            // ── Group header ──
-            const hdr = document.createElement('div');
-            hdr.className = 'leo-grp-hdr';
-            hdr.dataset.group = groupName;
-            hdr.innerHTML = `
-                <span class="leo-grp-arrow ${isOpen ? 'open' : ''}">▶</span>
-                <span class="leo-grp-label">📂 ${groupName}</span>
-                <span class="leo-grp-count">(${lessons.length})</span>`;
-            wrap.appendChild(hdr);
+                    const childrenDiv = document.createElement('div');
+                    childrenDiv.className = 'leo-ft-children' + (isOpen ? '' : ' collapsed');
 
-            // ── Group items ──
-            const grpDiv = document.createElement('div');
-            grpDiv.className = 'leo-grp-items';
-            grpDiv.dataset.groupItems = groupName;
-            grpDiv.style.display = isOpen ? 'block' : 'none';
+                    const sorted = [...filteredChildren].sort((a, b) => {
+                        if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+                        return a.name.localeCompare(b.name);
+                    });
+                    sorted.forEach(child => {
+                        const el = buildNode(child, node.name);
+                        if (el) childrenDiv.appendChild(el);
+                    });
 
-            lessons.forEach(l => {
-                const item = document.createElement('div');
-                item.className = 'leo-lesson' + (l.slug === this.leoActiveSlug ? ' active' : '');
-                item.dataset.slug = l.slug;
-                const badge = isFirstLesson && !q ? '<span class="leo-badge">NEW</span>' : '';
-                const date  = l.updatedAt
-                    ? new Date(l.updatedAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
-                    : '';
-                item.innerHTML = `
-                    <span class="leo-lesson-title">${badge}${l.title}</span>
-                    ${date ? `<span class="leo-lesson-date">${date}</span>` : ''}`;
-                item.addEventListener('click', () => this.loadLesson(l.slug));
-                grpDiv.appendChild(item);
-                isFirstLesson = false;
-            });
+                    label.addEventListener('click', () => {
+                        const arrow = label.querySelector('.leo-ft-arrow')!;
+                        if (this.leoCollapsed.has(node.name)) {
+                            this.leoCollapsed.delete(node.name);
+                            arrow.classList.add('open');
+                            childrenDiv.classList.remove('collapsed');
+                            label.innerHTML = `<span class="leo-ft-arrow open">▶</span>📂 ${node.name}`;
+                        } else {
+                            this.leoCollapsed.add(node.name);
+                            arrow.classList.remove('open');
+                            childrenDiv.classList.add('collapsed');
+                            label.innerHTML = `<span class="leo-ft-arrow">▶</span>📁 ${node.name}`;
+                        }
+                    });
 
-            wrap.appendChild(grpDiv);
-
-            // Toggle collapse on header click
-            hdr.addEventListener('click', () => {
-                const arrow = hdr.querySelector<HTMLElement>('.leo-grp-arrow')!;
-                if (this.leoCollapsed.has(groupName)) {
-                    this.leoCollapsed.delete(groupName);
-                    arrow.classList.add('open');
-                    grpDiv.style.display = 'block';
+                    wrapper.appendChild(label);
+                    wrapper.appendChild(childrenDiv);
+                    return wrapper;
                 } else {
-                    this.leoCollapsed.add(groupName);
-                    arrow.classList.remove('open');
-                    grpDiv.style.display = 'none';
+                    if (q && !node.name.toLowerCase().includes(q)) return null;
+
+                    const fileDiv = document.createElement('div');
+                    fileDiv.className = 'leo-ft-file';
+
+                    const label = document.createElement('div');
+                    label.className = 'leo-ft-file-label' + (node.name.replace(/\.md$/, '') === this.leoActiveSlug ? ' active' : '');
+
+                    const icon = node.name.endsWith('.md') ? '📄' : '📎';
+                    const sizeStr = node.size ? `<span class="ft-size">${this.formatFileSize(node.size)}</span>` : '';
+                    label.innerHTML = `${icon} <span class="ft-name">${node.name}</span>${sizeStr}`;
+
+                    if (node.name.endsWith('.md')) {
+                        label.addEventListener('click', () => {
+                            const slug = node.name.replace(/\.md$/, '');
+                            this.loadLesson(slug, parentFolder);
+                            document.querySelectorAll('.leo-ft-file-label').forEach(el => el.classList.remove('active'));
+                            label.classList.add('active');
+                        });
+                    }
+
+                    fileDiv.appendChild(label);
+                    return fileDiv;
                 }
+            };
+
+            this.leoTree.forEach(node => {
+                const el = buildNode(node, '');
+                if (el) wrap.appendChild(el);
             });
-        });
+
+            if (wrap.children.length === 0) {
+                wrap.innerHTML = '<div class="leo-msg">No files match.</div>';
+            }
+        } else if (this.leoLessons.length > 0) {
+            // Fallback: flat lesson list
+            const filtered = q
+                ? this.leoLessons.filter(l =>
+                    l.title.toLowerCase().includes(q) || l.slug.toLowerCase().includes(q))
+                : this.leoLessons;
+
+            if (filtered.length === 0) {
+                wrap.innerHTML = '<div class="leo-msg">No lessons match.</div>';
+                return;
+            }
+
+            wrap.innerHTML = '';
+            filtered.forEach(l => {
+                const item = document.createElement('div');
+                item.className = 'leo-ft-file';
+                const label = document.createElement('div');
+                label.className = 'leo-ft-file-label' + (l.slug === this.leoActiveSlug ? ' active' : '');
+                label.innerHTML = `📄 <span class="ft-name">${l.title}</span>`;
+                label.addEventListener('click', () => {
+                    this.loadLesson(l.slug);
+                    document.querySelectorAll('.leo-ft-file-label').forEach(el => el.classList.remove('active'));
+                    label.classList.add('active');
+                });
+                item.appendChild(label);
+                wrap.appendChild(item);
+            });
+        } else {
+            wrap.innerHTML = '<div class="leo-msg">No files available.</div>';
+        }
     }
 
     private createNotepadHtml() {
@@ -2171,6 +2207,46 @@ export class WindowsXP extends Scene {
         const timeout = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('timeout')), 10000));
 
+        // Try research tree API first
+        Promise.race([this.chatService.getResearchTree(), timeout])
+            .then((result) => {
+                if (!this.leoListEl) return;
+                const wrap = document.getElementById('leo-tree-wrap');
+                if (!wrap) return;
+
+                if (result.success && result.tree?.length) {
+                    this.leoTree = result.tree;
+                    this.renderLeoSidebar();
+                    // Auto-load first .md file found in tree
+                    const findFirstMd = (nodes: TreeNode[], folder: string): { slug: string; folder: string } | null => {
+                        for (const n of nodes) {
+                            if (n.type === 'file' && n.name.endsWith('.md')) {
+                                return { slug: n.name.replace(/\.md$/, ''), folder };
+                            }
+                            if (n.type === 'directory' && n.children) {
+                                const found = findFirstMd(n.children, n.name);
+                                if (found) return found;
+                            }
+                        }
+                        return null;
+                    };
+                    const first = findFirstMd(result.tree, '');
+                    if (first) this.loadLesson(first.slug, first.folder);
+                } else {
+                    // Fallback to legacy lessons API
+                    this.loadLessonsLegacy();
+                }
+            })
+            .catch(() => {
+                // Fallback to legacy lessons API on error
+                this.loadLessonsLegacy();
+            });
+    }
+
+    private loadLessonsLegacy() {
+        const timeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 10000));
+
         Promise.race([this.chatService.getLessons(1, 50), timeout])
             .then((result) => {
                 if (!this.leoListEl) return;
@@ -2191,18 +2267,23 @@ export class WindowsXP extends Scene {
             });
     }
 
-    private loadLesson(slug: string) {
+    private loadLesson(slug: string, folder?: string) {
         if (!this.leoContentEl) return;
 
         this.leoActiveSlug = slug;
         // Update active state in sidebar
-        document.querySelectorAll('.leo-lesson').forEach(el => {
-            el.classList.toggle('active', (el as HTMLElement).dataset.slug === slug);
+        document.querySelectorAll('.leo-ft-file-label').forEach(el => {
+            el.classList.remove('active');
         });
 
         this.leoContentEl.innerHTML = '<div class="xp-placeholder">Loading…</div>';
 
-        this.chatService.getLessonBySlug(slug).then((lesson: LessonResponse) => {
+        // Use research file API when folder is available, otherwise fallback to legacy
+        const promise = folder
+            ? this.chatService.getResearchFile(folder, slug)
+            : this.chatService.getLessonBySlug(slug);
+
+        promise.then((lesson: LessonResponse) => {
             if (!this.leoContentEl) return;
             if (lesson.success && lesson.content) {
                 const rawHtml = marked.parse(lesson.content, { async: false, breaks: true }) as string;
