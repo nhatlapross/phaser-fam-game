@@ -66,6 +66,16 @@ export class PetFarm extends Scene {
     private spawnedPetType: string = ""; // Track pet type for chat modal
     private petChatModal: PetChatModal | null = null; // Pet chat modal
 
+    // Chain-loaded pets (from NFT contract)
+    private chainPets: Array<{
+        sprite: Phaser.GameObjects.Sprite;
+        shadow: DynamicShadow;
+        label: Phaser.GameObjects.Text;
+        hitArea: Phaser.GameObjects.Arc;
+        chatModal: PetChatModal;
+    }> = [];
+    private chainPetsLoading: Phaser.GameObjects.Text | null = null;
+
     // Profile UI
     private profileManager!: ProfileManager;
 
@@ -82,6 +92,12 @@ export class PetFarm extends Scene {
         null;
     private anywhereDoorLabel: Phaser.GameObjects.Text | null = null;
     private anywhereDoorHitArea: Phaser.GameObjects.Arc | null = null;
+
+    // Mobile joystick
+    private joystickBase!: Phaser.GameObjects.Arc;
+    private joystickThumb!: Phaser.GameObjects.Arc;
+    private joystickActive: boolean = false;
+    private joystickPointer: Phaser.Input.Pointer | null = null;
 
     // Collision walls group
     private walls!: Phaser.Physics.Arcade.StaticGroup;
@@ -117,6 +133,7 @@ export class PetFarm extends Scene {
         this.createPlayer();
         this.setupCamera();
         this.setupControls();
+        this.createMobileControls();
         this.createPetShopNPC(); // Add Nobita NPC
         // Don't spawn pets automatically - wait for Lucky Box
         this.createUI();
@@ -124,6 +141,9 @@ export class PetFarm extends Scene {
         this.setupDebugHelpers();
 
         EventBus.emit("current-scene-ready", this);
+
+        // Load NFT pets from both chains in the background
+        this.loadPetsFromChain();
     }
 
     /**
@@ -132,6 +152,22 @@ export class PetFarm extends Scene {
     private cleanupAllNPCs() {
         this.cleanupNobita();
         this.cleanupMaidCat();
+        this.cleanupChainPets();
+    }
+
+    private cleanupChainPets() {
+        for (const pet of this.chainPets) {
+            if (pet.sprite.active) pet.sprite.destroy();
+            pet.shadow.destroy();
+            if (pet.label.active) pet.label.destroy();
+            if (pet.hitArea.active) pet.hitArea.destroy();
+            pet.chatModal.destroy();
+        }
+        this.chainPets = [];
+        if (this.chainPetsLoading?.active) {
+            this.chainPetsLoading.destroy();
+            this.chainPetsLoading = null;
+        }
     }
 
     /**
@@ -1162,6 +1198,72 @@ export class PetFarm extends Scene {
         });
     }
 
+    /**
+     * Load NFT pets owned on Arbitrum Sepolia and Creditcoin, then spawn them in PET_ZONES.
+     */
+    private async loadPetsFromChain() {
+        const cachedData = GameDataService.getCachedData();
+        const user = cachedData?.user || UserService.getStoredUser();
+        const address = user?.address || user?.walletAddress;
+        if (!address) return;
+
+        // Loading indicator (screen-space, visible above game world)
+        const W = this.scale.width;
+        const H = this.scale.height;
+        this.chainPetsLoading = this.add
+            .text(W / 2, H * 0.35, "🔍 Loading NFT pets...", {
+                fontSize: "12px",
+                color: "#ffd700",
+                stroke: "#000000",
+                strokeThickness: 3,
+                fontFamily: "PixelFont",
+                resolution: 2,
+            })
+            .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(5100);
+        this.cameras.main.ignore(this.chainPetsLoading);
+
+        try {
+            const { CyberCatService, CAT_TYPE_TO_SPRITE } = await import("../CyberCatService");
+            const ownedCats = await CyberCatService.fetchOwnedCats(address);
+
+            if (this.chainPetsLoading?.active) {
+                this.chainPetsLoading.destroy();
+                this.chainPetsLoading = null;
+            }
+
+            // Clear any previously loaded chain pets
+            this.cleanupChainPets();
+
+            if (ownedCats.length === 0) return;
+
+            const shortChain = (name: string) =>
+                name.toLowerCase().includes("arbitrum") ? "[ARB]" : "[CTC]";
+
+            const slotsToFill = Math.min(ownedCats.length, this.PET_ZONES.length);
+            for (let i = 0; i < slotsToFill; i++) {
+                const cat = ownedCats[i];
+                const zone = this.PET_ZONES[i];
+                const spriteKey = CAT_TYPE_TO_SPRITE[cat.catType];
+                if (!spriteKey) continue;
+                const cyberName = i === 0 ? "Cyber Cat" : `Cyber Cat ${i + 1}`;
+                this.spawnPet(spriteKey, zone.x, zone.y, shortChain(cat.chainName), cyberName);
+            }
+
+            this.showToast(
+                `🐱 ${slotsToFill} NFT pet(s) loaded from chain!`,
+                0x4caf50,
+            );
+        } catch (err) {
+            if (this.chainPetsLoading?.active) {
+                this.chainPetsLoading.destroy();
+                this.chainPetsLoading = null;
+            }
+            console.error("[PetFarm] Failed to load pets from chain:", err);
+        }
+    }
+
     private showPetSelectionModal() {
         const modalWidth = 450;
         const modalHeight = 500;
@@ -1858,7 +1960,7 @@ export class PetFarm extends Scene {
     /**
      * Spawn a pet at specified position
      */
-    private spawnPet(petType: string, x: number, y: number) {
+    private spawnPet(petType: string, x: number, y: number, chainLabel?: string, overrideName?: string) {
         let petSprite: Phaser.GameObjects.Sprite;
         let petName: string;
         let petScale: number;
@@ -2002,13 +2104,16 @@ export class PetFarm extends Scene {
         // Make UI camera ignore pet and shadow (prevent ghost images)
         this.uiCamera.ignore([petSprite, shadow]);
 
-        // Add name label
+        // Add name label (chain pets show a chain badge)
+        const displayName = overrideName ?? petName;
+        const labelText = chainLabel ? `${displayName}\n${chainLabel}` : displayName;
         const label = this.add
-            .text(x, y - 50, petName, {
+            .text(x, y - 50, labelText, {
                 fontSize: "14px",
                 color: "#fff",
                 stroke: "#000",
                 strokeThickness: 3,
+                align: "center",
             })
             .setOrigin(0.5)
             .setDepth(4000);
@@ -2031,20 +2136,22 @@ export class PetFarm extends Scene {
             petSprite.clearTint();
         });
 
-        // Store pet info
-        this.spawnedPetType = petType;
-
-        // Initialize PetChatModal
-        if (this.petChatModal) {
-            this.petChatModal.destroy();
+        // Initialize PetChatModal — chain pets each get their own modal
+        let chatModal: PetChatModal;
+        if (chainLabel) {
+            chatModal = new PetChatModal(this, displayName, petType);
+        } else {
+            if (this.petChatModal) {
+                this.petChatModal.destroy();
+            }
+            this.petChatModal = new PetChatModal(this, petName, petType);
+            chatModal = this.petChatModal;
+            this.spawnedPetType = petType;
         }
-        this.petChatModal = new PetChatModal(this, petName, petType);
 
         // Click to open chat modal
         hitArea.on("pointerdown", () => {
-            if (this.petChatModal) {
-                this.petChatModal.show();
-            }
+            chatModal.show();
         });
 
         // Start random movement
@@ -2056,18 +2163,19 @@ export class PetFarm extends Scene {
             "center",
         );
 
-        // Track spawned pet and related objects
-        this.spawnedPet = petSprite;
-        this.spawnedPetShadow = shadow;
-        this.spawnedPetLabel = label;
-        this.spawnedPetHitArea = hitArea;
+        if (chainLabel) {
+            // Chain-loaded pets tracked in array
+            this.chainPets.push({ sprite: petSprite, shadow, label, hitArea, chatModal });
+        } else {
+            // Lucky box pet tracked as single reference
+            this.spawnedPet = petSprite;
+            this.spawnedPetShadow = shadow;
+            this.spawnedPetLabel = label;
+            this.spawnedPetHitArea = hitArea;
 
-        // Show success message
-        const costMsg =
-            this.luckyBoxOpenCount === 1
-                ? "FREE"
-                : `${this.LUCKY_BOX_COST} Gold`;
-        this.showToast(`🎉 You got ${petName}! (${costMsg})`, petColor);
+            const costMsg = this.luckyBoxOpenCount === 1 ? "FREE" : `${this.LUCKY_BOX_COST} Gold`;
+            this.showToast(`🎉 You got ${petName}! (${costMsg})`, petColor);
+        }
     }
 
     private createMaidCatAnimations() {
@@ -3065,50 +3173,95 @@ export class PetFarm extends Scene {
         });
     }
 
+    private createMobileControls() {
+        const joystickX = 80;
+        const joystickY = this.scale.height - 80;
+
+        this.joystickBase = this.add.circle(joystickX, joystickY, 40, 0x333333, 0.5);
+        this.joystickBase.setDepth(5100);
+        this.joystickBase.setScrollFactor(0);
+        this.cameras.main.ignore(this.joystickBase);
+
+        this.joystickThumb = this.add.circle(joystickX, joystickY, 20, 0x666666, 0.8);
+        this.joystickThumb.setDepth(5101);
+        this.joystickThumb.setScrollFactor(0);
+        this.cameras.main.ignore(this.joystickThumb);
+
+        this.joystickBase.setInteractive();
+        this.joystickBase.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+            this.joystickActive = true;
+            this.joystickPointer = pointer;
+        });
+
+        this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+            if (this.joystickActive && this.joystickPointer === pointer) {
+                const dx = pointer.x - this.joystickBase.x;
+                const dy = pointer.y - this.joystickBase.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const maxDistance = 30;
+
+                if (distance < maxDistance) {
+                    this.joystickThumb.setPosition(pointer.x, pointer.y);
+                } else {
+                    const angle = Math.atan2(dy, dx);
+                    this.joystickThumb.setPosition(
+                        this.joystickBase.x + Math.cos(angle) * maxDistance,
+                        this.joystickBase.y + Math.sin(angle) * maxDistance,
+                    );
+                }
+            }
+        });
+
+        this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+            if (this.joystickPointer === pointer) {
+                this.joystickActive = false;
+                this.joystickPointer = null;
+                this.joystickThumb.setPosition(this.joystickBase.x, this.joystickBase.y);
+            }
+        });
+    }
+
     private setupDebugHelpers() {
         // Debug helpers removed for production
     }
 
     update() {
         const speed = 100;
-        let isMoving = false;
+        let velocityX = 0;
+        let velocityY = 0;
+        let direction = "";
 
-        // Horizontal movement
-        if (this.cursors.left.isDown) {
-            this.player.setVelocityX(-speed);
-            this.player.play("walk-left", true);
-            isMoving = true;
-        } else if (this.cursors.right.isDown) {
-            this.player.setVelocityX(speed);
-            this.player.play("walk-right", true);
-            isMoving = true;
-        } else {
-            this.player.setVelocityX(0);
+        // Keyboard input
+        if (this.cursors.left.isDown)       { velocityX = -speed; direction = "left"; }
+        else if (this.cursors.right.isDown) { velocityX =  speed; direction = "right"; }
+        if (this.cursors.up.isDown)         { velocityY = -speed; direction = "up"; }
+        else if (this.cursors.down.isDown)  { velocityY =  speed; direction = "down"; }
+
+        // Joystick input
+        if (this.joystickActive) {
+            const dx = this.joystickThumb.x - this.joystickBase.x;
+            const dy = this.joystickThumb.y - this.joystickBase.y;
+            const threshold = 5;
+
+            if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
+                const angle = Math.atan2(dy, dx);
+                velocityX = Math.cos(angle) * speed;
+                velocityY = Math.sin(angle) * speed;
+                direction = Math.abs(dx) > Math.abs(dy)
+                    ? (dx > 0 ? "right" : "left")
+                    : (dy > 0 ? "down" : "up");
+            }
         }
 
-        // Vertical movement
-        if (this.cursors.up.isDown) {
-            this.player.setVelocityY(-speed);
-            if (!isMoving) {
-                this.player.play("walk-up", true);
-            }
-            isMoving = true;
-        } else if (this.cursors.down.isDown) {
-            this.player.setVelocityY(speed);
-            if (!isMoving) {
-                this.player.play("walk-down", true);
-            }
-            isMoving = true;
-        } else {
-            this.player.setVelocityY(0);
-        }
+        this.player.setVelocity(velocityX, velocityY);
 
-        // Play idle animation when not moving
-        if (!isMoving) {
+        if (velocityX !== 0 || velocityY !== 0) {
+            this.player.play(`walk-${direction || "down"}`, true);
+        } else {
             const currentAnim = this.player.anims.currentAnim?.key || "";
             if (currentAnim.includes("walk")) {
-                const direction = currentAnim.split("-")[1];
-                this.player.play(`idle-${direction}`, true);
+                const dir = currentAnim.split("-").pop() || "down";
+                this.player.play(`idle-${dir}`, true);
             }
         }
 

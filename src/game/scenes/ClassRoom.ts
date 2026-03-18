@@ -16,7 +16,7 @@ import { UserService } from '../UserService';
 import { useGameState } from '../hooks/useGameState';
 import { CHARACTER_KEYS, PLAYABLE_CHARACTERS, DEFAULT_CHARACTER, getNextCharacterKey } from '../config/CharacterConfig';
 import { DynamicShadow } from '../objects/DynamicShadow';
-import { ClassroomChatService, LessonResponse, LessonSummary } from '../ClassroomChatService';
+import { ClassroomChatService, LessonResponse, LessonSummary, TreeNode } from '../ClassroomChatService';
 import { marked } from 'marked';
 
 /**
@@ -232,6 +232,19 @@ export class ClassRoom extends Scene {
 
         this.events.on('postupdate', this.updatePlayerUI, this);
 
+        // When waking up from WindowsXP scene — stand player back up
+        this.events.on('wake', () => {
+            this.isSitting = false;
+
+            // Play stand-up (idle facing down)
+            if (this.player?.active) {
+                this.player.play(`${this.currentCharacterKey}-idle-down`, true);
+            }
+
+            // Short camera fade-in for smooth return
+            this.cameras.main.fadeIn(400, 0, 0, 0);
+        });
+
         EventBus.emit('current-scene-ready', this);
     }
 
@@ -441,7 +454,7 @@ export class ClassRoom extends Scene {
         }
     }
 
-    /** Teleports the player to the seat and shows the studying overlay. */
+    /** Teleports the player to the seat and opens the Windows XP computer scene. */
     private sitAtDesk(seatX: number, seatY: number) {
         if (this.isSitting) return;
 
@@ -452,7 +465,9 @@ export class ClassRoom extends Scene {
         this.player.setVelocity(0, 0);
         this.player.play(`${this.currentCharacterKey}-idle-up`, true);
 
-        this.showStudyingOverlay();
+        // Sleep this scene and launch WindowsXP on top
+        this.scene.sleep('ClassRoom');
+        this.scene.launch('WindowsXP', { seatX, seatY });
     }
 
     /** Shows a large CRT-style 2-screen lesson viewer in screen space. */
@@ -784,7 +799,7 @@ export class ClassRoom extends Scene {
             container.add(listBg);
 
             // Panel header
-            const listHeader = this.add.text(lpX + lpW / 2, lpY + 16, '📚 Lessons', {
+            const listHeader = this.add.text(lpX + lpW / 2, lpY + 16, '📁 Research', {
                 fontSize: '11px', fontFamily: 'monospace', color: '#66ff66', resolution: 2,
                 fontStyle: 'bold',
             }).setOrigin(0.5);
@@ -795,7 +810,7 @@ export class ClassRoom extends Scene {
             listSep.lineBetween(lpX + 8, lpY + 30, lpX + lpW - 8, lpY + 30);
             container.add(listSep);
 
-            // Create HTML lesson list element
+            // Create HTML file tree element
             const canvasEl = this.game.canvas;
             const canvasRect2 = canvasEl.getBoundingClientRect();
             const scaleXR2 = canvasRect2.width / W;
@@ -822,65 +837,135 @@ export class ClassRoom extends Scene {
 
             const listStyle = document.createElement('style');
             listStyle.textContent = `
-                .lesson-list-item {
-                    padding: 6px 8px;
-                    margin: 2px 0;
-                    border: 1px solid #002211;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    transition: background 0.15s, border-color 0.15s;
-                    background: #0a0a0a;
+                .ft-dir, .ft-file { cursor: pointer; user-select: none; }
+                .ft-dir-label {
+                    padding: 3px 4px; display: flex; align-items: center; gap: 4px;
+                    color: #66ff66; font-weight: bold; font-size: 0.92em;
+                    border-radius: 3px; transition: background 0.12s;
                 }
-                .lesson-list-item:hover {
-                    background: #0a1a0a;
-                    border-color: #006622;
+                .ft-dir-label:hover { background: #0a1a0a; }
+                .ft-dir-label .ft-arrow {
+                    display: inline-block; width: 10px; text-align: center;
+                    font-size: 0.8em; transition: transform 0.15s;
                 }
-                .lesson-list-item.active {
-                    background: #001a0a;
-                    border-color: #33ff33;
+                .ft-dir-label .ft-arrow.open { transform: rotate(90deg); }
+                .ft-children {
+                    padding-left: 12px; border-left: 1px solid #002211; margin-left: 6px;
+                    overflow: hidden; transition: max-height 0.2s ease;
+                }
+                .ft-children.collapsed { max-height: 0 !important; }
+                .ft-file-label {
+                    padding: 3px 4px 3px 18px; display: flex; align-items: center; gap: 4px;
+                    color: #33ff33; font-size: 0.88em; border-radius: 3px;
+                    transition: background 0.12s, border-color 0.12s;
+                    border: 1px solid transparent; word-break: break-all;
+                }
+                .ft-file-label:hover { background: #0a1a0a; border-color: #006622; }
+                .ft-file-label.active {
+                    background: #001a0a; border-color: #33ff33;
                     box-shadow: 0 0 6px rgba(51, 255, 51, 0.15);
                 }
-                .lesson-list-item .lesson-title {
-                    font-size: 0.92em;
-                    color: #33ff33;
-                    line-height: 1.3;
-                    word-break: break-word;
+                .ft-file-label .ft-icon { flex-shrink: 0; }
+                .ft-file-label .ft-size {
+                    margin-left: auto; font-size: 0.75em; color: #006622; flex-shrink: 0;
                 }
-                .lesson-list-item .lesson-date {
-                    font-size: 0.75em;
-                    color: #006622;
-                    margin-top: 2px;
-                }
-                .lesson-list-item .lesson-badge {
-                    display: inline-block;
-                    font-size: 0.7em;
-                    color: #000;
-                    background: #33ff33;
-                    padding: 1px 5px;
-                    border-radius: 3px;
-                    margin-bottom: 3px;
-                    font-weight: bold;
-                }
-                .lesson-list-loading {
-                    text-align: center;
-                    color: #006622;
-                    padding: 20px 0;
-                    font-size: 0.9em;
+                .ft-loading {
+                    text-align: center; color: #006622; padding: 20px 0; font-size: 0.9em;
                 }
             `;
             this.lessonListElement.appendChild(listStyle);
 
             // Loading state
             const loadingDiv = document.createElement('div');
-            loadingDiv.className = 'lesson-list-loading';
-            loadingDiv.textContent = '> loading...';
+            loadingDiv.className = 'ft-loading';
+            loadingDiv.textContent = '> loading tree...';
             this.lessonListElement.appendChild(loadingDiv);
 
             document.body.appendChild(this.lessonListElement);
 
+            // Helper: format file size
+            const formatSize = (bytes: number): string => {
+                if (bytes < 1024) return `${bytes}B`;
+                return `${(bytes / 1024).toFixed(1)}K`;
+            };
+
+            // Helper: build file tree DOM recursively
+            const buildTreeNode = (node: TreeNode, depth: number, parentFolder: string): HTMLElement => {
+                if (node.type === 'directory') {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'ft-dir';
+
+                    const label = document.createElement('div');
+                    label.className = 'ft-dir-label';
+                    label.innerHTML = `<span class="ft-arrow open">▶</span>📂 ${node.name}`;
+
+                    const childrenDiv = document.createElement('div');
+                    childrenDiv.className = 'ft-children';
+
+                    if (node.children) {
+                        const sorted = [...node.children].sort((a, b) => {
+                            if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+                            return a.name.localeCompare(b.name);
+                        });
+                        sorted.forEach(child => {
+                            childrenDiv.appendChild(buildTreeNode(child, depth + 1, node.name));
+                        });
+                    }
+
+                    requestAnimationFrame(() => {
+                        childrenDiv.style.maxHeight = childrenDiv.scrollHeight + 'px';
+                    });
+
+                    label.addEventListener('click', () => {
+                        const arrow = label.querySelector('.ft-arrow')!;
+                        const isOpen = arrow.classList.contains('open');
+                        if (isOpen) {
+                            arrow.classList.remove('open');
+                            childrenDiv.classList.add('collapsed');
+                            label.innerHTML = `<span class="ft-arrow">▶</span>📁 ${node.name}`;
+                        } else {
+                            arrow.classList.add('open');
+                            childrenDiv.classList.remove('collapsed');
+                            childrenDiv.style.maxHeight = childrenDiv.scrollHeight + 'px';
+                            label.innerHTML = `<span class="ft-arrow open">▶</span>📂 ${node.name}`;
+                        }
+                    });
+
+                    wrapper.appendChild(label);
+                    wrapper.appendChild(childrenDiv);
+                    return wrapper;
+                } else {
+                    const fileDiv = document.createElement('div');
+                    fileDiv.className = 'ft-file';
+
+                    const label = document.createElement('div');
+                    label.className = 'ft-file-label';
+
+                    const icon = node.name.endsWith('.md') ? '📄' : '📎';
+                    let sizeStr = '';
+                    if (node.size) sizeStr = `<span class="ft-size">${formatSize(node.size)}</span>`;
+                    label.innerHTML = `<span class="ft-icon">${icon}</span><span>${node.name}</span>${sizeStr}`;
+
+                    if (node.name.endsWith('.md')) {
+                        label.addEventListener('click', () => {
+                            const slug = node.name.replace(/\.md$/, '');
+                            loadLesson(slug, parentFolder);
+                            if (this.lessonListElement) {
+                                this.lessonListElement.querySelectorAll('.ft-file-label').forEach(el => {
+                                    el.classList.remove('active');
+                                });
+                            }
+                            label.classList.add('active');
+                        });
+                    }
+
+                    fileDiv.appendChild(label);
+                    return fileDiv;
+                }
+            };
+
             // Helper: load a lesson by slug and update screens
-            const loadLesson = (slug: string) => {
-                // Reset screens
+            const loadLesson = (slug: string, folder?: string) => {
                 currentScreen = 1;
                 showScreen(1);
                 updateNav();
@@ -888,8 +973,6 @@ export class ClassRoom extends Scene {
                 titleText.setText('');
                 tocText.setText('');
                 cursor.setPosition(sX + 10, sY + 68);
-
-                // Reset scroll positions
                 tocScrollY = 0;
                 scrollContent.setY(0);
                 if (this.lessonContentElement) {
@@ -899,7 +982,12 @@ export class ClassRoom extends Scene {
                     this.lessonContentElement.innerHTML = styleHTML + '<div class="lesson-md" style="text-align:center;padding:20px;color:#006622;">Loading...</div>';
                 }
 
-                this.chatService.getLessonBySlug(slug).then((lesson: LessonResponse) => {
+                // Use research file API when folder is available, otherwise fallback to legacy
+                const promise = folder
+                    ? this.chatService.getResearchFile(folder, slug)
+                    : this.chatService.getLessonBySlug(slug);
+
+                promise.then((lesson: LessonResponse) => {
                     if (!this.isSitting) return;
                     if (lesson.success && lesson.toc && lesson.content) {
                         const fileName = `${lesson.slug || 'lesson'}.md`;
@@ -924,83 +1012,65 @@ export class ClassRoom extends Scene {
                         cursor.setPosition(sX + 10, tocText.y + tocText.height + 6);
                     }
                 });
-
-                // Update active state in list
-                if (this.lessonListElement) {
-                    this.lessonListElement.querySelectorAll('.lesson-list-item').forEach((el) => {
-                        el.classList.toggle('active', (el as HTMLElement).dataset.slug === slug);
-                    });
-                }
             };
 
             this.studyingOverlay = container;
 
-            // Fetch lesson from API and populate screens
-            let currentLessonSlug = '';
+            // Fetch latest lesson for initial screen display
             this.chatService.getLatestLesson().then((lesson: LessonResponse) => {
-                if (!this.isSitting) return; // user already stood up
+                if (!this.isSitting) return;
 
                 if (lesson.success && lesson.toc && lesson.content) {
-                    currentLessonSlug = lesson.slug || '';
                     const fileName = `${lesson.slug || 'lesson'}.md`;
                     prompt1.setText(`> ${fileName}`);
                     prompt2.setText(`> ${fileName}`);
-
-                    // Set title (centered, bold — no typewriter)
                     titleText.setText(lesson.title || 'Lesson');
 
-                    // Build TOC text for typewriter (items only)
                     const tocLines = lesson.toc.map((item) => `• ${item}`);
                     const fullTocText = tocLines.join('\n');
 
-                    // Typewriter effect on page 1
-                    // Cursor leads text: cursor moves first, then character appears behind it
                     const measureText = this.add.text(-9999, -9999, '', {
                         fontSize: '13px', fontFamily: 'monospace', resolution: 2,
                     }).setVisible(false);
                     this.cameras.main.ignore(measureText);
 
                     let charIndex = 0;
-                    // Two-phase per character: phase 0 = move cursor, phase 1 = reveal char
                     let phase = 0;
                     const typeTimer = this.time.addEvent({
                         delay: 15,
                         repeat: fullTocText.length * 2 - 1,
                         callback: () => {
+                            if (!tocText.active || !cursor.active) {
+                                typeTimer.remove(false);
+                                return;
+                            }
                             if (phase === 0) {
-                                // Phase 0: move cursor to where next char will appear
                                 const nextText = fullTocText.substring(0, charIndex + 1);
                                 const nextLines = nextText.split('\n');
                                 const nextLastLine = nextLines[nextLines.length - 1];
                                 measureText.setText(nextLastLine);
                                 const nextLineW = measureText.width;
-
-                                // If next char is newline, cursor goes to start of new line
                                 const isNewline = fullTocText[charIndex] === '\n';
                                 const currentText = fullTocText.substring(0, charIndex);
                                 const currentLines = currentText.split('\n');
                                 const lineCount = isNewline ? currentLines.length + 1 : nextLines.length;
-
-                                // Calculate Y based on current tocText height per line
                                 const tempLineCount = Math.max(currentLines.length, 1);
                                 const lineH = charIndex > 0 ? tocText.height / tempLineCount : 20;
                                 const cursorY = tocText.y + (lineCount - 1) * lineH;
                                 const cursorX = isNewline ? 0 : nextLineW;
                                 cursor.setPosition(sX + 10 + cursorX, cursorY);
-
                                 phase = 1;
                             } else {
-                                // Phase 1: reveal the character
                                 charIndex++;
                                 tocText.setText(fullTocText.substring(0, charIndex));
                                 phase = 0;
                             }
                         },
                     });
-                    // Clean up measure text after typewriter finishes
-                    this.time.delayedCall(15 * fullTocText.length * 2 + 200, () => measureText.destroy());
+                    this.time.delayedCall(15 * fullTocText.length * 2 + 200, () => {
+                        if (measureText.active) measureText.destroy();
+                    });
 
-                    // Populate screen 2 HTML with full markdown content
                     if (this.lessonContentElement) {
                         const styleTag = this.lessonContentElement.querySelector('style');
                         const styleHTML = styleTag ? styleTag.outerHTML : '';
@@ -1014,94 +1084,21 @@ export class ClassRoom extends Scene {
                 }
             });
 
-            // Fetch lesson list with pagination and populate sidebar
-            let lessonPage = 1;
-            let lessonTotalPages = 1;
-            let isLoadingMore = false;
-            const LESSONS_PER_PAGE = 10;
-
-            const renderLessonItems = (lessons: LessonSummary[], isFirstPage: boolean) => {
-                if (!this.lessonListElement) return;
-
-                lessons.forEach((item: LessonSummary, index: number) => {
-                    const div = document.createElement('div');
-                    div.className = 'lesson-list-item';
-                    // First item on first page = latest, mark active by default
-                    if (isFirstPage && index === 0) {
-                        div.classList.add('active');
-                    }
-                    div.dataset.slug = item.slug;
-
-                    let html = '';
-                    if (isFirstPage && index === 0) {
-                        html += '<span class="lesson-badge">LATEST</span><br>';
-                    }
-                    html += `<span class="lesson-title">${item.title}</span>`;
-                    if (item.updatedAt) {
-                        const date = new Date(item.updatedAt);
-                        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                        html += `<div class="lesson-date">${dateStr}</div>`;
-                    }
-                    div.innerHTML = html;
-
-                    div.addEventListener('click', () => {
-                        loadLesson(item.slug);
-                    });
-
-                    this.lessonListElement!.appendChild(div);
-                });
-            };
-
-            const loadMoreLessons = () => {
-                if (isLoadingMore || lessonPage >= lessonTotalPages || !this.lessonListElement) return;
-                isLoadingMore = true;
-
-                // Show loading indicator at bottom
-                const loader = document.createElement('div');
-                loader.className = 'lesson-list-loading';
-                loader.textContent = '> loading...';
-                this.lessonListElement.appendChild(loader);
-
-                lessonPage++;
-                this.chatService.getLessons(lessonPage, LESSONS_PER_PAGE).then((result) => {
-                    if (!this.isSitting || !this.lessonListElement) return;
-                    loader.remove();
-                    isLoadingMore = false;
-
-                    if (result.success && result.lessons && result.lessons.length > 0) {
-                        if (result.pagination) {
-                            lessonTotalPages = result.pagination.totalPages;
-                        }
-                        renderLessonItems(result.lessons, false);
-                    }
-                });
-            };
-
-            // Scroll-to-bottom triggers load more
-            this.lessonListElement.addEventListener('scroll', () => {
-                if (!this.lessonListElement) return;
-                const el = this.lessonListElement;
-                const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
-                if (nearBottom) loadMoreLessons();
-            });
-
-            // Initial fetch
-            this.chatService.getLessons(1, LESSONS_PER_PAGE).then((result) => {
+            // Fetch research tree and populate sidebar
+            this.chatService.getResearchTree().then((result) => {
                 if (!this.isSitting || !this.lessonListElement) return;
 
-                // Remove loading indicator
-                const loadingEl = this.lessonListElement.querySelector('.lesson-list-loading');
+                const loadingEl = this.lessonListElement.querySelector('.ft-loading');
                 if (loadingEl) loadingEl.remove();
 
-                if (result.success && result.lessons && result.lessons.length > 0) {
-                    if (result.pagination) {
-                        lessonTotalPages = result.pagination.totalPages;
-                    }
-                    renderLessonItems(result.lessons, true);
+                if (result.success && result.tree && result.tree.length > 0) {
+                    result.tree.forEach((node: TreeNode) => {
+                        this.lessonListElement!.appendChild(buildTreeNode(node, 0, ''));
+                    });
                 } else {
                     const emptyDiv = document.createElement('div');
                     emptyDiv.style.cssText = 'text-align:center;color:#006622;padding:20px 0;font-size:0.9em;';
-                    emptyDiv.textContent = result.error || 'No lessons available.';
+                    emptyDiv.textContent = result.error || 'No files available.';
                     this.lessonListElement.appendChild(emptyDiv);
                 }
             });
@@ -1618,6 +1615,8 @@ export class ClassRoom extends Scene {
 
         for (const npc of this.npcs) {
             const { sprite, key } = npc;
+
+            if (!sprite?.body || !sprite.active) continue;
 
             // ── Chat bubble lifetime ──
             if (npc.chatTimeLeft > 0) {

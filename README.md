@@ -1,232 +1,381 @@
-# Phaser Next.js Template
+# FAM Game
 
-This is a Phaser 3 project template that uses the Next.js framework. It includes a bridge for React to Phaser game communication, hot-reloading for quick development workflow and scripts to generate production-ready builds.
+A blockchain-integrated farming and social game built with Phaser 3, Next.js, and Web3 technologies. Players manage virtual farms, interact in shared social spaces, raise pets, collect NFTs, and earn real rewards.
 
-### Versions
+---
 
-This template has been updated for:
+## Table of Contents
 
-- [Phaser 3.90.0](https://github.com/phaserjs/phaser)
-- [Next.js 15.3.1](https://github.com/vercel/next.js)
-- [TypeScript 5](https://github.com/microsoft/TypeScript)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Game Scenes](#game-scenes)
+- [Architecture](#architecture)
+- [Web3 Integration](#web3-integration)
+- [Mini-Games](#mini-games)
 
-![screenshot](screenshot.png)
+---
 
-## Requirements
+## Features
 
-[Node.js](https://nodejs.org) is required to install dependencies and run scripts via `npm`.
+### Farming System
+- Plant, water, and harvest 3 crop types: **Algae**, **Mushroom**, **Tree**
+- 6-stage growth lifecycle: Digging → Seed → Sprout → Growing → Bloom → Mature
+- Plant health/hydration system with configurable death timer
+- Fertilizer types: Common, Rare, Epic, Legendary
+- Expandable farm plots (2 initial, up to 16)
+- Smart garden refresh — API only called when growth changes are expected
 
-## Available Commands
+### Social & Multiplayer
+- **Town Square** — shared public space with real-time multiplayer via WebSocket
+- Live chat with speech bubbles above player characters
+- See other players moving around the map in real time
+- Multiple playable characters with customizable appearance
 
-| Command | Description |
-|---------|-------------|
-| `npm install` | Install project dependencies |
-| `npm run dev` | Launch a development web server |
-| `npm run build` | Create a production build in the `dist` folder |
-| `npm run dev-nolog` | Launch a development web server without sending anonymous data (see "About log.js" below) |
-| `npm run build-nolog` | Create a production build in the `dist` folder without sending anonymous data (see "About log.js" below) |
+### Economy & Rewards
+- In-game currencies: **Gold** and **Gems**
+- Daily check-in streaks with escalating rewards
+- Mission system with objectives and redemption codes
+- **Phygital Exchange** — trade harvested fruits for real-world prizes:
+  - Tote bags, lottery tickets, Razer headsets, $300 vouchers, gold bars, iPhones, Seed NFTs
+- Shop with seeds, tools, and items (Gold / Gem / Cash pricing)
+- Factory system — convert fruits into fertilizers
 
-## Writing Code
+### Web3 & NFT
+- Multi-chain wallet support (EVM + ImmutableX)
+- NFT voucher system
+- NFT minting integration (CyberCat Lucky Box, FriendCards)
+- In-game chain switcher for multi-network support
+- Privy authentication (social login + embedded wallets)
 
-After cloning the repo, run `npm install` from your project directory. Then, you can start the local development server by running `npm run dev`.
+### Pets & Companions
+- Pet adoption and management system
+- Pet farm with dedicated manager
+- AI-powered pet chat (Google Gemini)
 
-The local development server runs on `http://localhost:8080` by default. Please see the Next.js documentation if you wish to change this, or add SSL support.
+### Content Features
+- **Manga Studio** — create and view manga panels
+- **Quiz System** — in-game knowledge quizzes with rewards
+- **Horoscope Modal** — daily horoscope readings
+- **Tarot Modal** — AI-powered tarot card readings
+- **DeFi Master Modal** — DeFi education content
+- **Event System** — time-limited events with special rewards
 
-Once the server is running you can edit any of the files in the `src` folder. Next.js will automatically recompile your code and then reload the browser.
+### Game World
+- Tile-based maps (50x50 tiles, 16px each)
+- Anywhere Door — NFT-gated fast travel between locations
+- Station system for navigating between scenes
+- Portrait and landscape mode support with CSS rotation
 
-## Template Project Structure
+---
 
-We have provided a default project structure to get you started. This is as follows:
+## Tech Stack
 
-| Path                          | Description                                                                 |
-|-------------------------------|-----------------------------------------------------------------------------|
-| `src/pages/_document.tsx`     | A basic Next.js component entry point. It is used to define the `<html>` and `<body>` tags and other globally shared UI. |
-| `src`                         | Contains the Next.js client source code.                                   |
-| `src/styles/globals.css`      | Some simple global CSS rules to help with page layout. You can enable Tailwind CSS here. |
-| `src/page/_app.tsx`           | The main Next.js component.                                                |
-| `src/App.tsx`                 | Middleware component used to run Phaser in client mode.                    |
-| `src/PhaserGame.tsx`          | The React component that initializes the Phaser Game and serves as a bridge between React and Phaser. |
-| `src/game/EventBus.ts`        | A simple event bus to communicate between React and Phaser.                |
-| `src/game`                    | Contains the game source code.                                             |
-| `src/game/main.tsx`           | The main **game** entry point. This contains the game configuration and starts the game. |
-| `src/game/scenes/`            | The Phaser Scenes are in this folder.                                      |
-| `public/favicon.png`          | The default favicon for the project.                                       |
-| `public/assets`               | Contains the static assets used by the game.                               |
+| Category | Technology |
+|---|---|
+| Game Engine | Phaser 3.90 |
+| Framework | Next.js 15 + React 19 |
+| Language | TypeScript 5 |
+| State Management | phaser-hooks 0.7 |
+| Wallet / Auth | Privy, wagmi 2, viem 2 |
+| Multi-chain UI | ReOwn AppKit |
+| NFT (ImmutableX) | @imtbl/sdk |
+| Real-time | socket.io-client 4 |
+| AI | Google Gemini (@google/genai) |
+| UI Plugins | phaser3-rex-plugins |
+| Bundler | Vite (via Next.js) |
 
+---
 
-## React Bridge
+## Project Structure
 
-The `PhaserGame.tsx` component is the bridge between React and Phaser. It initializes the Phaser game and passes events between the two.
+```
+src/
+├── game/
+│   ├── scenes/                    # Phaser scenes
+│   │   ├── FarmingGame.ts         # Main farming scene (orchestrator)
+│   │   ├── TownSquare.ts          # Multiplayer social scene
+│   │   ├── HomeGarden.ts          # Personal garden scene
+│   │   ├── ClassRoom.ts           # Classroom / education scene
+│   │   ├── Networking.ts          # Networking map scene
+│   │   ├── MapSelection.ts        # World map selection
+│   │   ├── GameLoader.ts          # Scene loader / transition
+│   │   ├── Preloader.ts           # Asset preloading with progress bar
+│   │   ├── Login.ts               # Login scene
+│   │   ├── SetupProfile.ts        # Profile setup scene
+│   │   └── MainMenu.ts            # Main menu
+│   ├── managers/                  # Game system managers (all extend BaseManager)
+│   │   ├── BaseManager.ts         # Abstract base class
+│   │   ├── CheckinManager.ts      # Daily check-in system
+│   │   ├── ShopManager.ts         # Shop and purchases
+│   │   ├── FactoryManager.ts      # Fruit-to-fertilizer conversion
+│   │   ├── WarehouseManager.ts    # Inventory storage
+│   │   ├── MailboxManager.ts      # Missions and redeem codes
+│   │   ├── ProfileManager.ts      # User profile and wallet display
+│   │   ├── ToolbarManager.ts      # Toolbar and item selection
+│   │   ├── PlotManager.ts         # Farm plot management
+│   │   ├── WellManager.ts         # Water well system
+│   │   ├── PlantDetailManager.ts  # Plant info popup
+│   │   ├── StationManager.ts      # Scene navigation / travel
+│   │   ├── PetManager.ts          # Pet companion system
+│   │   ├── PetFarmManager.ts      # Pet farm management
+│   │   ├── MissionManager.ts      # Mission objectives
+│   │   ├── QuizManager.ts         # Quiz minigame
+│   │   ├── EventModalManager.ts   # Time-limited events
+│   │   ├── GameHouseManager.ts    # Game house interactions
+│   │   ├── MangaStudioManager.ts  # Manga creation system
+│   │   ├── AnywhereDoorManager.ts # Fast travel system
+│   │   ├── ChainSwitcherManager.ts# Blockchain network switcher
+│   │   ├── NFTVoucherManager.ts   # NFT voucher handling
+│   │   ├── SoundManager.ts        # Audio management
+│   │   ├── FloatingButtonsManager.ts # Floating UI buttons
+│   │   ├── QuickActionsManager.ts # Quick action shortcuts
+│   │   ├── WelcomeManager.ts      # New user onboarding
+│   │   └── index.ts               # Barrel exports
+│   ├── hooks/
+│   │   ├── useGameState.ts        # Global game state (single source of truth)
+│   │   └── usePlantUpdates.ts     # Real-time plant update hook
+│   ├── types/
+│   │   ├── GameTypes.ts           # Shared types, interfaces, constants
+│   │   ├── ChatTypes.ts           # Chat / socket message types
+│   │   └── LobbyTypes.ts          # Multiplayer lobby types
+│   ├── ui/                        # Reusable Phaser UI components
+│   │   ├── PhaserButton.ts        # Phaser-native button component
+│   │   ├── HoroscopeModal.ts      # Horoscope reading UI
+│   │   ├── TarotModal.ts          # Tarot card reading UI
+│   │   ├── DefiMasterModal.ts     # DeFi education UI
+│   │   └── PetChatModal.ts        # AI pet chat UI
+│   ├── utils/
+│   │   ├── ScreenUtils.ts         # Screen / scaling utilities
+│   │   ├── GameCache.ts           # In-memory cache helpers
+│   │   └── AccessKeyUtils.ts      # Access key validation
+│   ├── objects/
+│   │   └── DynamicShadow.ts       # Player shadow game object
+│   ├── *Service.ts                # API service layer
+│   ├── *SocketService.ts          # WebSocket services
+│   ├── GameDataService.ts         # Centralized data fetching and caching
+│   └── main.ts                    # Phaser game config entry point
+├── components/
+│   ├── Web3Provider.tsx           # wagmi / viem provider
+│   ├── PassportProvider.tsx       # Privy auth provider
+│   ├── MangaStudioOverlay.tsx     # Manga studio React overlay
+│   ├── MiniGameOverlay.tsx        # Mini-game React overlay
+│   ├── RotateDeviceOverlay.tsx    # Portrait mode prompt
+│   └── Games/                    # Mini-games (Snake, Tetris, Minesweeper, BrickBreaker)
+├── pages/
+│   ├── index.tsx                  # Main entry page
+│   ├── _app.tsx                   # App wrapper with providers
+│   └── redirect.tsx               # Auth redirect handler
+├── config/
+│   ├── wagmi.ts                   # Wagmi chain configuration
+│   ├── privy.ts                   # Privy configuration
+│   └── passport.ts                # Immutable Passport configuration
+└── services/
+    ├── geminiService.ts           # Google Gemini AI service
+    ├── ipfsService.ts             # IPFS upload service
+    └── shelbyService.ts           # Shelby Protocol service
+```
 
-To communicate between React and Phaser, you can use the **EventBus.js** file. This is a simple event bus that allows you to emit and listen for events from both React and Phaser.
+---
 
-```js
-// In React
-import { EventBus } from './EventBus';
+## Getting Started
 
-// Emit an event
-EventBus.emit('event-name', data);
+### Prerequisites
 
-// In Phaser
-// Listen for an event
-EventBus.on('event-name', (data) => {
-    // Do something with the data
+- Node.js 20+
+- npm
+
+### Installation
+
+```bash
+git clone <repo-url>
+cd phaser-fam-game
+npm install
+```
+
+### Development
+
+```bash
+npm run dev
+```
+
+Opens at [http://localhost:8080](http://localhost:8080). Next.js hot-reloads on file changes.
+
+### Production Build
+
+```bash
+npm run build
+```
+
+### Without Phaser telemetry
+
+```bash
+npm run dev-nolog     # development
+npm run build-nolog   # production
+```
+
+---
+
+## Environment Variables
+
+Create a `.env.local` file in the root:
+
+```env
+# Game
+NEXT_PUBLIC_DEATH_TIMER_MS=300000         # Plant death timer in ms
+                                          # Default: 300000 (5 min, demo)
+                                          # Production: 259200000 (72 hours)
+
+# API
+NEXT_PUBLIC_API_URL=                      # Backend API base URL
+
+# Auth
+NEXT_PUBLIC_PRIVY_APP_ID=                # Privy app ID
+
+# Web3
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=    # ReOwn / WalletConnect project ID
+
+# AI
+GOOGLE_GENAI_API_KEY=                    # Google Gemini API key
+
+# NFT / Blockchain
+NEXT_PUBLIC_CONTRACT_ADDRESS=            # Main smart contract address
+NEXT_PUBLIC_IMMUTABLE_ENV=               # Immutable environment: sandbox | production
+```
+
+---
+
+## Game Scenes
+
+| Scene | Description |
+|---|---|
+| `Boot` | Initial boot, loads minimal assets |
+| `Preloader` | Asset loading with progress bar |
+| `Login` | Authentication screen |
+| `SetupProfile` | New user profile creation |
+| `MainMenu` | Main menu hub |
+| `MapSelection` | World map for choosing destination |
+| `FarmingGame` | Personal farming island — main gameplay |
+| `TownSquare` | Multiplayer social hub |
+| `HomeGarden` | Personal garden space |
+| `ClassRoom` | Education / classroom environment |
+| `Networking` | Networking event map |
+| `ProfileScene` | User profile view |
+| `GameLoader` | Scene transition handler |
+
+---
+
+## Architecture
+
+### Manager Pattern
+
+All game systems are encapsulated in **Managers** that extend `BaseManager`. Managers communicate with the scene through typed **callback interfaces**, keeping `FarmingGame.ts` as a thin orchestrator.
+
+```typescript
+export class MyManager extends BaseManager {
+    constructor(scene: Phaser.Scene, callbacks: MyCallbacks) {
+        super(scene);
+    }
+}
+
+interface MyCallbacks {
+    getPlayerGold: () => number;
+    setPlayerGold: (value: number) => void;
+    showToastMessage: (text: string, color: number) => void;
+}
+```
+
+### Global State
+
+`useGameState(scene)` provides a singleton state store (via phaser-hooks) that is the **single source of truth** for currencies, seeds, fertilizers, and inventory. All UI auto-updates when state changes.
+
+```typescript
+const gameState = useGameState(this.scene);
+gameState.setGold(100);     // UI updates automatically
+gameState.addGold(50);
+gameState.spendGold(25);    // Returns false if insufficient
+```
+
+### Data Flow
+
+1. **Game start** — `GameDataService.fetchAllGameData()` pre-fetches all data
+2. **Modals open** — read from cache instantly (no API lag)
+3. **User actions** — optimistic UI update → API call → sync or rollback on failure
+4. **After actions** — `GameDataService.refreshAndUpdateUI()` syncs cache
+
+### Optimistic Updates
+
+```typescript
+const prev = gameState.getGold();
+gameState.setGold(prev - item.price);  // instant feedback
+
+ShopService.buy(item).then(result => {
+    if (result.success) {
+        gameState.setGold(result.balanceGold);  // sync with server
+    } else {
+        gameState.setGold(prev);  // rollback
+    }
 });
 ```
 
-In addition to this, the `PhaserGame` component exposes the Phaser game instance along with the most recently active Phaser Scene using React forwardRef.
+### Depth Layers (Phaser)
 
-Once exposed, you can access them like any regular react reference.
+| Range | Usage |
+|---|---|
+| 0–999 | Ground / terrain |
+| 1000–4999 | Game objects (player, plants) |
+| 5000–5099 | UI backgrounds |
+| 5100–5199 | UI elements |
+| 5200–5299 | Modal backgrounds |
+| 5300–5399 | Modal elements |
+| 5400+ | Overlays and popups |
 
-## Phaser Scene Handling
+### Camera System
 
-In Phaser, the Scene is the lifeblood of your game. It is where you sprites, game logic and all of the Phaser systems live. You can also have multiple scenes running at the same time. This template provides a way to obtain the current active scene from React.
+- **Main camera** — follows player, 3x zoom
+- **UI camera** — fixed at (0,0), no zoom, renders all HUD elements
+- All UI elements must call `this.scene.cameras.main.ignore(element)`
 
-You can get the current Phaser Scene from the component event `"current-active-scene"`. In order to do this, you need to emit the event `"current-scene-ready"` from the Phaser Scene class. This event should be emitted when the scene is ready to be used. You can see this done in all of the Scenes in our template.
+---
 
-**Important**: When you add a new Scene to your game, make sure you expose to React by emitting the `"current-scene-ready"` event via the `EventBus`, like this:
+## Web3 Integration
 
+### Authentication
+- **Privy** — social login (Google, Twitter, email) + embedded EVM wallets
+- **Immutable Passport** — Web3 gaming identity for ImmutableX
 
-```ts
-class MyScene extends Phaser.Scene
-{
-    constructor ()
-    {
-        super('MyScene');
-    }
+### Wallets
+- **wagmi + viem** — EVM wallet connection and transactions
+- **ReOwn AppKit** — multi-chain wallet connect UI
+- **ChainSwitcherManager** — in-game network switching between supported chains
 
-    create ()
-    {
-        // Your Game Objects and logic here
+### NFTs
+- **NFTVoucherManager** — display and manage NFT vouchers in-game
+- **AnywhereDoorManager** — NFT-gated fast travel between maps
+- ImmutableX (zkEVM) support for gas-free NFT minting
 
-        // At the end of create method:
-        EventBus.emit('current-scene-ready', this);
-    }
-}
-```
+---
 
-You don't have to emit this event if you don't need to access the specific scene from React. Also, you don't have to emit it at the end of `create`, you can emit it at any point. For example, should your Scene be waiting for a network request or API call to complete, it could emit the event once that data is ready.
+## Mini-Games
 
-### React Component Example
+Accessible from the Game House in Town Square, rendered as React overlays on top of the Phaser canvas:
 
-Here's an example of how to access Phaser data for use in a React Component:
+| Game | Description |
+|---|---|
+| Snake | Classic snake |
+| Tetris | Classic block stacking |
+| Minesweeper | Classic mine avoidance |
+| Brick Breaker | Classic brick breaking |
 
-```ts
-import { useRef } from 'react';
-import { IRefPhaserGame } from "./game/PhaserGame";
+---
 
-// In a parent component
-const ReactComponent = () => {
+## Portrait Mode Support
 
-    const phaserRef = useRef<IRefPhaserGame>(); // you can access to this ref from phaserRef.current
+The game supports mobile portrait mode via CSS rotation of the game container (`#app`) by 90 degrees clockwise. Key implementation points:
 
-    const onCurrentActiveScene = (scene: Phaser.Scene) => {
-    
-        // This is invoked
-
-    }
-
-    return (
-        ...
-        <PhaserGame ref={phaserRef} currentActiveScene={onCurrentActiveScene} />
-        ...
-    );
-
-}
-```
-
-In the code above, you can get a reference to the current Phaser Game instance and the current Scene by creating a reference with `useRef()` and assign to PhaserGame component.
-
-From this state reference, the game instance is available via `phaserRef.current.game` and the most recently active Scene via `phaserRef.current.scene`.
-
-The `onCurrentActiveScene` callback will also be invoked whenever the the Phaser Scene changes, as long as you emit the event via the EventBus, as outlined above.
-
-## Handling Assets
-
-To load your static games files such as audio files, images, videos, etc place them into the `public/assets` folder. Then you can use this path in the Loader calls within Phaser:
-
-```js
-preload ()
-{
-    //  This is an example of loading a static image
-    //  from the public/assets folder:
-    this.load.image('background', 'assets/bg.png');
-}
-```
-
-When you issue the `npm run build` command, all static assets are automatically copied to the `dist/assets` folder.
-
-## Deploying to Production
-
-After you run the `npm run build` command, your code will be built into a single bundle and saved to the `dist` folder, along with any other assets your project imported, or stored in the public assets folder.
-
-In order to deploy your game, you will need to upload *all* of the contents of the `dist` folder to a public facing web server.
-
-## Customizing the Template
-
-### Next.js
-
-If you want to customize your build, such as adding plugin (i.e. for loading CSS or fonts), you can modify the `next.config.mjs` file for cross-project changes, or you can modify and/or create new configuration files and target them in specific npm tasks inside of `package.json`. Please see the [Next.js documentation](https://nextjs.org/docs) for more information.
-
-## About log.js
-
-If you inspect our node scripts you will see there is a file called `log.js`. This file makes a single silent API call to a domain called `gryzor.co`. This domain is owned by Phaser Studio Inc. The domain name is a homage to one of our favorite retro games.
-
-We send the following 3 pieces of data to this API: The name of the template being used (vue, react, etc). If the build was 'dev' or 'prod' and finally the version of Phaser being used.
-
-At no point is any personal data collected or sent. We don't know about your project files, device, browser or anything else. Feel free to inspect the `log.js` file to confirm this.
-
-Why do we do this? Because being open source means we have no visible metrics about which of our templates are being used. We work hard to maintain a large and diverse set of templates for Phaser developers and this is our small anonymous way to determine if that work is actually paying off, or not. In short, it helps us ensure we're building the tools for you.
-
-However, if you don't want to send any data, you can use these commands instead:
-
-Dev:
-
-```bash
-npm run dev-nolog
-```
-
-Build:
-
-```bash
-npm run build-nolog
-```
-
-Or, to disable the log entirely, simply delete the file `log.js` and remove the call to it in the `scripts` section of `package.json`:
-
-Before:
-
-```json
-"scripts": {
-    "dev": "node log.js dev & dev-template-script",
-    "build": "node log.js build & build-template-script"
-},
-```
-
-After:
-
-```json
-"scripts": {
-    "dev": "dev-template-script",
-    "build": "build-template-script"
-},
-```
-
-Either of these will stop `log.js` from running. If you do decide to do this, please could you at least join our Discord and tell us which template you're using! Or send us a quick email. Either will be super-helpful, thank you.
-
-## Join the Phaser Community!
-
-We love to see what developers like you create with Phaser! It really motivates us to keep improving. So please join our community and show-off your work 😄
-
-**Visit:** The [Phaser website](https://phaser.io) and follow on [Phaser Twitter](https://twitter.com/phaser_)<br />
-**Play:** Some of the amazing games [#madewithphaser](https://twitter.com/search?q=%23madewithphaser&src=typed_query&f=live)<br />
-**Learn:** [API Docs](https://newdocs.phaser.io), [Support Forum](https://phaser.discourse.group/) and [StackOverflow](https://stackoverflow.com/questions/tagged/phaser-framework)<br />
-**Discord:** Join us on [Discord](https://discord.gg/phaser)<br />
-**Code:** 2000+ [Examples](https://labs.phaser.io)<br />
-**Read:** The [Phaser World](https://phaser.io/community/newsletter) Newsletter<br />
-
-Created by [Phaser Studio](mailto:support@phaser.io). Powered by coffee, anime, pixels and love.
-
-The Phaser logo and characters are &copy; 2011 - 2025 Phaser Studio Inc.
-
-All rights reserved.
+- `transformPointer` in `PhaserGame.tsx` remaps touch/mouse coordinates after rotation
+- Use `PhaserButton` (Phaser-native) instead of HTML/React buttons inside the game scene
+- HTML inputs require coordinate transformation using canvas `getBoundingClientRect()` and scale factors
+- All pointer event coordinates are remapped: screen Y → game X, screen X (inverted) → game Y

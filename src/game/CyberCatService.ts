@@ -48,6 +48,13 @@ const CYBERCAT_ABI = [
         outputs: [{ name: "", type: "uint256" }],
         stateMutability: "view",
     },
+    {
+        type: "function",
+        name: "getCardBalances",
+        inputs: [{ name: "user", type: "address", internalType: "address" }],
+        outputs: [{ name: "", type: "uint256[7]", internalType: "uint256[7]" }],
+        stateMutability: "view",
+    },
 ] as const;
 
 // Map catType (1-7) → pet sprite key used in game
@@ -68,6 +75,12 @@ export interface MintCatResult {
     chainName?: string;
     explorerBaseUrl?: string;
     error?: string;
+}
+
+export interface OwnedCat {
+    catType: number;   // 1–7
+    chainName: string; // 'Arbitrum Sepolia' | 'Creditcoin'
+    balance: number;
 }
 
 export interface UpdateCatRequest {
@@ -215,6 +228,49 @@ export class CyberCatService {
             console.error("❌ CyberCatService.updateCat error:", error);
             return { success: false, error: "Cannot connect to server" };
         }
+    }
+
+    /**
+     * Fetch all owned cats across both chains (Arbitrum Sepolia + Creditcoin).
+     * Uses getCardBalances() which returns balances for all 7 cat types in one call.
+     */
+    static async fetchOwnedCats(address: string): Promise<OwnedCat[]> {
+        const results: OwnedCat[] = [];
+        const chains = [
+            { id: arbitrumSepolia.id, chain: arbitrumSepolia },
+            { id: creditcoin.id, chain: creditcoin },
+        ] as const;
+
+        await Promise.allSettled(
+            chains.map(async ({ id, chain }) => {
+                const contractAddress = CYBERCAT_CONTRACTS[id];
+                if (!contractAddress) return;
+
+                try {
+                    const publicClient = createPublicClient({ chain, transport: http() });
+                    const balances = await publicClient.readContract({
+                        address: contractAddress,
+                        abi: CYBERCAT_ABI,
+                        functionName: "getCardBalances",
+                        args: [address as `0x${string}`],
+                    }) as readonly bigint[];
+
+                    balances.forEach((balance, index) => {
+                        if (Number(balance) > 0) {
+                            results.push({
+                                catType: index + 1, // index 0 = catType 1
+                                chainName: chain.name,
+                                balance: Number(balance),
+                            });
+                        }
+                    });
+                } catch (err) {
+                    console.warn(`[CyberCatService] Could not fetch cats from ${chain.name}:`, err);
+                }
+            })
+        );
+
+        return results;
     }
 
     /**
