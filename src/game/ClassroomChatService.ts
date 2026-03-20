@@ -99,6 +99,64 @@ export class ClassroomChatService {
     }
 
     /**
+     * Send a message via SSE stream. Calls onHeartbeat while waiting, returns full response on completion.
+     */
+    public async sendMessageStream(
+        message: string,
+        agentId: 'teacher' | 'mentor',
+        onHeartbeat?: () => void,
+    ): Promise<ChatResponse> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/chat/stream`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, agentId }),
+            });
+
+            if (!response.ok || !response.body) {
+                throw new Error(`Chat API error: ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                let eventType = '';
+                for (const line of lines) {
+                    if (line.startsWith('event: ')) {
+                        eventType = line.slice(7);
+                    } else if (line.startsWith('data: ') && eventType) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            if (eventType === 'heartbeat') {
+                                onHeartbeat?.();
+                            } else if (eventType === 'done') {
+                                return { success: true, response: data.text, agentId: data.agentId, runId: data.runId };
+                            } else if (eventType === 'error') {
+                                return { success: false, error: data.error };
+                            }
+                        } catch { /* skip malformed */ }
+                        eventType = '';
+                    }
+                }
+            }
+
+            return { success: false, error: 'Stream ended unexpectedly' };
+        } catch (error) {
+            console.error('ClassroomChatService stream error:', error);
+            return { success: false, error: 'Sorry, I cannot respond right now. Please try again later.' };
+        }
+    }
+
+    /**
      * Fetch the latest lesson from the API
      */
     public async getLatestLesson(): Promise<LessonResponse> {
