@@ -2022,11 +2022,17 @@ export class ClassRoom extends Scene {
             const loadingText = this.chatDialogContainer?.getData('loadingText') as Phaser.GameObjects.Text;
             if (loadingText) loadingText.setText('⏳ Thinking...');
 
-            // Map NPC key to agentId
+            // Call API with streaming
             const agentId: 'teacher' | 'mentor' = this.activeNpcKey === 'teacher1' ? 'teacher' : 'mentor';
 
-            // Call API
-            const response = await this.chatService.sendMessage(message, agentId);
+            let elapsed = 0;
+            const response = await this.chatService.sendMessageStream(message, agentId, () => {
+                elapsed += 5;
+                const msg = elapsed >= 30
+                    ? `⏳ Thinking... (${elapsed}s) — This may take a while for complex questions...`
+                    : `⏳ Thinking... (${elapsed}s)`;
+                if (loadingText) loadingText.setText(msg);
+            });
 
             // Guard: dialog may have been closed while awaiting
             if (!this.chatDialogOpen) return;
@@ -2035,7 +2041,6 @@ export class ClassRoom extends Scene {
             if (loadingText) loadingText.setText('');
 
             if (response.success && response.response) {
-                // Store raw markdown — rendered by updateChatHistoryDisplay via marked
                 this.chatHistory.push({ role: 'assistant', content: response.response });
             } else {
                 this.chatHistory.push({
